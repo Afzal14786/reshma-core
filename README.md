@@ -70,7 +70,7 @@ To solve this, the system utilizes a **Polymorphic Database Strategy** (via Mong
 
 
 ```text
-reshma-boutique-backend/
+reshma-core/
 ├── .env.example
 ├── .gitignore
 ├── CHANGES.md
