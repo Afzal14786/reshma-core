@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
+### Added
+- **Core Infrastructure:** Integrated MongoDB (Mongoose), Redis client, and Cloudinary configurations.
+- **Environment Validation:** Added strict startup validation using Zod (`env.ts`) to immediately catch missing environment variables and prevent silent failures.
+- **Logging Pipeline:** Implemented an enterprise-grade Winston logger featuring daily log rotation, piped directly into Morgan for HTTP traffic monitoring.
+- **Data Models:** Built the highly-scalable `User` schema and strict TypeScript interface. Utilized sparse indexes to support upcoming Google OAuth integration, and intentionally isolated transactional data to prevent document bloat.
+- **Global Utilities:** Implemented standardized `AppError` and `ApiResponse` classes to guarantee consistent JSON payloads and error handling across all frontend communications.
+- **Communications Layer:** Set up a centralized Nodemailer SMTP infrastructure class (`Mailer`) for dispatching transactional emails.
+
 ---
 
 ## [1.0.0-alpha.1] - 2026-04-18
