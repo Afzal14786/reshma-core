@@ -4,8 +4,12 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 /**
- * Zod schema for strict environment variable validation.
- * Ensures the server crashes immediately at startup if required variables are missing.
+ * Global Environment Configuration
+ * * * ARCHITECTURE NOTE:
+ * We use the "Fail-Fast" boot philosophy. By wrapping `process.env` in a strict 
+ * Zod schema, if a DevOps engineer forgets to inject a critical secret (like the JWT key) 
+ * into the production container, the server crashes instantly with a clear error 
+ * BEFORE accepting any user traffic, preventing silent security failures.
  */
 const envSchema = z.object({
   PORT: z.string().default('5000'),
@@ -15,16 +19,22 @@ const envSchema = z.object({
 
   MONGO_URI: z.string().min(1, "MongoDB connection string is required"),
 
-  JWT_SECRET: z.string().min(10, "JWT Secret must be at least 10 characters long"),
-  JWT_EXPIRES_IN: z.string().default('7d'),
+  // --- Two-Token Security Architecture ---
+  // Access tokens are short-lived and live in React memory to prevent XSS.
+  JWT_ACCESS_SECRET: z.string().min(10, "Access Secret must be at least 10 characters long"),
+  JWT_ACCESS_EXPIRES_IN: z.string().default('15m'), 
 
+  // Refresh tokens are long-lived and live in HttpOnly cookies to prevent CSRF and XSS.
+  JWT_REFRESH_SECRET: z.string().min(10, "Refresh Secret must be at least 10 characters long"),
+  JWT_REFRESH_EXPIRES_IN: z.string().default('7d'), 
+
+  // --- External Providers ---
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
 
   REDIS_PASSWORD: z.string().optional(),
   REDIS_URL: z.string().default("redis://localhost:6379"),
-
 
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().default(587),  

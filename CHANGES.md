@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
 ### Added
+**Authentication & Security**
+- **Two-Token Architecture (`auth.utils.ts`):** Engineered a highly secure session system utilizing short-lived Access Tokens and long-lived `HttpOnly` Refresh Tokens.
+- **OTP Verification Flow (`verify-otp.dto.ts`):** Built an asynchronous Node `crypto` OTP system backed by Redis caching with safe collision recovery.
+- **Zod Validation (`login.dto.ts`, `register.dto.ts`):** Enforced strict payload sanitization before reaching the Auth controllers.
+- **Auth Middleware (`auth.middleware.ts`):** Implemented the `protect` middleware for cryptographically verifying JWTs and cross-referencing the Redis Blacklist.
+
+**Notification Engine (BullMQ & SMTP)**
+- **Queue Workers (`email.queue.ts`, `email.worker.ts`):** Implemented a Redis-backed producer/consumer queue to completely offload SMTP handshakes from the main event loop.
+- **Email Templates (`layout.ts`, `otp-verification.ts`, `welcome.ts`):** Built a strictly-typed HTML email compiler using the Facade design pattern (`notification.service.ts`).
+- **In-App Alerts (`notification.model.ts`):** Created a persistent MongoDB collection for user-specific dashboard alerts with IDOR protection on read receipts.
+
+**Documentation Architecture**
+- **Master Docs Hub (`/docs`):** Migrated from root-level text files to a dedicated, Domain-Driven documentation directory including `auth-architecture.md`, `system-overview.md`, and module-specific runbooks.
+
+### Changed
+- **Core Configuration (`app.ts`, `server.ts`, `env.ts`):** Hooked up the BullMQ workers to the server boot sequence and expanded the Zod strict environment validation.
+- **Dependencies (`package.json`):** Added required packages for authentication, Redis queues, and email transport.
+- **Readme (`README.md`):** Overhauled the system architecture folder tree and added routing to the new internal documentation hub.  
+
+### Added
 - **Type Definitions:** Extended the global Express `Request` interface (`express.d.ts`) to inject the `IUser` model, enabling deep IntelliSense across all secure routes.
 - **Identity & RBAC:** Implemented the `protect` middleware for cryptographically verifying JWTs (supporting both HttpOnly cookies and Bearer headers), and the `restrictTo` middleware for Role-Based Access Control.
 - **Traffic Control:** Deployed tiered rate limiters (`standardLimiter`, `authLimiter`, `checkoutLimiter`) to mitigate card testing and brute-force bot attacks.

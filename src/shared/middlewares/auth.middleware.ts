@@ -39,7 +39,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
             throw new AppError(HTTP_STATUS.UNAUTHORIZED, "You are not logged in");
         }
 
-        const decode = jwt.verify(token, env.JWT_SECRET) as IJwtPayload;
+        const decode = jwt.verify(token, env.JWT_ACCESS_SECRET) as IJwtPayload;
         // user should present 
         const currentUser = await User.findById(decode._id);
 
