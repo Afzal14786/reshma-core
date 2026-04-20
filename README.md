@@ -17,17 +17,17 @@
 
 ---
 
-## 📖 About The Startup
+## About The Startup
 **Reshma Bangles & Boutique** is a dedicated B2C online retail platform serving customers across India. The catalog spans highly diverse categories, ranging from fragile glass bangles sold by the dozen, to readymade apparel, and unstitched fabrics requiring custom tailoring measurements.
 
-### 🎯 Business Logic Core Highlights
+### Business Logic Core Highlights
 * **Dynamic Checkout Math:** Automated computation of Base Price + GST % + Heavy Shipping Fees + Cash On Delivery (COD) surcharges.
 * **Strict Return Arbitration:** Returns are conditionally blocked (e.g., innerwear) and explicitly require photographic proof uploaded via Cloudinary for fragile items.
 * **Background Notifications:** Asynchronous queue processing for "Notify Me" alerts and order status emails.
 
 ---
 
-## 📑 Master Planning Documents
+## Master Planning Documents
 
 To understand the full scope of this startup, including the Product Requirements Document (PRD), exact database mappings, and our initial 50-item inventory schema, please refer to our official planning documents:
 
@@ -40,9 +40,15 @@ To understand the full scope of this startup, including the Product Requirements
 
 *(Note: These documents are set to View-Only to protect proprietary business logic).*
 
+## Internal System Documentation
+
+Reshma-Core utilizes a strict Domain-Driven Design (DDD) architecture. For deep technical deep-dives into our Two-Token Auth system, Database Design, and API testing standards, refer to our internal documentation hub:
+
+**[Enter the System Overview & Architecture Index](./docs/architecture/system-overview.md)**
+
 ---
 
-## 🛠️ Comprehensive Tech Stack
+## Comprehensive Tech Stack
 
 | Category | Technology | Description / Purpose |
 | :--- | :--- | :--- |
@@ -56,7 +62,7 @@ To understand the full scope of this startup, including the Product Requirements
 
 ---
 
-## 🏗️ System Architecture & Complete Folder Structure
+## System Architecture & Complete Folder Structure
 
 **Organized by Features (Domain-Driven Design):** The codebase is split into specific, isolated features (like Users, Orders, Products) rather than lumping all controllers together. This makes the system easy to manage and scale.
 
@@ -78,8 +84,27 @@ reshma-core/
 ├── package.json
 ├── package-lock.json
 ├── README.md
-├── api-docs.md
 ├── tsconfig.json
+│
+├── docs/                         # MASTER DOCUMENTATION HUB
+│   ├── api/                      # Thunder Client configs & HTTP specs
+│   │   ├── api-standards.md
+│   │   ├── error-codes.md
+│   │   └── thunder-tests/
+│   ├── architecture/             # System blueprints & security logic
+│   │   ├── auth-architecture.md
+│   │   ├── database-design.md
+│   │   ├── security-hardening.md
+│   │   └── system-overview.md
+│   ├── deployment/               # Deployment guides
+│   │   └── docker-guide.md
+│   ├── modules/                  # DDD domain specifics
+│   │   ├── auth-module.md
+│   │   ├── notification-module.md
+│   │   └── user-module.md
+│   └── setup/                    # Local environment runbooks
+│       ├── environment-variables.md
+│       └── local-development.md
 │
 └── src/
     ├── app.ts                    # Express app setup, global middlewares
@@ -123,7 +148,7 @@ reshma-core/
 ```
 
 
-## 🚀 Getting Started (Developer Setup)
+## Getting Started (Developer Setup)
 
 **1. Installation** 
 ```bash
@@ -159,7 +184,7 @@ npm run dev
 
   Currently based in India and actively developing production-grade applications.
 
-  ### Let's Connect! 🤝
+  ### Let's Connect! 
 
   [![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=flat&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/0x4f5a4c/)
   [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/Afzal14786)
