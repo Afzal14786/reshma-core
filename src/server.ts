@@ -2,7 +2,7 @@ import app from "./app";
 import env from "@config/env";
 import logger from "@config/logger";
 import mongoose from "mongoose";
-import { redisClient } from "@config/redis";
+import { redisClient, connectRedis } from "@config/redis";
 import { Server } from "http";
 
 // Initialize Background Workers 
@@ -27,10 +27,8 @@ const bootstrap = async () => {
         await mongoose.connect(env.MONGO_URI);
         logger.info("MongoDB connected successfully.");
 
-        // 2. Verify Redis Connection
-        if (redisClient.isReady) {
-            logger.info("Redis connected successfully.");
-        }
+        // 2. Connect to Redis
+        await connectRedis();
 
         // 3. Start Express Server
         server = app.listen(env.PORT, () => {

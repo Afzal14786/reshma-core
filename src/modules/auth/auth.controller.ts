@@ -6,6 +6,7 @@ import { HTTP_STATUS } from '@shared/constant/http-codes';
 import { RegisterInput } from './dtos/register.dto';
 import { LoginInput } from './dtos/login.dto';
 import { VerifyOtpInput } from './dtos/verify-otp.dto';
+import { GoogleLoginInput } from './dtos/google.dto';
 import logger from '@config/logger';
 
 /**
@@ -94,6 +95,44 @@ export class AuthController {
             const newAccessToken = await AuthService.refreshSession(refreshToken);
             
             new ApiResponse(res, HTTP_STATUS.OK, 'Token refreshed', { accessToken: newAccessToken }).send();
+        } catch (error: unknown) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/auth/google
+     * Bridges the "Continue with Google" flow into our native Two-Token session architecture.
+     * * * SECURITY NOTE:
+     * Even though the user authenticated via Google, we instantly discard Google's session
+     * and issue our own native Access (Memory) and Refresh (HttpOnly) tokens. This ensures 
+     * complete vendor lock-in avoidance and maintains our strict XSS/CSRF immunity.
+     */
+    public static async googleLogin(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const data = req.body as GoogleLoginInput;
+            
+            // 1. Hand off the raw ID Token to the Domain Service for cryptographic verification
+            const user = await AuthService.loginWithGoogle(data.idToken);
+
+            // 2. Establish the Native Two-Token Session
+            const accessToken = signAccessToken(user._id);
+            const refreshToken = signRefreshToken(user._id);
+            
+            // 3. Telemetry Update (Bypass hooks for performance)
+            user.lastLogin = new Date();
+            await user.save({ validateBeforeSave: false });
+
+            // 4. Secure Transport (Attach HttpOnly Cookie)
+            setRefreshCookie(res, refreshToken);
+
+            new ApiResponse(
+                res, 
+                HTTP_STATUS.OK, 
+                'Google Login successful', 
+                { user, accessToken }
+            ).send();
+            
         } catch (error: unknown) {
             next(error);
         }

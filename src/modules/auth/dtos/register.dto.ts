@@ -7,7 +7,8 @@ import { z } from 'zod';
  * lowercasing emails) before the data ever reaches the controller.
  */
 export const RegisterSchema = z.object({
-    firstname: z.string().min(2, "First name must be at least 2 characters").trim(),
+    body: z.object({
+        firstname: z.string().min(2, "First name must be at least 2 characters").trim(),
     lastname: z.string().min(2, "Last name must be at least 2 characters").trim(),
     email: z.string().email("Invalid email format").toLowerCase().trim(),
     password: z.string()
@@ -15,7 +16,8 @@ export const RegisterSchema = z.object({
         .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
         .regex(/[0-9]/, "Password must contain at least one number"),
     // Transform strips all spaces and hyphens from the phone number
-    phone: z.string().transform((val) => val.replace(/[\s-]/g, '')).optional() 
+    phone: z.string().transform((val) => val.replace(/[\s-]/g, '')).optional()
+    }) 
 });
 
-export type RegisterInput = z.infer<typeof RegisterSchema>;
+export type RegisterInput = z.infer<typeof RegisterSchema>["body"];

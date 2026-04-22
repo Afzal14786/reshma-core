@@ -145,6 +145,31 @@ sequenceDiagram
     AuthAPI-->>Client: Clear-Cookie Header & 200 OK
 ```
 
+### F. Google OAuth Flow (Client-Side)
+To maintain our strict stateless JWT architecture and avoid server memory session bloat (common with Passport.js), Reshma-Core utilizes the modern Client-Side Token Flow for Google authentication.
+
+1. **Client Interaction:** The React frontend handles the Google OAuth popup and receives a Google `idToken`.
+2. **Cryptographic Verification:** The frontend POSTs this `idToken` to our backend. The `AuthService` mathematically verifies the cryptographic signature directly against Google's public keys using the official `google-auth-library`.
+3. **Safe Account Merging:** - If the user already exists as a `LOCAL` user but never verified their email via OTP, Google's login acts as absolute proof of email ownership. The system seamlessly auto-verifies them.
+   - If the user does not exist, a new account is onboarded instantly without a password (relying entirely on Google as the identity provider).
+4. **Session Hand-off:** Google's token is immediately discarded, and the system issues our native Two-Token session (Access & Refresh), completely avoiding vendor lock-in.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Google
+    participant AuthAPI
+    participant MongoDB
+
+    Client->>Google: Clicks "Continue with Google"
+    Google-->>Client: Returns secure `idToken`
+    Client->>AuthAPI: POST /api/v1/auth/google { idToken }
+    AuthAPI->>Google: Cryptographically verify signature
+    Google-->>AuthAPI: Valid (Returns payload: email, name)
+    AuthAPI->>MongoDB: Upsert user (Auto-verify if needed)
+    AuthAPI-->>Client: 200 OK (Native Access JSON + Refresh Cookie)
+```
+
 ---
 
 ## 3. Defense Mechanisms & Request Interceptors

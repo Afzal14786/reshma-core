@@ -28,6 +28,10 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(10, "Refresh Secret must be at least 10 characters long"),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'), 
 
+  GOOGLE_CLIENT_ID: z.string().min(1, "Google Client ID is required"),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CALLBACK_URL: z.string().url().optional(),
+  
   // --- External Providers ---
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),
