@@ -40,11 +40,24 @@ To understand the full scope of this startup, including the Product Requirements
 
 *(Note: These documents are set to View-Only to protect proprietary business logic).*
 
-## Internal System Documentation
+## Internal Documentation Hub
 
-Reshma-Core utilizes a strict Domain-Driven Design (DDD) architecture. For deep technical deep-dives into our Two-Token Auth system, Database Design, and API testing standards, refer to our internal documentation hub:
+Reshma-Core utilizes a strict Domain-Driven Design (DDD) architecture. We maintain comprehensive internal documentation covering API standards, security, testing, and feature modules. Click any link below to navigate directly to the respective guide:
 
-**[Enter the System Overview & Architecture Index](./docs/architecture/system-overview.md)**
+### Architecture & System Design
+* **[System Overview](./docs/architecture/system-overview.md)** - The master blueprint and folder structure of the Reshma-Core backend.
+* **[Authentication & Security Architecture](./docs/architecture/auth-architecture.md)** - Deep dive into the Two-Token stateless JWT, Google OAuth, and Redis OTP flows.
+* **[Security Hardening](./docs/architecture/security-hardening.md)** - Details on rate-limiting, Zod payload firewalls, and strict XSS/CSRF prevention.
+* **[Database Design Strategy](./docs/architecture/database-design.md)** - *(Coming Next: Polymorphic Product Catalog Schema)*
+
+### API Integration Standards (For Frontend Teams)
+* **[API Design & Integration Standards](./docs/api/api-standards.md)** - Expected JSON response shapes, token handling, and base URLs.
+* **[Error Codes & Handling Guide](./docs/api/error-codes.md)** - Standardized error payloads and our HTTP status code dictionary.
+
+### Testing & Setup Runbooks
+* **[Authentication Testing Runbook](./docs/testing/auth-runbook.md)** - Sequential manual testing steps and edge-case verifications for the Auth Epic.
+* **[Local Development Setup](./docs/setup/local-development.md)** - Step-by-step guide to booting the Node server, Redis cache, and background workers.
+* **[Environment Variables](./docs/setup/environment-variables.md)** - Required `.env` configuration for fail-fast boot sequences.
 
 ---
 

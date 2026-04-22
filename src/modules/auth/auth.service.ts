@@ -7,10 +7,13 @@ import { HTTP_STATUS } from '@shared/constant/http-codes';
 import logger from '@config/logger';
 import { redisClient } from '@config/redis';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
 import env from '@config/env';
 import crypto from 'crypto';
 import { NotificationService } from '../notifications/notification.service';
 import { signAccessToken } from './auth.utils';
+
+const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
 /**
  * Authentication Service (Domain Layer)
@@ -141,6 +144,12 @@ export class AuthService {
      */
     public static async refreshSession(refreshToken: string): Promise<string> {
         try {
+            const isBlacklisted = await redisClient.get(`blacklist:${refreshToken}`);
+            if (isBlacklisted) {
+                logger.warn(`Attempted refresh with blacklisted token`);
+                throw new AppError(HTTP_STATUS.UNAUTHORIZED, 'Session revoked. Please log in again.');
+            }
+
             const decoded = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as jwt.JwtPayload;
             
             const user = await User.findById(decoded.id);
@@ -149,8 +158,71 @@ export class AuthService {
 
             // Issue a fresh 15-minute Access Token
             return signAccessToken(user._id);
-        } catch (error) {
+        } catch (error: unknown) {
+            if (error instanceof AppError) throw error;
             throw new AppError(HTTP_STATUS.UNAUTHORIZED, 'Invalid or expired refresh token. Please log in again.');
+        }
+    }
+
+    /**
+     * Stateless Google OAuth Verification & Upsert
+     * * * ARCHITECTURE NOTE:
+     * We utilize the "Client-Side Token Flow" to maintain our stateless JWT architecture.
+     * The frontend handles the Google popup and sends us the `idToken`. We mathematically 
+     * verify Google's signature here. This prevents the need for clunky server-side 
+     * redirects (like Passport.js) and session memory bloat.
+     */
+    public static async loginWithGoogle(idToken: string) {
+        try {
+            // 1. Cryptographic Verification: Ask Google if this token is genuinely theirs
+            const ticket = await googleClient.verifyIdToken({
+                idToken,
+                audience: env.GOOGLE_CLIENT_ID,
+            });
+
+            const payload = ticket.getPayload();
+            if (!payload || !payload.email) {
+                throw new AppError(401, 'Invalid or malformed Google Token payload');
+            }
+
+            const { email, given_name, family_name } = payload;
+            const sanitizedEmail = email.toLowerCase();
+
+            // 2. State Management & Collision Recovery
+            let user = await User.findOne({ email: sanitizedEmail });
+
+            if (user) {
+                // 2a. Infrastructure Gatekeeper
+                if (!user.isActive) {
+                    throw new AppError(403, 'This account has been deactivated. Please contact support.');
+                }
+
+                // 2b. Safe Account Merging (UX Optimization)
+                if (!user.isEmailVerified) {
+                    user.isEmailVerified = true;
+                    await user.save({ validateBeforeSave: false });
+                }
+
+                return user;
+            }
+
+            // 3. New User Onboarding
+            user = await User.create({
+                firstname: given_name || 'User',
+                lastname: family_name || '',
+                email: sanitizedEmail,
+                authProvider: 'GOOGLE',
+                isEmailVerified: true, // Implicitly true: Google already verified their identity
+            });
+            
+            // Trigger the asynchronous onboarding Welcome Sequence
+            await NotificationService.triggerWelcome(user._id, user.email, user.firstname);
+
+            return user;
+
+        } catch (error: unknown) {
+            if (error instanceof AppError) throw error;
+            throw new AppError(HTTP_STATUS.UNAUTHORIZED, 'Google authentication failed or token expired. Please try again.');
         }
     }
 

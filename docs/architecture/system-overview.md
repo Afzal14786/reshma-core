@@ -29,9 +29,9 @@ Use the links below to navigate the internal documentation of the Reshma-Core sy
 
 ### Architecture Diagrams & Security
 High-level system design, security protocols, and database schemas.
-* **[Authentication & Security Architecture](./auth-architecture.md)** *(Two-Token JWT, OTP Flows)*
-* **[Database Design & Indexing](./database-design.md)** *(Polymorphic Schema Mapping - Pending)*
-* **[Security Hardening Guide](./security-hardening.md)** *(Helmet, Rate Limiting, XSS Prevention - Pending)*
+* **[Authentication & Security Architecture](./auth-architecture.md)** *(Two-Token JWT, Google OAuth, OTP Flows)*
+* **Database Design Strategy** *(Polymorphic Schema Mapping - Up Next)*
+* **[Security Hardening Guide](./security-hardening.md)** *(Helmet, Rate Limiting, Zod Payload Firewalls)*
 
 ### Domain Modules
 Deep dives into the specific business logic, DTOs, and services for each core feature.
@@ -41,15 +41,14 @@ Deep dives into the specific business logic, DTOs, and services for each core fe
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.
-* **[API Design Standards](../api/api-standards.md)** *(Naming conventions, Pagination rules - Pending)*
-* **[Global Error Codes](../api/error-codes.md)** *(Standardized HTTP responses - Pending)*
-* **[Thunder Client Test Suites](../api/thunder-tests/)** *(Exported JSON Collections - Work in Progress)*
+* **[API Design Standards](../api/api-standards.md)** *(Two-Token frontend integration & payload shapes)*
+* **[Global Error Codes](../api/error-codes.md)** *(Standardized HTTP responses & error handling)*
+* **[Authentication Testing Runbook](../testing/auth-runbook.md)** *(Manual integration testing guide)*
 
 ### Setup & Deployment
 Runbooks for getting the server running locally or deploying to production.
 * **[Local Development Setup](../setup/local-development.md)** *(Node, Mongo, Redis Boot Guide)*
 * **[Environment Variables Guide](../setup/environment-variables.md)** *(Zod Validation & .env maps)*
-* **[Docker Deployment](../deployment/docker-guide.md)** *(Containerization Strategy - Future)*
 
 ---
 
@@ -57,11 +56,12 @@ Runbooks for getting the server running locally or deploying to production.
 
 The development of Reshma-Core is divided into four major epics. 
 
-### Phase 1: The Foundation (Current State)
+### Phase 1: The Foundation (Completed)
 - [x] Environment validation & Fail-Fast server boot.
 - [x] Global Error Handling & Zod Interceptors.
 - [x] User Domain Schema & RBAC integration.
 - [x] Two-Token Authentication (JWT + HttpOnly Cookies).
+- [x] Google OAuth (Client-Side Token Flow) Integration.
 - [x] Background Notification Engine (BullMQ + Redis).
 
 ### Phase 2: The Core Catalog Engine (Up Next)
@@ -79,7 +79,6 @@ The development of Reshma-Core is divided into four major epics.
 ### Phase 4: Operations & Analytics
 - [ ] Return Arbitration Engine (Cloudinary photographic proof requirement).
 - [ ] Admin Dashboard aggregations (Sales volume, top-selling categories).
-- [ ] Google OAuth 1-Click Login integration.
 
 ---
 *Maintained by Md Afzal Ansari | Core System Architecture*

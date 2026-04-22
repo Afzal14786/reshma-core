@@ -6,6 +6,7 @@ import { protect } from '@shared/middlewares/auth.middleware';
 import { RegisterSchema } from './dtos/register.dto';
 import { LoginSchema } from './dtos/login.dto';
 import { VerifyOtpSchema } from './dtos/verify-otp.dto';
+import { googleLoginSchema } from './dtos/google.dto';
 
 const router = Router();
 
@@ -32,6 +33,14 @@ router.post(
     authLimiter,
     validate(VerifyOtpSchema),
     AuthController.verifyOtp
+);
+
+// POST /api/v1/auth/google -> Cryptographically verifies Google idToken and issues native session
+router.post(
+    '/google', 
+    authLimiter, 
+    validate(googleLoginSchema), 
+    AuthController.googleLogin
 );
 
 // POST /api/v1/auth/login -> Standard credential verification
