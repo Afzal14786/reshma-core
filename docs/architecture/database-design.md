@@ -41,7 +41,7 @@ Before settling on Mongoose Discriminators, we evaluated two other common e-comm
 
 ## 2. Base Product Schema
 
-This is the foundation. Every single item sold on the platform must contain these fields in order to function within the global cart and checkout system.
+This is the foundation. Every single item sold on the platform must contain these fields in order to function within the global cart and checkout system.  
 
 | Field | Type | Rules | Why this exists |
 | :--- | :--- | :--- | :--- |
@@ -63,7 +63,8 @@ This is the foundation. Every single item sold on the platform must contain thes
 These schemas inherit the Base Schema and add their own strictly validated, category-specific fields. This prevents data corruption.
 
 ### A. The Bangle Schema (`itemType: 'BANGLE'`)
-* **Why it exists:** Bangles have unique sizing systems and shipping risks that apparel does not share.
+* **Why it exists:** Bangles have unique sizing systems and shipping risks that apparel does not share.  
+
 | Field | Type | Rules | Why this exists |
 | :--- | :--- | :--- | :--- |
 | `diameter` | Enum | `['2/2', '2/4', '2/6', '2/8']` | Traditional Indian bangle sizing metrics. |
@@ -72,7 +73,8 @@ These schemas inherit the Base Schema and add their own strictly validated, cate
 | `packSize` | Number | Default: `12` | Bangles are rarely sold individually, requiring dynamic unit pricing displays. |
 
 ### B. The Apparel Schema (`itemType: 'APPAREL'`)
-* **Why it exists:** Readymade garments rely on standard alphabetic or numeric sizing charts.
+* **Why it exists:** Readymade garments rely on standard alphabetic or numeric sizing charts.  
+
 | Field | Type | Rules | Why this exists |
 | :--- | :--- | :--- | :--- |
 | `size` | Enum | `['XS', 'S', 'M', 'L', 'XL', 'XXL']` | Standard readymade sizing for stock management. |
@@ -80,7 +82,8 @@ These schemas inherit the Base Schema and add their own strictly validated, cate
 | `careInstructions` | String | Optional | Wash care details rendered on the product page. |
 
 ### C. The Fabric Schema (`itemType: 'FABRIC'`)
-* **Why it exists:** Unstitched materials are sold by length, not by standard sizes.
+* **Why it exists:** Unstitched materials are sold by length, not by standard sizes.  
+
 | Field | Type | Rules | Why this exists |
 | :--- | :--- | :--- | :--- |
 | `lengthMeters` | Number | Required | Indicates the raw material length provided to the customer. |
