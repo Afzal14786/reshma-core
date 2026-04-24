@@ -16,7 +16,7 @@
 
 Reshma-Core is built to scale gracefully while handling highly diverse e-commerce requirements. The backend enforces the following technical standards:
 
-1. **Domain-Driven Design (DDD):** Code is logically grouped by business feature (Users, Auth, Orders) rather than technical layers (Controllers, Models).
+1. **Domain-Driven Design (DDD):** Code is logically grouped by business feature (Users, Auth, Products) rather than technical layers (Controllers, Models).
 2. **Strict Type Safety:** Zod enforces runtime payload validation at the Controller boundary, while strict TypeScript ensures compile-time safety.
 3. **Fail-Fast Initialization:** The system refuses to boot if critical environment variables (like JWT secrets or MongoDB URIs) are missing or malformed.
 4. **Polymorphic Database Strategy:** Utilizing Mongoose Discriminators, disparate items (e.g., Glass Bangles and Unstitched Fabrics) share a common `Products` collection while enforcing strictly unique validation rules.
@@ -30,11 +30,13 @@ Use the links below to navigate the internal documentation of the Reshma-Core sy
 ### Architecture Diagrams & Security
 High-level system design, security protocols, and database schemas.
 * **[Authentication & Security Architecture](./auth-architecture.md)** *(Two-Token JWT, Google OAuth, OTP Flows)*
-* **Database Design Strategy** *(Polymorphic Schema Mapping - Up Next)*
+* **[Database Design Strategy](./database-design.md)** *(Polymorphic Schema Mapping & ADRs)*
+* **[Product Catalog Schema](./product-catalog.md)** *(Google Sheet Data to Database Mapping)*
 * **[Security Hardening Guide](./security-hardening.md)** *(Helmet, Rate Limiting, Zod Payload Firewalls)*
 
 ### Domain Modules
 Deep dives into the specific business logic, DTOs, and services for each core feature.
+* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*
 * **[User Module](../modules/user-module.md)** *(Identity, RBAC, Password Hashing)*
 * **[Authentication Module](../modules/auth-module.md)** *(Login, Registration, Token Issuance)*
 * **[Notification Engine](../modules/notification-module.md)** *(BullMQ Background Workers, SMTP, In-App Alerts)*
@@ -64,13 +66,13 @@ The development of Reshma-Core is divided into four major epics.
 - [x] Google OAuth (Client-Side Token Flow) Integration.
 - [x] Background Notification Engine (BullMQ + Redis).
 
-### Phase 2: The Core Catalog Engine (Up Next)
-- [ ] Base `Product` schema implementation.
-- [ ] Mongoose Discriminators for custom categories (Bangles, Apparel, Fabrics).
-- [ ] Cloudinary integration for product image pipelines.
-- [ ] Category & Inventory tracking modules.
+### Phase 2: The Core Catalog Engine (Completed)
+- [x] Base `Product` schema implementation.
+- [x] Mongoose Discriminators for custom categories (Bangles, Apparel, Fabrics).
+- [x] Cloudinary integration for product image pipelines (Memory Buffers & Rollbacks).
+- [x] Category & Inventory tracking modules.
 
-### Phase 3: The Transaction Pipeline
+### Phase 3: The Transaction Pipeline (Up Next)
 - [ ] Cart management (Syncing local state with DB).
 - [ ] Dynamic Checkout Math Engine (GST, COD fees, Heavy Shipping).
 - [ ] Razorpay Payment Gateway integration.

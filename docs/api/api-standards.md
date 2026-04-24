@@ -1,28 +1,43 @@
-# API Design & Integration Standards
+<div align="center">
 
-## 1. Overview
-The Reshma-Core API follows strict RESTful conventions, utilizes a Two-Token stateless authentication architecture, and guarantees a predictable JSON response structure for every single endpoint.
+  # REST API Reference & Integration Standards
+  **Reshma Bangles & Boutique Core Engine**
 
-**Base URL:** `http://localhost:5000/api/v1` (Development)
-**Content-Type:** `application/json`
+  [![API Version](https://img.shields.io/badge/API_Version-v1.0-3448C5?style=flat&logo=server&logoColor=white)]()
+  [![Format](https://img.shields.io/badge/Format-JSON-000000?style=flat&logo=json&logoColor=white)]()
+  [![Auth](https://img.shields.io/badge/Auth-Two--Token_JWT-DC382D?style=flat)]()
+
+</div>
+
+---
+
+## 1. Environments & Base URLs
+The Reshma-Core API follows strict RESTful conventions. All API endpoints belong to the `v1` namespace. Ensure you are pointing to the correct environment.
+
+| Environment | Base URL | Usage |
+| :--- | :--- | :--- |
+| **Development** | `http://localhost:5000/api/v1` | Local testing and frontend integration. |
+| **Production** | `https://api.reshmabangles.com/api/v1` | Live customer traffic. |
 
 --- 
 
 ## 2. Standardized Response Payload
-To eliminate guesswork for the frontend team, every successful and failed request routes through our `ApiResponse` or `AppError` classes. You will *always* receive this exact JSON shape:
+To eliminate guesswork for the frontend team, every successful and failed request routes through our custom `ApiResponse` or `AppError` wrapper classes. You will *always* receive this exact JSON shape.
 
 ### Success Response (2xx)
 ```json
 {
   "success": true,
   "statusCode": 200,
-  "message": "Human readable success message",
+  "message": "Catalog retrieved successfully",
   "data": {
-    // The requested resource(s) will always be nested inside 'data'
-    "user": { ... },
-    "accessToken": "..." 
+    "products": [ ... ],
+    "meta": {
+      "total": 500,
+      "page": 1
+    }
   },
-  "timestamp": "2026-04-22T14:30:00.000Z"
+  "timestamp": "2026-04-24T14:30:00.000Z"
 }
 ```  
 
@@ -31,77 +46,123 @@ To eliminate guesswork for the frontend team, every successful and failed reques
 {
   "success": false,
   "statusCode": 400,
-  "message": "Validation Failed: firstname is required, email is Invalid format",
+  "message": "Validation Failed: itemType is required, basePrice cannot be negative",
+  "data": null,
+  "timestamp": "2026-04-24T14:30:05.000Z",
   "stack": "..." // ONLY included if NODE_ENV=development
 }
-```
-**Frontend Implementation Tip:**  
-You do not need to manually check HTTP status codes if you don't want to. You can safely write your frontend Axios/Fetch interceptors to simply check `if (!response.data.success) { throw new Error(...) }`.  
+```  
+**Frontend Implementation Tip:** You do not need to manually check HTTP status codes. You can safely write your frontend Axios/Fetch interceptors to simply check `if (!response.data.success) { throw new Error(response.data.message) }`.  
 
 ---  
 
 ## 3. The Two-Token Authentication Flow  
-
-Reshma-Core uses an enterprise-grade stateless JWT architecture designed to completely prevent XSS and CSRF attacks.  
+Reshma-Core uses an enterprise-grade stateless JWT architecture designed to prevent XSS and CSRF attacks.  
 
 **The Tokens**  
-1. **Access Token (The VIP Pass):** Short-lived (15 mins). Returned in the JSON response payload. **Must be stored in React Memory (Zustand/Context/Closure)**. Never store this in `localStorage`.  
+1. **Access Token (The VIP Pass):** Short-lived (15 mins). Returned in the JSON response payload. **Must be stored in React Memory (Zustand/Context)**. Never store this in localStorage.
 
 2. **Refresh Token (The Vault Key):** Long-lived (7 days). Automatically attached to the browser as an `HttpOnly`, `Secure`, `SameSite=Strict` cookie. It is invisible to JavaScript.  
 
 **The Flow**  
+1. **Login:** Send credentials. Receive `accessToken` in JSON. The browser automatically saves the `refreshToken` cookie.  
 
-1. **Login/Verify:** Send credentials. Receive accessToken in JSON. The browser automatically saves the refreshToken cookie.  
+2. **Protected Requests:** Attach the Access Token to the **Authorization header:** `http Authorization: Bearer <YOUR_ACCESS_TOKEN>`  
 
-2. **Protected Requests:** Attach the Access Token to the Authorization header: 
-    ```http
-    Authorization: Bearer <YOUR_ACCESS_TOKEN>
-    ```  
+3. **Silent Refresh:** When the Access Token expires (HTTP 401), the frontend must silently call **POST /api/v1/auth/refresh**. The browser will automatically attach the HttpOnly cookie, and the server will return a fresh `accessToken`.  
 
-3. **Silent Refresh:** When the Access Token expires (HTTP 401), the frontend must silently call **GET /api/v1/auth/refresh**. The browser will automatically attach the HttpOnly cookie, and the server will return a fresh `accessToken`.  
+4. **Logout:** Call **GET /api/v1/auth/logout**. The server will command the browser to destroy the HttpOnly cookie and clear the session.  
 
-4. **Logout:** Call `GET /api/v1/auth/logout` with the Access Token. The server will blacklist the token in Redis and command the browser to destroy the HttpOnly cookie.  
-
---- 
-
+---  
 ## 4. HTTP Status Code Dictionary  
 
-The API strictly adheres to the following HTTP status codes mapping (`@shared/constant/http-codes.ts`):  
-
-**Success Codes**  
-* `200 OK:` Standard success (Login, fetching data, updating data).
-* `201 Created:` Resource created successfully (Registration, creating a product).
-* `204 No Content:` Resource deleted successfully (Response body will be empty).  
-
-**Client Error Codes**  
-
-* `400 Bad Request:` Validation failure (Zod caught a bad payload).
-* `401 Unauthorized:` Authentication failure (Missing token, expired token, or invalid credentials).  
-* `403 Forbidden:` Authorization failure (Valid token, but user lacks ADMIN role or account is deactivated).
-* `404 Not Found:` The requested endpoint or database resource does not exist.
-* `409 Conflict:` Database collision (e.g., trying to register with an email that is already verified).
-* `429 Too Many Requests:` Rate limit exceeded.  
-
-**Server Error Codes**  
-* `500 Internal Server Error:` Unhandled exception.
-* `503 Service Unavailable:` Redis or Database connection failure.  
+The API strictly adheres to the following HTTP status codes mapping:  
+| Code | Status               | Description                                                                                     |
+|------|----------------------|-------------------------------------------------------------------------------------------------|
+| 200  | OK                   | Standard success (Login, fetching data, updating data).                                        |
+| 201  | Created              | Resource created successfully (Registration, creating a product).                              |
+| 204  | No Content           | Resource deleted successfully (Response body will be empty).                                   |
+| 400  | Bad Request          | Validation failure (Zod caught a bad payload).                                                 |
+| 401  | Unauthorized         | Authentication failure (Missing token, expired token, or invalid credentials).                 |
+| 403  | Forbidden            | Authorization failure (Valid token, but user lacks ADMIN role).                                |
+| 404  | Not Found            | The requested endpoint or database resource does not exist.                                    |
+| 409  | Conflict             | Database collision (e.g., Duplicate SKU, email already registered, out of stock).              |
+| 429  | Too Many Requests    | Rate limit exceeded.                                                                           |
+| 500  | Server Error         | Unhandled internal exception.                                                                  |  
 
 ---  
 
-## 5. Request Validation (Zod)  
+## 5. Request Validation (Zod) & Security Limits  
 
-Every incoming request (`body`, `query`, and `params`) is intercepted by strict Zod schemas.  
+* **NoSQL Injection Prevention:** Every incoming request (`body`, `query`, and `params`) is intercepted by strict Zod schemas. Extraneous fields sent in the JSON body will be silently stripped out.
 
-* Extraneous fields sent in the JSON body will be silently stripped out to prevent NoSQL injection.  
-* If required fields are missing or malformed, the API will fail-fast and return a 400 Bad `Request` with a comma-separated list of exactly which fields failed.  
+* **Fail-Fast:** If required fields are missing, the API immediately returns a `400 Bad Request`. 
+
+* **Global API Limit:** 100 requests per 15 minutes per IP.
+* **Authentication Limit:** 10 attempts per 15 minutes per IP on all `/auth/*` routes.
+* **Payload Limit:** Maximum JSON body size is restricted to 10kb. (Images are handled separately via Multer `multipart/form-data` with a 10MB strict limit).  
+
+---  
+
+## 6. Master Endpoint Directory  
+
+**1. Auth Module (`/auth`)** `POST /auth/register` - Register a new customer  
+
+* `POST /auth/login` - Login and receive JWT pair
+* `POST /auth/verify-otp` - Verify email via asynchronous OTP
+* `POST /auth/refresh` - Issue new access token via HttpOnly Cookie
+* `GET /auth/logout` - Clear session and destroy HttpOnly cookies  
+
+**2. Users Module (`/users`)**  `GET /users/me` - Get current logged-in user profile  
+* `PATCH /users/me` - Update profile details
+* `GET /users` - *(Admin)* List all registered customers  
+
+**3. Products Module (`/products`) - Polymorphic Catalog**  
+
+* `GET /products` - *(Public)* List catalog. Supports pagination and text search (`?page=1&limit=15&q=red&itemType=BANGLE`)
+* `GET /products/:id` - *(Public)* Get single product details 
+* `POST /products` - *(Admin)* Create a new product. **Requires** `multipart/form-data` for Cloudinary image uploads. 
+* `PATCH /products/:id` - *(Admin)* Update product details or stock counts.
+* `DELETE /products/:id` - *(Admin)* Soft-delete a product to preserve historical receipts. 
+
+**4. Orders & Checkout (/orders) - Upcoming Phase 4** `POST /orders/checkout` - Calculate final price and initialize Razorpay Gateway  
+
+* `POST /orders/verify` - Verify webhook payment signature
+* `GET /orders/my-orders` - List current user's orders
+* `GET /orders` - *(Admin)* View all incoming orders
+* `PATCH /orders/:id/status` - *(Admin)* Update order shipping status
+
+**5. Returns Module (/returns) - Upcoming Phase 5**  `POST /returns/:orderId` - Submit return request (Requires Cloudinary image proof for Fragile items)  
+
+* `GET /returns/pending` - *(Admin)* View returns awaiting approval 
 
 --- 
 
-## 6. Rate Limiting & Security Limits  
+## Endpoint Documentation Template  
 
-To protect against brute-force and DDoS attacks, the following limits are enforced globally:  
+*(Note: As we build out frontend integrations, specific endpoints will be documented below using this exact template)*. `POST /products`  
+**Description:** Creates a new polymorphic product and processes Cloudinary image streams.  
 
-* `Global API Limit:` 100 requests per 15 minutes per IP.
-* `Authentication Limit:` 10 attempts per 15 minutes per IP on all /auth/* routes.  
-* `Payload Limit:` Maximum JSON body size is restricted to 10kb.  
+**Access:** `Protected (Admin)`  
+**Request Type:** `multipart/form-data`  
+**Expected Payload:** `itemType` (String: BANGLE, APPAREL, etc.)  
+* `sku` (String)
+* `images` (File Array - max 10MB)
+* *...[Polymorphic fields dynamically required based on itemType]*  
 
+### Successful Response (201 Created):  
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Product created successfully",
+  "data": {
+    "product": {
+      "_id": "64a7b...",
+      "sku": "RB-APP-1001",
+      "images": ["[suspicious link removed]..."]
+    }
+  },
+  "timestamp": "2026-04-24T14:30:00.000Z"
+}
+```

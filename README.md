@@ -47,15 +47,17 @@ Reshma-Core utilizes a strict Domain-Driven Design (DDD) architecture. We mainta
 ### Architecture & System Design
 * **[System Overview](./docs/architecture/system-overview.md)** - The master blueprint and folder structure of the Reshma-Core backend.
 * **[Authentication & Security Architecture](./docs/architecture/auth-architecture.md)** - Deep dive into the Two-Token stateless JWT, Google OAuth, and Redis OTP flows.
+* **[Database Design Strategy](./docs/architecture/database-design.md)** - Explains the Mongoose Polymorphic single-collection strategy and ADRs.
+* **[Product Catalog Schema](./docs/architecture/product-catalog.md)** - Maps the physical Google Sheet inventory data to the strict database rules.
 * **[Security Hardening](./docs/architecture/security-hardening.md)** - Details on rate-limiting, Zod payload firewalls, and strict XSS/CSRF prevention.
-* **[Database Design Strategy](./docs/architecture/database-design.md)** - *(Coming Next: Polymorphic Product Catalog Schema)*
 
 ### API Integration Standards (For Frontend Teams)
 * **[API Design & Integration Standards](./docs/api/api-standards.md)** - Expected JSON response shapes, token handling, and base URLs.
 * **[Error Codes & Handling Guide](./docs/api/error-codes.md)** - Standardized error payloads and our HTTP status code dictionary.
 
 ### Testing & Setup Runbooks
-* **[Authentication Testing Runbook](./docs/testing/auth-runbook.md)** - Sequential manual testing steps and edge-case verifications for the Auth Epic.
+* **[Authentication Testing Runbook](./docs/api/thunder-tests/auth-runbook.md)** - Sequential manual testing steps for the Auth Epic.
+* **[Product Catalog Testing Runbook](./docs/api/thunder-tests/product-runbook.md)** - Testing instructions for `multipart/form-data` uploads and polymorphic Zod payloads.
 * **[Local Development Setup](./docs/setup/local-development.md)** - Step-by-step guide to booting the Node server, Redis cache, and background workers.
 * **[Environment Variables](./docs/setup/environment-variables.md)** - Required `.env` configuration for fail-fast boot sequences.
 
@@ -145,7 +147,17 @@ reshma-core/
     │   ├── interactions/         # Ratings & Reviews
     │   ├── notification/         # In-App & Email alerts
     │   ├── orders/               # Checkout & Math Engine
-    │   ├── products/             # Polymorphic Catalog
+    │   ├── products/             # POLYMORPHIC CATALOG ENGINE
+    │   │   ├── controllers/      
+    │   │   │   ├── product.admin.controller.ts
+    │   │   │   └── product.public.controller.ts
+    │   │   ├── dtos/             # Zod Discriminated Unions
+    │   │   │   ├── product.admin.dto.ts
+    │   │   │   └── product.public.dto.ts
+    │   │   ├── interfaces/       # Types for Base & Discriminators
+    │   │   ├── models/           # Mongoose Base & Discriminators
+    │   │   ├── product.routes.ts 
+    │   │   └── product.service.ts             # Polymorphic Catalog
     │   ├── returns/              # Damage Proof Logic
     │   └── users/                # Customer Profiles
     │
