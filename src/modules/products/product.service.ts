@@ -1,173 +1,200 @@
-import { Product } from './models/base-product.model';
-import { AppError } from '@shared/utils/app-error';
-import { HTTP_STATUS } from '@shared/constant/http-codes';
-import { uploadBufferToCloudinary, deleteFromCloudinary } from '@config/cloudinary';
-import { CreateProductInput, UpdateProductInput } from './dtos/product.admin.dto';
-import { GetProductsQueryInput } from './dtos/product.public.dto';
-import { IBaseProduct } from './interfaces/base-product.interface';
+import { Product } from "./models/base-product.model";
+import { AppError } from "@shared/utils/app-error";
+import { HTTP_STATUS } from "@shared/constant/http-codes";
+import {
+  uploadBufferToCloudinary,
+  deleteFromCloudinary,
+} from "@config/cloudinary";
+import {
+  CreateProductInput,
+  UpdateProductInput,
+} from "./dtos/product.admin.dto";
+import { GetProductsQueryInput } from "./dtos/product.public.dto";
+import { IBaseProduct } from "./interfaces/base-product.interface";
 
 /**
  * Product Service
- * Handles all database interactions, polymorphic document creation, 
+ * Handles all database interactions, polymorphic document creation,
  * and Cloudinary image pipelines for the catalog.
  */
 export class ProductService {
-    
-    /**
-     * Admin: Create a new Polymorphic Product
-     * Features: Parallel Cloudinary uploads and Cloudinary Rollback 
-     * if the database transaction fails (e.g., Duplicate SKU).
-     */
-    public static async createProduct(
-        payload: CreateProductInput, 
-        files: Express.Multer.File[]
-    ): Promise<IBaseProduct> {
-        // Enforce Image Requirement
-        if (!files || files.length === 0) {
-            throw new AppError(HTTP_STATUS.BAD_REQUEST, 'At least one product image must be uploaded.');
-        }
-
-        // Parallel Cloudinary Uploads
-        const uploadPromises = files.map((file) => 
-            uploadBufferToCloudinary(file.buffer, `products/${payload.itemType.toLowerCase()}`)
-        );
-        
-        const imageUrls = await Promise.all(uploadPromises);
-
-        // Database Transaction with Distributed Rollback
-        try {
-            const productData = {
-                ...payload,
-                images: imageUrls,
-            };
-
-            const product = await Product.create(productData);
-            return product;
-
-        } catch (error) {
-            // ROLLBACK: If DB creation fails (e.g., duplicate SKU), delete the uploaded images
-            // to prevent Cloudinary storage bloat (Orphaned Assets).
-            const rollbackPromises = imageUrls.map((url) => deleteFromCloudinary(url));
-            await Promise.allSettled(rollbackPromises); // Use allSettled so one failed deletion doesn't crash the others
-            
-            throw error; // Rethrow to the Global Error Handler
-        }
+  /**
+   * Admin: Create a new Polymorphic Product
+   * Features: Parallel Cloudinary uploads and Cloudinary Rollback
+   * if the database transaction fails (e.g., Duplicate SKU).
+   */
+  public static async createProduct(
+    payload: CreateProductInput,
+    files: Express.Multer.File[],
+  ): Promise<IBaseProduct> {
+    // Enforce Image Requirement
+    if (!files || files.length === 0) {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        "At least one product image must be uploaded.",
+      );
     }
 
-    /**
-     * Public: Fetch Catalog with Advanced Querying
-     * Implements Pagination, Filtering, and highly-optimized MongoDB Text Searching.
-     */
-    public static async getProducts(queryData: GetProductsQueryInput) {
-        const { page, limit, sort, q, itemType, mainCategory, subCategory } = queryData;
+    // Parallel Cloudinary Uploads
+    const uploadPromises = files.map((file) =>
+      uploadBufferToCloudinary(
+        file.buffer,
+        `products/${payload.itemType.toLowerCase()}`,
+      ),
+    );
 
-        // Build the dynamic MongoDB Query Object safely using Record
-        // This avoids Mongoose versioning type errors while remaining strongly typed.
-        const query: Record<string, any> = { isActive: true };
+    const imageUrls = await Promise.all(uploadPromises);
 
-        // Text Search Optimization
-        if (q) {
-            query.$text = { $search: q };
-        }
+    // Database Transaction with Distributed Rollback
+    try {
+      const productData = {
+        ...payload,
+        images: imageUrls,
+      };
 
-        // Exact Match Filters
-        if (itemType) query.itemType = itemType;
-        if (mainCategory) query.mainCategory = mainCategory;
-        if (subCategory) query.subCategory = subCategory;
+      const product = await Product.create(productData);
+      return product;
+    } catch (error) {
+      // ROLLBACK: If DB creation fails (e.g., duplicate SKU), delete the uploaded images
+      // to prevent Cloudinary storage bloat (Orphaned Assets).
+      const rollbackPromises = imageUrls.map((url) =>
+        deleteFromCloudinary(url),
+      );
+      await Promise.allSettled(rollbackPromises); // Use allSettled so one failed deletion doesn't crash the others
 
-        // Pagination Math
-        const skip = (page - 1) * limit;
+      throw error; // Rethrow to the Global Error Handler
+    }
+  }
 
-        // Execute Queries in Parallel
-        const [products, totalDocuments] = await Promise.all([
-            Product.find(query)
-                .sort(sort || '-createdAt')
-                .skip(skip)
-                .limit(limit)
-                .lean(), // .lean() strips heavy Mongoose document wrappers for high read performance
-            Product.countDocuments(query)
-        ]);
+  /**
+   * Public: Fetch Catalog with Advanced Querying
+   * Implements Pagination, Filtering, and highly-optimized MongoDB Text Searching.
+   */
+  public static async getProducts(queryData: GetProductsQueryInput) {
+    const { page, limit, sort, q, itemType, mainCategory, subCategory } =
+      queryData;
 
-        return {
-            products,
-            meta: {
-                total: totalDocuments,
-                page,
-                limit,
-                totalPages: Math.ceil(totalDocuments / limit),
-            }
-        };
+    // Build the dynamic MongoDB Query Object safely using Record
+    // This avoids Mongoose versioning type errors while remaining strongly typed.
+    const query: Record<string, any> = { isActive: true };
+
+    // Text Search Optimization
+    if (q) {
+      query.$text = { $search: q };
     }
 
-    /**
-     * Public/Admin: Fetch a single Product by ID
-     */
-    public static async getProductById(productId: string): Promise<IBaseProduct> {
-        const product = await Product.findOne({ _id: productId, isActive: true }).lean();
-        
-        if (!product) {
-            throw new AppError(HTTP_STATUS.NOT_FOUND, 'The requested product could not be found or has been removed.');
-        }
+    // Exact Match Filters
+    if (itemType) query.itemType = itemType;
+    if (mainCategory) query.mainCategory = mainCategory;
+    if (subCategory) query.subCategory = subCategory;
 
-        return product as unknown as IBaseProduct;
+    // Pagination Math
+    const skip = (page - 1) * limit;
+
+    // Execute Queries in Parallel
+    const [products, totalDocuments] = await Promise.all([
+      Product.find(query)
+        .sort(sort || "-createdAt")
+        .skip(skip)
+        .limit(limit)
+        .lean(), // .lean() strips heavy Mongoose document wrappers for high read performance
+      Product.countDocuments(query),
+    ]);
+
+    return {
+      products,
+      meta: {
+        total: totalDocuments,
+        page,
+        limit,
+        totalPages: Math.ceil(totalDocuments / limit),
+      },
+    };
+  }
+
+  /**
+   * Public/Admin: Fetch a single Product by ID
+   */
+  public static async getProductById(productId: string): Promise<IBaseProduct> {
+    const product = await Product.findOne({
+      _id: productId,
+      isActive: true,
+    }).lean();
+
+    if (!product) {
+      throw new AppError(
+        HTTP_STATUS.NOT_FOUND,
+        "The requested product could not be found or has been removed.",
+      );
     }
 
-    /**
-     * Admin: Update Product Data
-     * Performs a partial update. Mongoose will strictly validate the payload 
-     * against the correct discriminator schema based on the document's `itemType`.
-     */
-    public static async updateProduct(productId: string, payload: UpdateProductInput): Promise<IBaseProduct> {
-        const updatedProduct = await Product.findByIdAndUpdate(
-            productId,
-            { $set: payload },
-            { new: true, runValidators: true }
-        );
+    return product as unknown as IBaseProduct;
+  }
 
-        if (!updatedProduct) {
-            throw new AppError(HTTP_STATUS.NOT_FOUND, 'Product not found.');
-        }
+  /**
+   * Admin: Update Product Data
+   * Performs a partial update. Mongoose will strictly validate the payload
+   * against the correct discriminator schema based on the document's `itemType`.
+   */
+  public static async updateProduct(
+    productId: string,
+    payload: UpdateProductInput,
+  ): Promise<IBaseProduct> {
+    const updatedProduct = await Product.findByIdAndUpdate(
+      productId,
+      { $set: payload },
+      { new: true, runValidators: true },
+    );
 
-        return updatedProduct;
+    if (!updatedProduct) {
+      throw new AppError(HTTP_STATUS.NOT_FOUND, "Product not found.");
     }
 
-    /**
-     * Admin: Soft Delete Product
-     * We never permanently delete (`.deleteOne()`) products. Doing so would orphan 
-     * historical Order documents and break financial receipts. Instead, we hide them.
-     */
-    public static async softDeleteProduct(productId: string): Promise<void> {
-        const result = await Product.findByIdAndUpdate(productId, { isActive: false });
-        
-        if (!result) {
-            throw new AppError(HTTP_STATUS.NOT_FOUND, 'Product not found.');
-        }
-    }
+    return updatedProduct;
+  }
 
-    /**
-     * Internal: Reserve Stock Atomically (Used during Checkout Phase)
-     * * * ARCHITECTURE NOTE:
-     * This method utilizes MongoDB's atomic `$inc` combined with a `$gte` query firewall.
-     * This prevents Race Conditions if 10 users try to buy the last 1 item at the exact same millisecond.
-     */
-    public static async reserveStock(productId: string, quantityToDeduct: number): Promise<void> {
-        const updatedProduct = await Product.findOneAndUpdate(
-            { 
-                _id: productId, 
-                currentStock: { $gte: quantityToDeduct }, // FIREWALL
-                isActive: true 
-            },
-            { 
-                $inc: { currentStock: -quantityToDeduct } 
-            },
-            { new: true }
-        );
+  /**
+   * Admin: Soft Delete Product
+   * We never permanently delete (`.deleteOne()`) products. Doing so would orphan
+   * historical Order documents and break financial receipts. Instead, we hide them.
+   */
+  public static async softDeleteProduct(productId: string): Promise<void> {
+    const result = await Product.findByIdAndUpdate(productId, {
+      isActive: false,
+    });
 
-        if (!updatedProduct) {
-            throw new AppError(
-                HTTP_STATUS.CONFLICT, 
-                'Insufficient stock available or product is no longer active. The transaction was aborted.'
-            );
-        }
+    if (!result) {
+      throw new AppError(HTTP_STATUS.NOT_FOUND, "Product not found.");
     }
+  }
+
+  /**
+   * Internal: Reserve Stock Atomically (Used during Checkout Phase)
+   * * * ARCHITECTURE NOTE:
+   * This method utilizes MongoDB's atomic `$inc` combined with a `$gte` query firewall.
+   * This prevents Race Conditions if 10 users try to buy the last 1 item at the exact same millisecond.
+   */
+  public static async reserveStock(
+    productId: string,
+    quantityToDeduct: number,
+  ): Promise<void> {
+    const updatedProduct = await Product.findOneAndUpdate(
+      {
+        _id: productId,
+        currentStock: { $gte: quantityToDeduct }, // FIREWALL
+        isActive: true,
+      },
+      {
+        $inc: { currentStock: -quantityToDeduct },
+      },
+      { new: true },
+    );
+
+    if (!updatedProduct) {
+      throw new AppError(
+        HTTP_STATUS.CONFLICT,
+        "Insufficient stock available or product is no longer active. The transaction was aborted.",
+      );
+    }
+  }
 }

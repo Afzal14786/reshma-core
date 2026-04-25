@@ -5,7 +5,10 @@ import { baseEmailLayout } from "./layout";
  * @param firstname - The user's first name for personalization.
  * @param otp - The 6-digit one-time password.
  */
-export const otpVerificationTemplate = (firstname: string, otp: string): string => {
+export const otpVerificationTemplate = (
+  firstname: string,
+  otp: string,
+): string => {
   const content = `
       <h2 style="margin-top: 0; color: #111827; font-size: 24px;">Welcome to Reshma Bangles, ${firstname}!</h2>
       <p style="color: #4b5563; font-size: 16px;">

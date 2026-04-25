@@ -1,9 +1,12 @@
 import { baseEmailLayout } from "./layout";
 import env from "@config/env";
 
-export const passwordResetTemplate = (firstname: string, resetToken: string): string => {
+export const passwordResetTemplate = (
+  firstname: string,
+  resetToken: string,
+): string => {
   const resetUrl = `${env.CLIENT_URL}/auth/reset-password?token=${resetToken}`;
-    
+
   const content = `
       <h2 style="margin-top: 0; color: #111827; font-size: 24px;">Password Reset Request</h2>
       <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
