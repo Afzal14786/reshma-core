@@ -125,14 +125,21 @@ The API strictly adheres to the following HTTP status codes mapping:
 * `PATCH /products/:id` - *(Admin)* Update product details or stock counts.
 * `DELETE /products/:id` - *(Admin)* Soft-delete a product to preserve historical receipts. 
 
-**4. Orders & Checkout (/orders) - Upcoming Phase 4** `POST /orders/checkout` - Calculate final price and initialize Razorpay Gateway  
+**4. Cart Module (`/cart`)**
+* `GET /cart` - Retrieve the active user's cart (Dynamically populated & Self-Healing).
+* `POST /cart/merge` - Triggered post-login. Merges a frontend `localStorage` guest cart into the database.
+* `POST /cart/add` - Add a new item or increment an existing variant's quantity.
+* `PATCH /cart/update` - Explicitly override the quantity of a specific cart item.
+* `DELETE /cart/item/:productId` - Completely drop a product from the cart.
+* `DELETE /cart/clear` - Empty the cart (Called post-checkout).
 
+**5. Orders & Checkout (`/orders`) - Upcoming Phase 4.2** * `POST /orders/checkout` - Calculate final price and initialize Razorpay Gateway
 * `POST /orders/verify` - Verify webhook payment signature
 * `GET /orders/my-orders` - List current user's orders
 * `GET /orders` - *(Admin)* View all incoming orders
-* `PATCH /orders/:id/status` - *(Admin)* Update order shipping status
+* `PATCH /orders/:id/status` - *(Admin)* Update order shipping status `PATCH /orders/:id/status` - *(Admin)* Update order shipping status
 
-**5. Returns Module (/returns) - Upcoming Phase 5**  `POST /returns/:orderId` - Submit return request (Requires Cloudinary image proof for Fragile items)  
+**6. Returns Module (/returns) - Upcoming Phase 5**  `POST /returns/:orderId` - Submit return request (Requires Cloudinary image proof for Fragile items)  
 
 * `GET /returns/pending` - *(Admin)* View returns awaiting approval 
 
