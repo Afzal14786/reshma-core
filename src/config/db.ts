@@ -1,6 +1,6 @@
-import mongoose from 'mongoose';
-import env from './env';
-import logger from './logger';
+import mongoose from "mongoose";
+import env from "./env";
+import logger from "./logger";
 
 /**
  * Establishes connection to the MongoDB Atlas cluster.
@@ -11,7 +11,7 @@ export const connectDB = async (): Promise<void> => {
     const connection = await mongoose.connect(env.MONGO_URI);
     logger.info(`MongoDB Connected: ${connection.connection.host}`);
   } catch (error) {
-    logger.error('Error connecting to MongoDB:', error);
-    process.exit(1); 
+    logger.error("Error connecting to MongoDB:", error);
+    process.exit(1);
   }
 };

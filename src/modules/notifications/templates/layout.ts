@@ -3,14 +3,15 @@ import env from "@config/env";
 /**
  * Master Email Layout
  * * ARCHITECTURE NOTE:
- * Email clients (Gmail, Outlook, Apple Mail) strip out modern CSS and `<style>` tags. 
- * We must use inline CSS and table-based layouts to ensure the email renders 
+ * Email clients (Gmail, Outlook, Apple Mail) strip out modern CSS and `<style>` tags.
+ * We must use inline CSS and table-based layouts to ensure the email renders
  * perfectly across all devices. This layout wraps around all our transactional emails.
  */
 export const baseEmailLayout = (title: string, content: string): string => {
   const currentYear = new Date().getFullYear();
   // Using a secure HTTPS Cloudinary link for the logo ensures it renders in Gmail
-  const logoUrl = 'https://res.cloudinary.com/demo/image/upload/v1/reshma_bangles_logo.png'; // Update with your actual uploaded logo URL
+  const logoUrl =
+    "https://res.cloudinary.com/demo/image/upload/v1/reshma_bangles_logo.png"; // Update with your actual uploaded logo URL
 
   return `
   <!DOCTYPE html>
