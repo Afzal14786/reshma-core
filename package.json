@@ -12,7 +12,9 @@
     "start": "node dist/server.js",
     "dev": "nodemon --exec ts-node -r tsconfig-paths/register src/server.ts",
     "build": "tsc && tsc-alias",
-    "seed": "tsx src/db/seed.ts"
+    "seed": "tsx src/db/seed.ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\""
   },
   "keywords": [],
   "license": "ISC",
@@ -50,6 +52,7 @@
     "@types/node": "^25.6.0",
     "@types/nodemailer": "^8.0.0",
     "nodemon": "^3.1.14",
+    "prettier": "^3.8.3",
     "ts-node": "^10.9.2",
     "tsc-alias": "^1.8.16",
     "tsconfig-paths": "^4.2.0",
