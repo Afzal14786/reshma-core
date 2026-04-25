@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # Scan npm dependencies in the root directory
+  - package-ecosystem: "npm"
+    directory: "/"
+    
+    # Industry Standard: Check once a week to avoid daily spam
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      
+    # Prevent Dependabot from opening too many PRs at the same time
+    open-pull-requests-limit: 5
+    
+    # Assign yourself to the Pull Requests so you get the notification
+    assignees:
+      - "Afzal14786" # Make sure this matches your exact GitHub username
+      
+    ignore:
+      # Pro-Tip: Ignore major TypeScript updates. Major updates often 
+      # break type definitions across the whole app. It's better to do those manually.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
