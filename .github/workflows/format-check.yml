@@ -1,7 +1,6 @@
 name: "Code Formatting Check"
 
 on:
-  # Run this check on every Pull Request targeting the main branch
   pull_request:
     branches: [ "main" ]
 
@@ -20,14 +19,11 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20' # Uses a modern, stable Node version
-        cache: 'npm'       # Caches dependencies to make the check run faster
+        node-version: '20'
+        cache: 'npm'
 
     - name: Install Dependencies
-      # We use 'npm ci' instead of 'npm install' in automated pipelines. 
-      # It strictly follows the package-lock.json and is much faster.
       run: npm ci
 
     - name: Run Prettier Check
-      # This runs the script we added to your package.json earlier
       run: npm run format:check
