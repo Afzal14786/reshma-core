@@ -1,0 +1,67 @@
+import { Router } from 'express';
+import { CartController } from './cart.controller';
+
+// Middlewares
+import { protect } from '../../shared/middlewares/auth.middleware';
+import { validate } from '../../shared/middlewares/validate.middleware';
+
+// Validation Schemas
+import { 
+    AddItemToCartSchema, 
+    UpdateCartItemSchema, 
+    RemoveCartItemSchema,
+    MergeCartSchema
+} from './dtos/cart.dto';
+
+const router = Router();
+
+/*
+ * Protected Customer Routes
+ * All endpoints below require a valid user session. Guest carts are kept 
+ * in the frontend's local storage and synced using the /merge route upon login.
+ */
+
+// Enforce authentication for the entire cart module
+router.use(protect);
+
+// Fetch the user's current cart with live prices and stock
+router.get(
+    '/',
+    CartController.getCart
+);
+
+// Merge a frontend guest cart into the user's database cart after login
+router.post(
+    '/merge',
+    validate(MergeCartSchema),
+    CartController.mergeCart
+);
+
+// Add a new item to the cart or increase the quantity of an existing one
+router.post(
+    '/add',
+    validate(AddItemToCartSchema),
+    CartController.addItem
+);
+
+// Change the exact quantity of a specific cart item
+router.patch(
+    '/update',
+    validate(UpdateCartItemSchema),
+    CartController.updateItem
+);
+
+// Remove a specific product entirely from the cart
+router.delete(
+    '/item/:productId',
+    validate(RemoveCartItemSchema),
+    CartController.removeItem
+);
+
+// Empty the cart completely (usually called after a successful checkout)
+router.delete(
+    '/clear',
+    CartController.clearCart
+);
+
+export const CartRoutes = router;

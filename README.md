@@ -49,7 +49,8 @@ Reshma-Core utilizes a strict Domain-Driven Design (DDD) architecture. We mainta
 * **[Authentication & Security Architecture](./docs/architecture/auth-architecture.md)** - Deep dive into the Two-Token stateless JWT, Google OAuth, and Redis OTP flows.
 * **[Database Design Strategy](./docs/architecture/database-design.md)** - Explains the Mongoose Polymorphic single-collection strategy and ADRs.
 * **[Product Catalog Schema](./docs/architecture/product-catalog.md)** - Maps the physical Google Sheet inventory data to the strict database rules.
-* **[Security Hardening](./docs/architecture/security-hardening.md)** - Details on rate-limiting, Zod payload firewalls, and strict XSS/CSRF prevention.
+* **[Security Hardening](./docs/architecture/security-hardening.md)** - Details on rate-limiting, Zod payload firewalls, and strict XSS/CSRF prevention.  
+* **[Cart & Session Sync](./docs/modules/cart-module.md)** - Documentation on the Self-Healing Cart and Guest-to-User merge logic.
 
 ### API Integration Standards (For Frontend Teams)
 * **[API Design & Integration Standards](./docs/api/api-standards.md)** - Expected JSON response shapes, token handling, and base URLs.
