@@ -56,6 +56,7 @@ export const setRefreshCookie = (res: Response, refreshToken: string): void => {
     res.cookie('refreshToken', refreshToken, {
         expires: new Date(Date.now() + expirationMs),
         httpOnly: true,
+        signed: true,
         secure: env.NODE_ENV === 'production',
         sameSite: 'strict', // Mitigates Cross-Site Request Forgery (CSRF)
     });
@@ -70,6 +71,6 @@ export const clearRefreshCookie = (res: Response): void => {
         expires: new Date(Date.now() + 10 * 1000), 
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
-        sameSite: 'strict'
+        sameSite: 'strict',
     });
 };

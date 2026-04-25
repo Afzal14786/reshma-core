@@ -1,6 +1,5 @@
 import rateLimit from "express-rate-limit";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
-import { success } from "zod";
 
 /**
  * Infrastructure Layer: Rate Limiting
