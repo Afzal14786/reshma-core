@@ -41,7 +41,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
 
         const decode = jwt.verify(token, env.JWT_ACCESS_SECRET) as IJwtPayload;
         // user should present 
-        const currentUser = await User.findById(decode._id);
+        const currentUser = await User.findById(decode.id);
 
         if (!currentUser) {
             throw new AppError(HTTP_STATUS.UNAUTHORIZED, "The user belonging to this token is no longer exist");
