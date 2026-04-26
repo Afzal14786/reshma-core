@@ -33,6 +33,7 @@ High-level system design, security protocols, and database schemas.
 * **[Database Design Strategy](./database-design.md)** *(Polymorphic Schema Mapping & ADRs)*
 * **[Product Catalog Schema](./product-catalog.md)** *(Google Sheet Data to Database Mapping)*
 * **[Security Hardening Guide](./security-hardening.md)** *(Helmet, Rate Limiting, Zod Payload Firewalls)*
+* **[Payment Integration Architecture](./payment-integration.md)** *(HMAC-SHA256 Cryptographic Handshakes, ACID Transaction Integrity, and Idempotency Guards)*  
 
 ### Domain Modules
 Deep dives into the specific business logic, DTOs, and services for each core feature.

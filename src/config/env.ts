@@ -52,8 +52,15 @@ const envSchema = z.object({
   SMTP_PASS: z.string().min(1),
   EMAIL_FROM: z.string().min(1),
 
-  RAZORPAY_KEY_ID: z.string().optional(),
-  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_KEY_ID: z
+    .string()
+    .min(1, "Razorpay Key ID is required for checkout"),
+  RAZORPAY_KEY_SECRET: z
+    .string()
+    .min(1, "Razorpay Secret is required for checkout"),
+  RAZORPAY_WEBHOOK_SECRET: z
+    .string()
+    .min(1, "Webhook secret is required for security"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

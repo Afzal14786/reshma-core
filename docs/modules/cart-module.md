@@ -1,4 +1,17 @@
-# Cart Module Architecture
+<div align="center">
+
+  # Cart Module Architecture
+  
+  **The volatile, write‑heavy pre‑checkout sandbox bridging anonymous browsing to authenticated payment pipelines for the Reshma‑Core platform.**
+
+  [![MongoDB](https://img.shields.io/badge/MongoDB-Atomic_Updates-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+  [![Mongoose](https://img.shields.io/badge/Mongoose-Populate_Strategy-880000?style=flat&logo=mongoose&logoColor=white)](https://mongoosejs.com/)
+  [![Zod](https://img.shields.io/badge/Zod-Strict_DTO-3068b7?style=flat)](https://zod.dev/)
+  [![JWT](https://img.shields.io/badge/JWT-Guest_to_User_Merge-000000?style=flat&logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
+
+</div>
+
+---
 
 ## Overview
 The Cart Module serves as the highly volatile, write-heavy pre-checkout sandbox for Reshma-Core. Unlike the Product catalog (which is read-heavy), the Cart must actively defend against race conditions, out-of-stock anomalies, and malicious mathematical payloads (e.g., negative quantities).
@@ -34,4 +47,7 @@ This module bridges the gap between the Anonymous Frontend User and the Authenti
 All inbound payloads are intercepted by strict Zod Data Transfer Objects (`cart.dto.ts`):
 * **NoSQL Injection:** `productId` is regex-validated to guarantee a strict 24-character MongoDB Hex string.
 * **Negative Math Exploit:** `quantity` is strictly typed as an integer with `.min(1)`. This guarantees a malicious actor cannot pass `{ quantity: -5 }` to artificially drop their order subtotal.
-* **Type Strictness:** `selectedAttributes` utilizes a strict `Record<string, AttributeValue>` to prevent deep-nested object injection.
+* **Type Strictness:** `selectedAttributes` utilizes a strict `Record<string, AttributeValue>` to prevent deep-nested object injection.  
+
+---
+**Standard Documentation | Reshma-Core Architecture**
