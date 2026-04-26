@@ -112,11 +112,12 @@ reshma-core/
 │   │   ├── database-design.md
 │   │   ├── security-hardening.md
 │   │   └── system-overview.md
-│   ├── deployment/               # Deployment guides
-│   │   └── docker-guide.md
 │   ├── modules/                  # DDD domain specifics
 │   │   ├── auth-module.md
+│   │   ├── cart-module.md
 │   │   ├── notification-module.md
+│   │   ├── order-module.md
+│   │   ├── product-module.md
 │   │   └── user-module.md
 │   └── setup/                    # Local environment runbooks
 │       ├── environment-variables.md
@@ -126,28 +127,49 @@ reshma-core/
     ├── app.ts                    # Express app setup, global middlewares
     ├── server.ts                 # Database connection and server listener
     ├── assets/                   # Static assets
-    │   └── image_74cfe0.png      # Startup Logo
+    │   └── reshma_bangles.jpg    
     │
     ├── config/                   # Integrations & Configs
+    │   ├── cloudinary.ts         
     │   ├── db.ts                 
     │   ├── env.ts                
     │   ├── logger.ts             
     │   └── redis.ts              
     │
     ├── db/                       # Database Utilities
-    │   └── seed.ts               # Script to inject initial 50 products
+    │   └── seed.ts               # Script to inject initial products
     │
     ├── modules/                  # DOMAIN-DRIVEN MODULES
     │   ├── auth/                 # JWT, Login, Registration
     │   │   ├── dtos/
-    │   │   ├── interface/
     │   │   ├── auth.controller.ts
     │   │   ├── auth.routes.ts
-    │   │   └── auth.service.ts
+    │   │   ├── auth.service.ts
+    │   │   └── auth.utils.ts
+    │   ├── cart/                 # DYNAMIC CART ENGINE
+    │   │   ├── dtos/
+    │   │   ├── interfaces/
+    │   │   ├── cart.controller.ts
+    │   │   ├── cart.model.ts
+    │   │   ├── cart.route.ts
+    │   │   └── cart.service.ts
     │   ├── dashboard/            # Admin Analytics
     │   ├── interactions/         # Ratings & Reviews
-    │   ├── notification/         # In-App & Email alerts
-    │   ├── orders/               # Checkout & Math Engine
+    │   ├── notifications/        # In-App & Email alerts
+    │   │   ├── interface/
+    │   │   ├── templates/
+    │   │   ├── notification.controller.ts
+    │   │   ├── notification.model.ts
+    │   │   ├── notification.routes.ts
+    │   │   └── notification.service.ts
+    │   ├── orders/               # CHECKOUT & PAYMENT ENGINE
+    │   │   ├── dtos/
+    │   │   ├── interfaces/
+    │   │   ├── order.controller.ts
+    │   │   ├── order.model.ts
+    │   │   ├── order.routes.ts
+    │   │   ├── order.service.ts
+    │   │   └── payment.utils.ts
     │   ├── products/             # POLYMORPHIC CATALOG ENGINE
     │   │   ├── controllers/      
     │   │   │   ├── product.admin.controller.ts
@@ -158,15 +180,22 @@ reshma-core/
     │   │   ├── interfaces/       # Types for Base & Discriminators
     │   │   ├── models/           # Mongoose Base & Discriminators
     │   │   ├── product.routes.ts 
-    │   │   └── product.service.ts             # Polymorphic Catalog
+    │   │   └── product.service.ts# Polymorphic Catalog
     │   ├── returns/              # Damage Proof Logic
     │   └── users/                # Customer Profiles
+    │   |   ├── dtos/
+    │   │   ├── interfaces/
+    │   |   ├── user.controller.ts
+    │   │   ├── user.model.ts
+    │   │   ├── user.routes.ts
+    │   │   ├── user.service.ts
     │
     ├── routes/                   # Master Route Combiner
     │   └── index.ts              
     │
     └── shared/                   # Global Utilities
-        ├── constants/            # http-codes.ts
+        ├── constant/             # http-codes.ts
+        ├── infrastructure/       # mailer.ts
         ├── middlewares/          # auth, error, rate-limit, upload, validate
         ├── queues/               # BullMQ Background Workers
         ├── types/                # Express overrides (express.d.ts)
