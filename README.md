@@ -94,83 +94,185 @@ To solve this, the system utilizes a **Polymorphic Database Strategy** (via Mong
 ```text
 reshma-core/
 ├── .env.example
+├── .github/
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   ├── dependabot.yml
+│   └── workflows/
+│       ├── codeql.yml
+│       └── format-check.yml
 ├── .gitignore
 ├── CHANGES.md
-├── LICENSE
-├── package.json
-├── package-lock.json
+├── LICENCE
 ├── README.md
-├── tsconfig.json
-│
-├── docs/                         # MASTER DOCUMENTATION HUB
-│   ├── api/                      # Thunder Client configs & HTTP specs
+├── SECURITY.md
+├── docs/
+│   ├── api/
 │   │   ├── api-standards.md
 │   │   ├── error-codes.md
 │   │   └── thunder-tests/
-│   ├── architecture/             # System blueprints & security logic
+│   │       ├── auth-runbook.md
+│   │       └── product-runbook.md
+│   ├── architecture/
 │   │   ├── auth-architecture.md
 │   │   ├── database-design.md
+│   │   ├── payment-integration.md
+│   │   ├── product-catalog.md
 │   │   ├── security-hardening.md
 │   │   └── system-overview.md
-│   ├── deployment/               # Deployment guides
-│   │   └── docker-guide.md
-│   ├── modules/                  # DDD domain specifics
+│   ├── modules/
 │   │   ├── auth-module.md
+│   │   ├── cart-module.md
 │   │   ├── notification-module.md
+│   │   ├── order-module.md
+│   │   ├── product-module.md
 │   │   └── user-module.md
-│   └── setup/                    # Local environment runbooks
+│   └── setup/
 │       ├── environment-variables.md
 │       └── local-development.md
-│
-└── src/
-    ├── app.ts                    # Express app setup, global middlewares
-    ├── server.ts                 # Database connection and server listener
-    ├── assets/                   # Static assets
-    │   └── image_74cfe0.png      # Startup Logo
-    │
-    ├── config/                   # Integrations & Configs
-    │   ├── db.ts                 
-    │   ├── env.ts                
-    │   ├── logger.ts             
-    │   └── redis.ts              
-    │
-    ├── db/                       # Database Utilities
-    │   └── seed.ts               # Script to inject initial 50 products
-    │
-    ├── modules/                  # DOMAIN-DRIVEN MODULES
-    │   ├── auth/                 # JWT, Login, Registration
-    │   │   ├── dtos/
-    │   │   ├── interface/
-    │   │   ├── auth.controller.ts
-    │   │   ├── auth.routes.ts
-    │   │   └── auth.service.ts
-    │   ├── dashboard/            # Admin Analytics
-    │   ├── interactions/         # Ratings & Reviews
-    │   ├── notification/         # In-App & Email alerts
-    │   ├── orders/               # Checkout & Math Engine
-    │   ├── products/             # POLYMORPHIC CATALOG ENGINE
-    │   │   ├── controllers/      
-    │   │   │   ├── product.admin.controller.ts
-    │   │   │   └── product.public.controller.ts
-    │   │   ├── dtos/             # Zod Discriminated Unions
-    │   │   │   ├── product.admin.dto.ts
-    │   │   │   └── product.public.dto.ts
-    │   │   ├── interfaces/       # Types for Base & Discriminators
-    │   │   ├── models/           # Mongoose Base & Discriminators
-    │   │   ├── product.routes.ts 
-    │   │   └── product.service.ts             # Polymorphic Catalog
-    │   ├── returns/              # Damage Proof Logic
-    │   └── users/                # Customer Profiles
-    │
-    ├── routes/                   # Master Route Combiner
-    │   └── index.ts              
-    │
-    └── shared/                   # Global Utilities
-        ├── constants/            # http-codes.ts
-        ├── middlewares/          # auth, error, rate-limit, upload, validate
-        ├── queues/               # BullMQ Background Workers
-        ├── types/                # Express overrides (express.d.ts)
-        └── utils/                # api-response.ts, app-error.ts
+├── package-lock.json
+├── package.json
+├── src/
+│   ├── app.ts
+│   ├── assets/
+│   │   └── reshma_bangles.jpg
+│   ├── config/
+│   │   ├── cloudinary.ts
+│   │   ├── db.ts
+│   │   ├── env.ts
+│   │   ├── logger.ts
+│   │   ├── razorpay.ts
+│   │   └── redis.ts
+│   ├── db/
+│   │   └── seed.ts
+│   ├── modules/
+│   │   ├── auth/
+│   │   │   ├── auth.controller.ts
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── auth.service.ts
+│   │   │   ├── auth.utils.ts
+│   │   │   └── dtos/
+│   │   │       ├── google.dto.ts
+│   │   │       ├── login.dto.ts
+│   │   │       ├── register.dto.ts
+│   │   │       └── verify-otp.dto.ts
+│   │   ├── cart/
+│   │   │   ├── cart.controller.ts
+│   │   │   ├── cart.model.ts
+│   │   │   ├── cart.route.ts
+│   │   │   ├── cart.service.ts
+│   │   │   ├── dtos/
+│   │   │   │   └── cart.dto.ts
+│   │   │   └── interfaces/
+│   │   │       └── cart.interface.ts
+│   │   ├── dashboard/
+│   │   │   ├── dashboard.controller.ts
+│   │   │   ├── dashboard.routes.ts
+│   │   │   ├── dashboard.service.ts
+│   │   │   ├── dtos/
+│   │   │   │   └── date-range.dto.ts
+│   │   │   └── interface/
+│   │   │       └── dashboard.interface.ts
+│   │   ├── interactions/
+│   │   │   ├── dtos/
+│   │   │   │   └── add-review.dto.ts
+│   │   │   ├── interaction.controller.ts
+│   │   │   ├── interaction.model.ts
+│   │   │   ├── interaction.routes.ts
+│   │   │   ├── interaction.service.ts
+│   │   │   └── interface/
+│   │   │       └── review.interface.ts
+│   │   ├── notifications/
+│   │   │   ├── interface/
+│   │   │   │   ├── email.interface.ts
+│   │   │   │   └── notification.interface.ts
+│   │   │   ├── notification.controller.ts
+│   │   │   ├── notification.model.ts
+│   │   │   ├── notification.routes.ts
+│   │   │   ├── notification.service.ts
+│   │   │   └── templates/
+│   │   │       ├── layout.ts
+│   │   │       ├── order-cancle.ts
+│   │   │       ├── order-placed.ts
+│   │   │       ├── otp-verification.ts
+│   │   │       ├── password-reset.ts
+│   │   │       ├── password-update.ts
+│   │   │       └── welcome.ts
+│   │   ├── orders/
+│   │   │   ├── dtos/
+│   │   │   │   └── order.dto.ts
+│   │   │   ├── interfaces/
+│   │   │   │   └── order.interface.ts
+│   │   │   ├── invoice.generator.ts
+│   │   │   ├── order.admin.controller.ts
+│   │   │   ├── order.model.ts
+│   │   │   ├── order.public.controller.ts
+│   │   │   ├── order.routes.ts
+│   │   │   ├── order.service.ts
+│   │   │   └── payment.utils.ts
+│   │   ├── products/
+│   │   │   ├── controllers/
+│   │   │   │   ├── product.admin.controller.ts
+│   │   │   │   └── product.public.controller.ts
+│   │   │   ├── dtos/
+│   │   │   │   ├── product.admin.dto.ts
+│   │   │   │   └── product.public.dto.ts
+│   │   │   ├── interfaces/
+│   │   │   │   ├── accessory.interface.ts
+│   │   │   │   ├── apparel.interface.ts
+│   │   │   │   ├── bangle.interface.ts
+│   │   │   │   ├── base-product.interface.ts
+│   │   │   │   ├── fabric.interface.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   └── innerwear.interface.ts
+│   │   │   ├── models/
+│   │   │   │   ├── accessory.model.ts
+│   │   │   │   ├── apparel.model.ts
+│   │   │   │   ├── bangle.model.ts
+│   │   │   │   ├── base-product.model.ts
+│   │   │   │   ├── fabric.model.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   └── innerwear.model.ts
+│   │   │   ├── product.routes.ts
+│   │   │   └── product.service.ts
+│   │   ├── returns/
+│   │   │   ├── return.controller.ts
+│   │   │   ├── return.route.ts
+│   │   │   └── return.service.ts
+│   │   └── users/
+│   │       ├── dtos/
+│   │       │   ├── add-address.dto.ts
+│   │       │   └── update-profile.dto.ts
+│   │       ├── interface/
+│   │       │   └── user.interface.ts
+│   │       ├── user.controller.ts
+│   │       ├── user.model.ts
+│   │       ├── user.routes.ts
+│   │       └── user.service.ts
+│   ├── routes/
+│   │   └── index.ts
+│   ├── server.ts
+│   └── shared/
+│       ├── constant/
+│       │   └── http-codes.ts
+│       ├── infrastructure/
+│       │   └── mailer.ts
+│       ├── middlewares/
+│       │   ├── auth.middleware.ts
+│       │   ├── error.middleware.ts
+│       │   ├── http-logger.ts
+│       │   ├── rate-limit.middleware.ts
+│       │   ├── role.middleware.ts
+│       │   ├── upload.middleware.ts
+│       │   └── validate.middleware.ts
+│       ├── queues/
+│       │   ├── email.queue.ts
+│       │   └── email.worker.ts
+│       ├── types/
+│       │   └── express.d.ts
+│       └── utils/
+│           ├── api-response.ts
+│           └── app-error.ts
+└── tsconfig.json
 ```
 
 
