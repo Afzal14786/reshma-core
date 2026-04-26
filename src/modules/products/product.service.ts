@@ -80,24 +80,24 @@ export class ProductService {
 
     // Text Search Optimization
     if (q) {
-      query.$text = { $search: q };
+      query.$text = { $search: String(q) };
     }
 
     // Exact Match Filters
-    if (itemType) query.itemType = itemType;
-    if (mainCategory) query.mainCategory = mainCategory;
-    if (subCategory) query.subCategory = subCategory;
+    if (itemType) query.itemType = { $eq: String(itemType) };
+    if (mainCategory) query.mainCategory = { $eq: String(mainCategory) };
+    if (subCategory) query.subCategory = { $eq: String(subCategory) };
 
     // Pagination Math
-    const skip = (page - 1) * limit;
+    const skip = (Number(page) - 1) * Number(limit);
 
     // Execute Queries in Parallel
     const [products, totalDocuments] = await Promise.all([
       Product.find(query)
-        .sort(sort || "-createdAt")
+        .sort(sort ? String(sort) : "-createdAt")
         .skip(skip)
-        .limit(limit)
-        .lean(), // .lean() strips heavy Mongoose document wrappers for high read performance
+        .limit(Number(limit))
+        .lean(),
       Product.countDocuments(query),
     ]);
 
@@ -105,9 +105,9 @@ export class ProductService {
       products,
       meta: {
         total: totalDocuments,
-        page,
-        limit,
-        totalPages: Math.ceil(totalDocuments / limit),
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(totalDocuments / Number(limit)),
       },
     };
   }
@@ -117,7 +117,7 @@ export class ProductService {
    */
   public static async getProductById(productId: string): Promise<IBaseProduct> {
     const product = await Product.findOne({
-      _id: productId,
+      _id: { $eq: String(productId) },
       isActive: true,
     }).lean();
 
@@ -140,9 +140,16 @@ export class ProductService {
     productId: string,
     payload: UpdateProductInput,
   ): Promise<IBaseProduct> {
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { $set: payload },
+    const sanitizedPayload: Record<string, any> = {};
+    for (const [key, value] of Object.entries(payload)) {
+      if (!key.startsWith("$")) {
+        sanitizedPayload[key] = value;
+      }
+    }
+
+    const updatedProduct = await Product.findOneAndUpdate(
+      { _id: { $eq: String(productId) } },
+      { $set: sanitizedPayload },
       { new: true, runValidators: true },
     );
 
@@ -159,9 +166,10 @@ export class ProductService {
    * historical Order documents and break financial receipts. Instead, we hide them.
    */
   public static async softDeleteProduct(productId: string): Promise<void> {
-    const result = await Product.findByIdAndUpdate(productId, {
-      isActive: false,
-    });
+    const result = await Product.findOneAndUpdate(
+      { _id: { $eq: String(productId) } },
+      { $set: { isActive: false } },
+    );
 
     if (!result) {
       throw new AppError(HTTP_STATUS.NOT_FOUND, "Product not found.");
@@ -180,12 +188,12 @@ export class ProductService {
   ): Promise<void> {
     const updatedProduct = await Product.findOneAndUpdate(
       {
-        _id: productId,
-        currentStock: { $gte: quantityToDeduct }, // FIREWALL
+        _id: { $eq: String(productId) },
+        currentStock: { $gte: Number(quantityToDeduct) },
         isActive: true,
       },
       {
-        $inc: { currentStock: -quantityToDeduct },
+        $inc: { currentStock: -Number(quantityToDeduct) },
       },
       { new: true },
     );
