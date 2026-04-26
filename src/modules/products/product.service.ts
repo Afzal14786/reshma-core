@@ -140,9 +140,15 @@ export class ProductService {
     productId: string,
     payload: UpdateProductInput,
   ): Promise<IBaseProduct> {
-    const sanitizedPayload: Record<string, any> = {};
+    const sanitizedPayload: Record<string, any> = Object.create(null);
+
     for (const [key, value] of Object.entries(payload)) {
-      if (!key.startsWith("$")) {
+      if (
+        !key.startsWith("$") &&
+        key !== "__proto__" &&
+        key !== "constructor" &&
+        key !== "prototype"
+      ) {
         sanitizedPayload[key] = value;
       }
     }
