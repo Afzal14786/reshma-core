@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
 ### Added
+**Orders, Payments & Automated Fulfillment (Phase 5)**
+- **ACID-Compliant Checkout Engine (`order.service.ts`):** Engineered a high-integrity checkout pipeline using MongoDB Multi-Document Transactions (`startSession`) to guarantee atomic stock reservation and automated rollbacks on failure.
+- **Razorpay Financial Integration:** Integrated the official Razorpay SDK with a "Non-Trust Frontend" architecture, enforcing backend HMAC SHA-256 cryptographic signature verification for all payment payloads.
+- **On-the-Fly PDF Invoicing (`invoice.generator.ts`):** Developed a memory-efficient billing system using `pdfkit` that generates GST-compliant Tax Invoices as binary buffers, streaming them directly to the user to avoid server-side storage bloat.
+- **Historical Data Snapshotting:** Implemented a deep-copy mechanism in the `Order` model to freeze product prices, names, and attributes at the exact moment of purchase, ensuring audit integrity against future catalog changes.
+- **Automated Logistics Pipeline:** Hooked the Order State Machine into the BullMQ Notification Engine. Transitioning an order to `SHIPPED` now automatically dispatches asynchronous tracking emails and persistent in-app dashboard alerts.
+- **Performance Indexing:** Deployed compound MongoDB indexes on `orderStatus`, `paymentStatus`, and `orderNumber` to optimize administrative fulfillment dashboards and customer order history lookups.
+
+### Fixed
+- **Type Safety Collapse:** Resolved a critical TypeScript `never` type cascade in the Order Service by strictly mapping `Map` subdocuments and respecting `exactOptionalPropertyTypes` constraints.
+- **IDOR Vulnerability (Invoices):** Fortified the invoice download endpoint by enforcing a strict ownership check, ensuring users can only trigger PDF generation for orders bound to their specific `userId`.
+- **Logistics Data Integrity:** Fixed a missing model import and invalid `.select()` syntax in the `OrderAdminController` that was preventing the automated shipping notification trigger.
+
+### Changed
+- **Notification Facade Expansion:** Updated the `NotificationService` and `email.interface.ts` to support the `ORDER_SHIPPED` event type using strict TypeScript Discriminated Unions for payload accuracy.
+- **Routing Security:** Tiered the Order routes to prioritize `checkoutLimiter` (anti-carding protection) and `validate` (NoSQL firewall) before hitting the expensive ACID transaction logic.  
+
+
+### Added
 **Cart & Checkout Pre-Processing (Phase 3)**
 - **Dynamic Cart Engine (`cart.service.ts`):** Engineered a stateful cart module that cross-references live product prices, calculates total payload weight (`totalWeightGrams`), and actively filters out deactivated inventory.
 - **Deterministic Attribute Hashing:** Implemented a signature generation algorithm to intelligently group identical product variations (e.g., Size: M, Color: Red) to prevent cart duplication.

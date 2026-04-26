@@ -149,13 +149,55 @@ export class NotificationService {
           subject: `Order Cancelled #${payload.data.orderId}`,
           html: "<p>Order Cancelled.</p>",
         };
+
+      case "ORDER_SHIPPED": // FIX: Properly integrated into the switch
+        return {
+          subject: `Your Reshma Bangles Order ${payload.data.orderNumber} has shipped!`,
+          html: `
+              <h2>Hey, ${payload.data.firstname}!</h2>
+              <p>Your order <strong>${payload.data.orderNumber}</strong> has been handed over to <strong>${payload.data.courierName}</strong>.</p>
+              <p>Your Tracking Number is: <strong>${payload.data.trackingNumber}</strong></p>
+          `,
+        };
       default:
-        // FIX: Remove property access on the 'never' type.
         // We stringify the raw payload to capture the bug in server logs.
         const _exhaustiveCheck: never = payload;
         throw new Error(
           `Unhandled email type. Payload: ${JSON.stringify(payload)}`,
         );
     }
+  }
+
+  /**
+   * Dispatches the "Order Shipped" transactional email via BullMQ
+   * Also creates an In-App database notification.
+   */
+  public static async sendOrderShippedNotification(
+    userId: Types.ObjectId, // Added so we can send an in-app notification too!
+    email: string,
+    firstname: string,
+    orderNumber: string,
+    trackingNumber: string,
+    courierName: string,
+  ): Promise<void> {
+    // Dispatch Async Email via Redis Worker
+    await dispatchEmailJob({
+      type: "ORDER_SHIPPED",
+      to: email,
+      data: { firstname, orderNumber, trackingNumber, courierName },
+    });
+
+    // Dispatch Synchronous In-App Notification
+    await Notification.create({
+      recipientId: userId,
+      type: "ORDER",
+      title: `Order Shipped: ${orderNumber}`,
+      message: `Your package is on the way via ${courierName}. Tracking: ${trackingNumber}`,
+      link: `/orders/${orderNumber}`,
+    });
+
+    logger.info(
+      `[Notification] Shipping alerts queued and saved for User: ${userId}`,
+    );
   }
 }

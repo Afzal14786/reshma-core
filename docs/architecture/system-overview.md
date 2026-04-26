@@ -33,13 +33,16 @@ High-level system design, security protocols, and database schemas.
 * **[Database Design Strategy](./database-design.md)** *(Polymorphic Schema Mapping & ADRs)*
 * **[Product Catalog Schema](./product-catalog.md)** *(Google Sheet Data to Database Mapping)*
 * **[Security Hardening Guide](./security-hardening.md)** *(Helmet, Rate Limiting, Zod Payload Firewalls)*
+* **[Payment Integration Architecture](./payment-integration.md)** *(HMAC-SHA256 Cryptographic Handshakes, ACID Transaction Integrity, and Idempotency Guards)*  
 
 ### Domain Modules
 Deep dives into the specific business logic, DTOs, and services for each core feature.
-* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*
 * **[User Module](../modules/user-module.md)** *(Identity, RBAC, Password Hashing)*
 * **[Authentication Module](../modules/auth-module.md)** *(Login, Registration, Token Issuance)*
 * **[Notification Engine](../modules/notification-module.md)** *(BullMQ Background Workers, SMTP, In-App Alerts)*
+* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*
+* **[Cart Module](../modules/cart-module.md)** *(Dynamic Pricing, Attribute Hashing, Guest Merging)*
+* **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, State Machine)*
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.

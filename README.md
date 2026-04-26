@@ -119,7 +119,7 @@ reshma-core/
 │   │   ├── product-catalog.md
 │   │   ├── security-hardening.md
 │   │   └── system-overview.md
-│   ├── modules/
+│   ├── modules/                  # DDD domain specifics
 │   │   ├── auth-module.md
 │   │   ├── cart-module.md
 │   │   ├── notification-module.md
