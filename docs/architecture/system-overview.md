@@ -36,10 +36,12 @@ High-level system design, security protocols, and database schemas.
 
 ### Domain Modules
 Deep dives into the specific business logic, DTOs, and services for each core feature.
-* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*
 * **[User Module](../modules/user-module.md)** *(Identity, RBAC, Password Hashing)*
 * **[Authentication Module](../modules/auth-module.md)** *(Login, Registration, Token Issuance)*
 * **[Notification Engine](../modules/notification-module.md)** *(BullMQ Background Workers, SMTP, In-App Alerts)*
+* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*
+* **[Cart Module](../modules/cart-module.md)** *(Dynamic Pricing, Attribute Hashing, Guest Merging)*
+* **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, State Machine)*
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.
