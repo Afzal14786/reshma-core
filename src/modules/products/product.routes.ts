@@ -7,6 +7,7 @@ import { protect } from "@shared/middlewares/auth.middleware";
 import { restrictTo } from "@shared/middlewares/role.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
 import { uploadProductImage } from "@shared/middlewares/upload.middleware";
+import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 
 // DTO Imports
 import {
@@ -41,6 +42,8 @@ router.get(
  * PROTECTED ROUTES (Admin Facing)
  * Requires Two-Token JWT verification AND 'ADMIN' database role.
  */
+
+router.use(standardLimiter);
 
 // Apply authentication and authorization to all subsequent routes
 router.use(protect);
