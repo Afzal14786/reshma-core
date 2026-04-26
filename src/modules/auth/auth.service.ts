@@ -35,7 +35,7 @@ export class AuthService {
   public static async registerLocal(
     data: RegisterInput,
   ): Promise<{ user: IUser; message: string }> {
-    let targetUser = await User.findOne({ email: data.email });
+    let targetUser = await User.findOne({ email: { $eq: String(data.email) } });
 
     if (targetUser) {
       // Hard block if the account is already verified and active
@@ -116,7 +116,7 @@ export class AuthService {
 
     // Activate the account in the database
     const user = await User.findOneAndUpdate(
-      { email },
+      { email: { $eq: String(email) } },
       { isEmailVerified: true },
       { new: true },
     );
@@ -142,7 +142,9 @@ export class AuthService {
    */
   public static async loginLocal(data: LoginInput): Promise<IUser> {
     // The password field has 'select: false' in the Schema. We must explicitly request it here.
-    const user = await User.findOne({ email: data.email }).select("+password");
+    const user = await User.findOne({
+      email: { $eq: String(data.email) },
+    }).select("+password");
 
     if (!user || !(await user.comparePassword(data.password))) {
       logger.warn(`Failed login attempt`, { email: data.email });
@@ -192,7 +194,7 @@ export class AuthService {
         env.JWT_REFRESH_SECRET,
       ) as jwt.JwtPayload;
 
-      const user = await User.findById(decoded.id);
+      const user = await User.findOne({ _id: { $eq: String(decoded.id) } });
       if (!user)
         throw new AppError(
           HTTP_STATUS.UNAUTHORIZED,
@@ -240,7 +242,7 @@ export class AuthService {
       const sanitizedEmail = email.toLowerCase();
 
       // 2. State Management & Collision Recovery
-      let user = await User.findOne({ email: sanitizedEmail });
+      let user = await User.findOne({ email: { $eq: String(sanitizedEmail) } });
 
       if (user) {
         // 2a. Infrastructure Gatekeeper
