@@ -57,7 +57,7 @@ export class CartService {
    */
   public static async getCart(userId: string) {
     // Fetch or Create Cart (Upsert)
-    let cart = await Cart.findOne({ user: userId }).populate({
+    let cart = await Cart.findOne({ user: { $eq: String(userId) } }).populate({
       path: "items.product",
       select:
         "name sku basePrice discount currentStock weightGrams isFragile isActive images itemType",
@@ -129,7 +129,7 @@ export class CartService {
     const { productId, quantity, selectedAttributes } = payload;
 
     // Stock & Validation Check
-    const product = await Product.findById(productId)
+    const product = await Product.findOne({ _id: { $eq: String(productId) } })
       .select("currentStock isActive")
       .lean();
 
@@ -148,7 +148,7 @@ export class CartService {
     }
 
     // Fetch User Cart
-    let cart = await Cart.findOne({ user: userId });
+    let cart = await Cart.findOne({ user: { $eq: String(userId) } });
     if (!cart) {
       cart = new Cart({ user: userId, items: [] });
     }
@@ -223,7 +223,7 @@ export class CartService {
       );
     }
 
-    const cart = await Cart.findOne({ user: userId });
+    const cart = await Cart.findOne({ user: { $eq: String(userId) } });
     if (!cart) throw new AppError(HTTP_STATUS.NOT_FOUND, "Cart not found.");
 
     const targetSignature = this.generateItemSignature(
@@ -247,9 +247,10 @@ export class CartService {
     }
 
     // Real-time stock verification
-    const product = await Product.findById(productId)
+    const product = await Product.findOne({ _id: { $eq: String(productId) } })
       .select("currentStock isActive")
       .lean();
+
     if (!product || !product.isActive || product.currentStock < quantity) {
       throw new AppError(
         HTTP_STATUS.CONFLICT,
@@ -273,7 +274,7 @@ export class CartService {
    * @description Completely removes all variations of a specific product from the cart.
    */
   public static async removeProduct(userId: string, productId: string) {
-    const cart = await Cart.findOne({ user: userId });
+    const cart = await Cart.findOne({ user: { $eq: String(userId) } });
     if (!cart) return;
 
     // Filter out the item(s) matching the Product ID
@@ -290,7 +291,10 @@ export class CartService {
    * @description Empties the cart. Used immediately after a successful checkout.
    */
   public static async clearCart(userId: string): Promise<void> {
-    await Cart.findOneAndUpdate({ user: userId }, { items: [] });
+    await Cart.findOneAndUpdate(
+      { user: { $eq: String(userId) } },
+      { items: [] },
+    );
   }
 
   /**
@@ -306,14 +310,16 @@ export class CartService {
       return this.getCart(userId);
     }
 
-    let cart = await Cart.findOne({ user: userId });
+    let cart = await Cart.findOne({ user: { $eq: String(userId) } });
     if (!cart) {
       cart = new Cart({ user: userId, items: [] });
     }
 
     for (const guestItem of guestItems) {
       // Verify product still exists and is active
-      const product = await Product.findById(guestItem.productId)
+      const product = await Product.findOne({
+        _id: { $eq: String(guestItem.productId) },
+      })
         .select("currentStock isActive")
         .lean();
 
