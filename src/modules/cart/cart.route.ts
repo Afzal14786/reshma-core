@@ -5,6 +5,8 @@ import { CartController } from "./cart.controller";
 import { protect } from "../../shared/middlewares/auth.middleware";
 import { validate } from "../../shared/middlewares/validate.middleware";
 
+import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
+
 // Validation Schemas
 import {
   AddItemToCartSchema,
@@ -20,6 +22,8 @@ const router = Router();
  * All endpoints below require a valid user session. Guest carts are kept
  * in the frontend's local storage and synced using the /merge route upon login.
  */
+
+router.use(standardLimiter);
 
 // Enforce authentication for the entire cart module
 router.use(protect);
