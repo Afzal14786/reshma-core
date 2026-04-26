@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
 ### Added
+**Cart & Checkout Pre-Processing (Phase 3)**
+- **Dynamic Cart Engine (`cart.service.ts`):** Engineered a stateful cart module that cross-references live product prices, calculates total payload weight (`totalWeightGrams`), and actively filters out deactivated inventory.
+- **Deterministic Attribute Hashing:** Implemented a signature generation algorithm to intelligently group identical product variations (e.g., Size: M, Color: Red) to prevent cart duplication.
+- **Guest Cart Merging (`cart.controller.ts`):** Built a non-destructive merge system that synchronizes unauthenticated frontend `localStorage` carts with the user's persistent database cart upon login, enforcing strict stock limit capping.
+
+**Enterprise Security & CI/CD Hardening (Phase 4)**
+- **Static Application Security Testing (SAST):** Integrated GitHub CodeQL workflows (`codeql.yml`) to automatically scan Pull Requests for logical vulnerabilities.
+- **Supply Chain Automation (SCA):** Configured Dependabot (`dependabot.yml`) for weekly automated dependency auditing and patch management.
+- **Continuous Integration:** Implemented an automated Prettier formatting pipeline (`format-check.yml`) enforcing a unified codebase style.
+- **Repository Compliance:** Authored public-facing vulnerability reporting protocols (`SECURITY.md`) and standardized Pull Request templates.
+
+### Fixed
+**Vulnerability Remediations (CodeQL)**
+- **NoSQL Injection (CWE-89):** Eradicated object-injection vulnerabilities across Product, Cart, and Auth services by wrapping dynamic query variables in strict `$eq` operators and enforcing `String()` casting.
+- **Prototype Pollution (CWE-250):** Hardened the `ProductService` update pipeline by initializing payload dictionaries via `Object.create(null)` and physically stripping `__proto__` and `constructor` keys to prevent Remote Property Injection.
+- **Auth Bypass (CWE-807):** Transitioned the core `protect` middleware from reading raw cookies to evaluating cryptographically validated `req.signedCookies`, closing user-controlled authentication bypass vectors.
+- **Denial of Service (CWE-770):** Shielded expensive database and cryptographic execution paths by deploying strict route-level rate limiters (`authLimiter`, `standardLimiter`) in front of protected Auth, Cart, Product, and Notification endpoints.
+
+### Changed
+- **Authentication Pipeline:** Initialized `cookie-parser` with a cryptographic secret in `app.ts` to support the new Signed Cookie security architecture.
+- **Core Configuration:** Overhauled Zod environment validation to enforce stricter server boot requirements.
+- **Dependencies:** Added `prettier` as a devDependency and integrated the project-wide `.prettierrc` configuration.
+
+### Added
 **Authentication & Security**
 - **Two-Token Architecture (`auth.utils.ts`):** Engineered a highly secure session system utilizing short-lived Access Tokens and long-lived `HttpOnly` Refresh Tokens.
 - **OTP Verification Flow (`verify-otp.dto.ts`):** Built an asynchronous Node `crypto` OTP system backed by Redis caching with safe collision recovery.
