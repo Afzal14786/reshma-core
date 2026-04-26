@@ -2,7 +2,11 @@ import { Router } from "express";
 import { NotificationController } from "./notification.controller";
 import { protect } from "@shared/middlewares/auth.middleware";
 
+import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
+
 const router = Router();
+
+router.use(standardLimiter);
 
 // ALL notification routes require the user to be logged in
 router.use(protect);
