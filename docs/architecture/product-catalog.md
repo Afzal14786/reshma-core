@@ -1,4 +1,16 @@
-# Product Catalog Schema Mapping (Phase 2 Blueprint)
+<div align="center">
+
+  # Product Catalog Schema Mapping (Phase 2 Blueprint)
+  
+  **The polymorphic discriminator strategy mapping real‑world bangles, apparel, innerwear, and accessories into strict Mongoose schemas for the Reshma‑Core platform.**
+
+  [![Mongoose](https://img.shields.io/badge/Mongoose-Discriminators-880000?style=flat&logo=mongoose&logoColor=white)](https://mongoosejs.com/)
+  [![MongoDB](https://img.shields.io/badge/MongoDB-Schema_Design-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-Polymorphic_Models-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
+</div>
+
+---
 
 ## 1. Overview
 This document maps the real-world business data from the Reshma Bangles & Boutique catalog into strict Mongoose Polymorphic Schemas. The system utilizes a Base Schema for shared e-commerce attributes, and specific Discriminators for category-unique validation.
@@ -54,3 +66,7 @@ These schemas inherit the Base Schema. They handle the complex variations in siz
 | Database Field | Type | Sourced From | Validation / Notes |
 | :--- | :--- | :--- | :--- |
 | `sizeDetails` | `String` | `Available Sizes` | Usually 'Free Size' or 'Adjustable'. Stored as a flat string. |
+
+---  
+
+**Standard Documentation | Reshma-Core Architecture**

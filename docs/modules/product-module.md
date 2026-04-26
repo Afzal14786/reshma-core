@@ -1,4 +1,17 @@
-# Product Domain Module
+<div align="center">
+
+  # Product Domain Module
+  
+  **The polymorphic catalog engine powering CRUD operations, category‑specific validation, and Cloudinary image management for the Reshma‑Core platform.**
+
+  [![MongoDB](https://img.shields.io/badge/MongoDB-Atomic_Stock-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+  [![Cloudinary](https://img.shields.io/badge/Cloudinary-Image_Pipeline-3448C5?style=flat&logo=cloudinary&logoColor=white)](https://cloudinary.com/)
+  [![Zod](https://img.shields.io/badge/Zod-Discriminated_Unions-3068b7?style=flat)](https://zod.dev/)
+  [![Mongoose](https://img.shields.io/badge/Mongoose-Polymorphic_Models-880000?style=flat&logo=mongoose&logoColor=white)](https://mongoosejs.com/)
+
+</div>
+
+---
 
 ## 1. Overview
 The Product module is the core catalog engine of Reshma-Core. It is responsible for handling the CRUD operations of our polymorphic inventory, validating complex category-specific payloads, and managing the Cloudinary image pipeline.
@@ -42,4 +55,8 @@ The Service layer isolates the database operations from the HTTP controllers and
 * **`createProduct`:** 1. Uploads memory buffers to Cloudinary concurrently via `Promise.all`.
   2. Saves the polymorphic document to MongoDB.
   3. **Cloudinary Rollback:** If MongoDB fails (e.g., Duplicate SKU constraint), the service automatically catches the error and deletes the newly uploaded images from Cloudinary to prevent orphaned asset storage bloat.
-* **`reserveStock`:** Utilizes MongoDB's atomic `$inc` combined with a `$gte` query firewall. This prevents Race Conditions if multiple users attempt to purchase the final inventory item at the exact same millisecond.
+* **`reserveStock`:** Utilizes MongoDB's atomic `$inc` combined with a `$gte` query firewall. This prevents Race Conditions if multiple users attempt to purchase the final inventory item at the exact same millisecond.  
+
+---  
+
+**Standard Documentation | Reshma-Core Architecture**

@@ -12,7 +12,8 @@ export type EmailJobType =
   | "PASSWORD_RESET"
   | "PROFILE_UPDATE"
   | "ORDER_CONFIRMATION"
-  | "ORDER_CANCELLED";
+  | "ORDER_CANCELLED"
+  | "ORDER_SHIPPED";
 
 interface BaseEmailJob {
   type: EmailJobType;
@@ -49,6 +50,16 @@ export interface IOrderCancelledJob extends BaseEmailJob {
   data: { firstname: string; orderId: string; reason: string };
 }
 
+export interface IOrderShippedJob extends BaseEmailJob {
+  type: "ORDER_SHIPPED";
+  data: {
+    firstname: string;
+    orderNumber: string;
+    trackingNumber: string;
+    courierName: string;
+  };
+}
+
 // The exported union ensures our worker's exhaustive switch statement is flawless
 export type EmailJobPayload =
   | IOtpVerificationJob
@@ -56,4 +67,5 @@ export type EmailJobPayload =
   | IPasswordResetJob
   | IProfileUpdateJob
   | IOrderConfirmationJob
-  | IOrderCancelledJob;
+  | IOrderCancelledJob
+  | IOrderShippedJob;

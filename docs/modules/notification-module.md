@@ -94,6 +94,6 @@ A background process initialized in `server.ts`. It constantly listens to the Re
 
 - **Express Rate Limiting:** Applied globally to prevent spamming the paginated notification fetch endpoint.
 
----
+---  
 
-*Standard Documentation | Reshma-Core Architecture*
+**Standard Documentation | Reshma-Core Architecture**
