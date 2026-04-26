@@ -47,10 +47,10 @@ router.post(
 router.post("/login", authLimiter, validate(LoginSchema), AuthController.login);
 
 // GET /api/v1/auth/refresh -> Accepts HttpOnly cookie, returns new JSON Access Token
-router.get("/refresh", AuthController.refresh);
+router.get("/refresh", authLimiter, AuthController.refresh);
 
 // GET /api/v1/auth/logout -> Blacklists current session and drops cookies
 // Requires an active Access session to execute via the 'protect' gatekeeper.
-router.get("/logout", protect, AuthController.logout);
+router.get("/logout", authLimiter, protect, AuthController.logout);
 
 export const authRoutes = router;
