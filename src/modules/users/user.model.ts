@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import bcrypt from "bcrypt";
-import { IUser, IAddress } from "./interface/user.interface";
+import { IUser, IAddress } from "./interfaces/user.interface";
 
 const AddressSchema = new Schema<IAddress>(
   {

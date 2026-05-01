@@ -1,4 +1,4 @@
-import { IUser } from "@modules/users/interface/user.interface";
+import { IUser } from "@modules/users/interfaces/user.interface";
 
 // * ARCHITECTURE NOTE:
 // By default, the Express Request object knows nothing about our custom User models.

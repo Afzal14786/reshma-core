@@ -1,5 +1,5 @@
 import { User } from "../users/user.model";
-import { IUser } from "../users/interface/user.interface";
+import { IUser } from "../users/interfaces/user.interface";
 import { RegisterInput } from "./dtos/register.dto";
 import { LoginInput } from "./dtos/login.dto";
 import { AppError } from "@shared/utils/app-error";

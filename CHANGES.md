@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
 ### Added
+- **Embedded Logistics Engine:** Engineered an `AddressSchema` embedded within the `User` document. Supports up to 10 saved locations with ACID-compliant, atomic transactions to autonomously toggle the `isDefault` delivery address.
+- **Step-Up Authentication:** Upgraded password mutations to banking-level security. Changing a password now requires a two-factor cryptographic handshake: a 6-digit OTP (dispatched via email and cached in Redis for 10m) combined with the user's current bcrypt password.
+- **Diskless Avatar Uploads:** Connected Multer's memory storage directly to the Cloudinary API pipeline, enabling lightning-fast profile picture updates without saving files to the local server disk.
+- **Security Alert Templates:** Added new HTML email templates and In-App Database Notifications for critical security events (e.g., Password Updates).
+
+### Changed & Optimized
+- **Fire-and-Forget Notifications:** Refactored the `NotificationService` to prevent MongoDB latency from bottlenecking HTTP responses. All In-App database inserts (`Notification.create()`) are now offloaded to the Node.js background event loop as un-awaited, non-blocking promises.
+- **Strict Queue Compiler:** Upgraded the BullMQ payload definitions (`EmailJobPayload`) to use strict TypeScript Discriminated Unions. The compiler now guarantees 100% payload accuracy (e.g., ensuring `changedField` and `time` exist before an email can be queued).
+- **Controller Error Routing:** Completely refactored the `UserController` HTTP boundaries to safely wrap all asynchronous operations in `try/catch` blocks, passing rejections to Express's `NextFunction`. This eliminates unhandled promise rejections and routes all failures to the global `error.middleware.ts`.
+- **Zero-'any' Compliance:** Refactored the entire User Module (Service, Controller, and Interface) to strictly adhere to the project's Zero-'any' TypeScript policy, utilizing safe casting and explicit interface mapping.
+
+### Security
+- **Mass Assignment Firewalls:** Deployed airtight Zod `.strict()` DTO schemas across all profile update routes. Any HTTP request attempting to inject restricted fields (e.g., `role: "ADMIN"`, `loyaltyPoints: 9999`) is now instantly rejected at the routing layer.
+- **IDOR Prevention:** Enforced explicit ownership checks (`req.user._id`) across all Notification and Address mutation endpoints.
+
+### Added
 **Infrastructure Resiliency & Garbage Collection (Phase 5.2)**
 - **Cloud Storage Garbage Collection (`base-product.model.ts`):** Engineered a Mongoose `pre('findOneAndDelete')` hook that intercepts product deletion events. It autonomously maps over the product's image array and concurrently executes `deleteFromCloudinary` promises, preventing permanent storage leaks and financial bloat.
 - **Enterprise Graceful Shutdowns (`server.ts`):** Implemented a rigorous teardown orchestrator that intercepts `SIGINT` and `SIGTERM` signals. The sequence halts new Express traffic, allows in-flight ACID transactions and BullMQ workers to drain, and safely severs MongoDB and Redis connections before exiting the Node process.
