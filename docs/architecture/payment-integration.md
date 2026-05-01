@@ -118,4 +118,13 @@ The integration is tightly coupled with MongoDB Sessions to prevent data corrupt
 | Network Timeout       | User can re-trigger verification; Idempotency logic handles duplicate hits.     |
 | Insufficient Stock    | Transaction aborts before hitting Razorpay API; returns 409 Conflict.           |  
 
+
+## 6. Asynchronous Fallback (Webhooks)
+
+To guarantee financial consistency during client-side network failures, the system implements a server-to-server webhook listener.
+
+### The Webhook Flow
+1. **Trigger:** Razorpay fires an `order.paid` event directly to `/api/v1/orders/webhook`.
+2. **Verification:** The backend intercepts the `x-razorpay-signature` header and mathematically compares it against a payload hashed with the `RAZORPAY_WEBHOOK_SECRET`.
+3. **Idempotency Execution:** The system queries the database. If the `orderStatus` is already `PAID` (meaning the frontend successfully completed the handshake earlier), the webhook safely terminates. If it is `PENDING`, the system applies the financial state change and proceeds to fulfillment.  
 ---

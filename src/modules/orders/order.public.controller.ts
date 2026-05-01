@@ -6,6 +6,7 @@ import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { AppError } from "@shared/utils/app-error";
 import { CheckoutInput } from "./dtos/order.dto";
 import { generateInvoiceBuffer } from "./invoice.generator";
+import { IRazorpayWebhookBody, IOrder } from './interfaces/order.interface';
 
 export class OrderPublicController {
   /**
@@ -107,4 +108,25 @@ export class OrderPublicController {
 
     return res.status(HTTP_STATUS.OK).end(pdfBuffer);
   }
+
+  /**
+     * @route   POST /api/v1/orders/webhook
+     * @desc    Razorpay Server-to-Server asynchronous event handler
+     * @access  Public (Protected via HMAC Signature)
+     */
+    public static async handleRazorpayWebhook(req: Request, res: Response): Promise<Response> {
+        const signature = req.headers['x-razorpay-signature'] as string;
+        
+        if (!signature) {
+            throw new AppError(HTTP_STATUS.BAD_REQUEST, "Missing cryptographic signature");
+        }
+
+        // Strict two-step casting to satisfy TypeScript without compromising safety
+        const body = req.body as unknown as IRazorpayWebhookBody;
+
+        await OrderService.processWebhook(body, signature);
+
+        // Webhooks strictly require an immediate 200 OK response
+        return res.status(HTTP_STATUS.OK).json({ status: "ok" });
+    }
 }

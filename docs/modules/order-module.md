@@ -34,7 +34,14 @@ Unlike other modules that rely on live references, this module utilizes **Deep-C
 
 ### 3. Atomic Stock Reservation
 We utilize a "Find-and-Update" firewall pattern using MongoDB `$inc` and `$gte` operators within the session.
-* **Race-Condition Defense:** Stock is only deducted if `currentStock >= requestedQuantity`. This prevents "Overselling" during high-traffic flash sales.
+* **Race-Condition Defense:** Stock is only deducted if `currentStock >= requestedQuantity`. This prevents "Overselling" during high-traffic flash sales.  
+
+### 4. Inventory Defragmentation (Cron Orchestration)
+To prevent "Inventory Leaks" caused by abandoned checkouts, the module relies on an automated background orchestrator (`node-cron`).
+
+* **The Problem:** When a user initiates checkout, stock is atomically decremented. If they close their browser without paying, that stock remains locked indefinitely.
+* **The Solution:** A worker sweeps the `Order` collection every 15 minutes. It isolates documents where `orderStatus` is `PENDING` and the `createdAt` timestamp is older than 30 minutes.
+* **Atomic Restoration:** For each abandoned order, the worker opens a new transaction, marks the order as `CANCELLED`, and executes an `$inc` operation to return the exact quantity back to the `Product` catalog.
 
 ---
 
