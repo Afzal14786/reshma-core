@@ -21,10 +21,7 @@ const router = Router();
  * Guarded strictly by HMAC cryptographic signatures, not JWTs.
  */
 
-router.post(
-    '/webhook',
-    OrderPublicController.handleRazorpayWebhook
-);
+router.post("/webhook", OrderPublicController.handleRazorpayWebhook);
 
 /**
  * PUBLIC ROUTES: CUSTOMER FINANCIAL BOUNDARY

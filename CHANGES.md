@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
+### Added
+**Infrastructure Resiliency & Garbage Collection (Phase 5.2)**
+- **Cloud Storage Garbage Collection (`base-product.model.ts`):** Engineered a Mongoose `pre('findOneAndDelete')` hook that intercepts product deletion events. It autonomously maps over the product's image array and concurrently executes `deleteFromCloudinary` promises, preventing permanent storage leaks and financial bloat.
+- **Enterprise Graceful Shutdowns (`server.ts`):** Implemented a rigorous teardown orchestrator that intercepts `SIGINT` and `SIGTERM` signals. The sequence halts new Express traffic, allows in-flight ACID transactions and BullMQ workers to drain, and safely severs MongoDB and Redis connections before exiting the Node process.
+- **Event Loop Failsafes:** Deployed `.unref()` on the shutdown force-kill timer to prevent artificial event loop blocking, and established global listeners for `uncaughtException` and `unhandledRejection` to catch and gracefully handle synchronous boot errors and orphaned promises.
+
+### Fixed
+- **Mongoose Hook Typings:** Resolved implicit 'any' types in the pre-delete hook by explicitly typing the Document Query context and safely casting the lean document payload to the `IBaseProduct` interface.
+- **Server Initialization Sequence:** Fixed a potential unhandled crash vector by declaring the `server` variable with a union type (`Server | undefined`) and strictly verifying its initialization state before attempting to invoke `.close()` during a shutdown event.
+
 **Webhooks & Inventory Defragmentation (Phase 5.1)**
 - **Asynchronous Payment Webhooks (`order.public.controller.ts`):** Established a secure, server-to-server webhook endpoint to catch Razorpay `order.paid` events, ensuring fulfillment even if the client disconnects prematurely.
 - **Strict Webhook Typings (`order.interface.ts`):** Engineered the `IRazorpayWebhookBody` interface to strictly parse incoming gateway payloads without bypassing the TypeScript compiler.
