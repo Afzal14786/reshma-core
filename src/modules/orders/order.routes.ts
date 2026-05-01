@@ -17,6 +17,16 @@ import { CheckoutSchema, UpdateOrderStatusSchema } from "./dtos/order.dto";
 const router = Router();
 
 /**
+ * UNPROTECTED ROUTES (System Webhooks)
+ * Guarded strictly by HMAC cryptographic signatures, not JWTs.
+ */
+
+router.post(
+    '/webhook',
+    OrderPublicController.handleRazorpayWebhook
+);
+
+/**
  * PUBLIC ROUTES: CUSTOMER FINANCIAL BOUNDARY
  * All routes below this point require a mathematically verified JWT.
  * We apply the standard limiter globally to prevent basic enumeration attacks

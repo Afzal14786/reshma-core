@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
+**Webhooks & Inventory Defragmentation (Phase 5.1)**
+- **Asynchronous Payment Webhooks (`order.public.controller.ts`):** Established a secure, server-to-server webhook endpoint to catch Razorpay `order.paid` events, ensuring fulfillment even if the client disconnects prematurely.
+- **Strict Webhook Typings (`order.interface.ts`):** Engineered the `IRazorpayWebhookBody` interface to strictly parse incoming gateway payloads without bypassing the TypeScript compiler.
+- **Inventory Recovery Worker (`order-recovery.cron.ts`):** Deployed a `node-cron` background worker that sweeps the database every 15 minutes, utilizing ACID transactions to atomically restore locked physical inventory from abandoned carts.
+
+### Fixed
+- **Type Safety Enforcement:** Eradicated all instances of forced type bypassing across the Order and Notification controllers, replacing them with mathematically safe `unknown` cascading and Mongoose `ObjectId` assertions.  
+
 ### Added
 **Orders, Payments & Automated Fulfillment (Phase 5)**
 - **ACID-Compliant Checkout Engine (`order.service.ts`):** Engineered a high-integrity checkout pipeline using MongoDB Multi-Document Transactions (`startSession`) to guarantee atomic stock reservation and automated rollbacks on failure.

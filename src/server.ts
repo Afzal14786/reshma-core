@@ -4,6 +4,7 @@ import logger from "@config/logger";
 import mongoose from "mongoose";
 import { redisClient, connectRedis } from "@config/redis";
 import { Server } from "http";
+import { startCronJobs } from './shared/cron/order-recovery.cron';
 
 // Initialize Background Workers
 // By importing this here, the worker starts listening to Redis the moment the server boots.
@@ -29,7 +30,9 @@ const bootstrap = async () => {
     // 1. Connect to MongoDB
     await mongoose.connect(env.MONGO_URI);
     logger.info("MongoDB connected successfully.");
-
+    
+    startCronJobs();
+    
     // 2. Connect to Redis
     await connectRedis();
 

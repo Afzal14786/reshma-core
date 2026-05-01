@@ -67,3 +67,19 @@ export interface IOrder extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+
+/**
+ * Strict Typings for Razorpay Webhook Events
+ */
+export interface IRazorpayWebhookBody {
+    event: string;
+    payload: {
+        payment: {
+            entity: {
+                id: string;
+                order_id: string;
+            };
+        };
+    };
+}
