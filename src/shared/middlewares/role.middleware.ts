@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
-import { UserRole } from "@modules/users/interface/user.interface";
+import { UserRole } from "@modules/users/interfaces/user.interface";
 
 /**
  * The RBAC Gatekeeper (Authorization)

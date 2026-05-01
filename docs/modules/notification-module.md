@@ -15,25 +15,28 @@
 ## Overview
 
 The Notification Module (`src/modules/notifications/`) utilizes the **Facade Design Pattern** to completely decouple business logic from messaging infrastructure. It handles two distinct notification streams:
-1. **In-App Notifications:** Persistent alerts saved to MongoDB, displayed in the user's dashboard (e.g., "Welcome to Reshma Bangles").
+1. **In-App Notifications:** Persistent alerts saved to MongoDB, displayed in the user's dashboard (e.g., "Welcome to Reshma Bangles" or "Security Alert").
 2. **Email Notifications:** Asynchronous background jobs pushed to a Redis queue, constructed via strictly-typed HTML templates, and dispatched via SMTP.
 
 ---
 
-## Architectural Flow
+## Architectural Flow & Performance Optimization
 
-The module acts as a traffic router. When an event occurs in the system (e.g., a user verifies their email), the origin service calls the `NotificationService`. The Facade then decides whether to write to the Database, push to the Queue, or both.
+The module acts as a traffic router. When an event occurs in the system (e.g., a user changes their password), the origin service calls the `NotificationService`. 
+
+**Performance Note (Fire-and-Forget):** 
+While pushing to Redis is sub-millisecond, writing to a MongoDB cluster can cause latency spikes. To prevent notification dispatch from bottlenecking the main HTTP response, all `Notification.create()` DB writes intentionally omit the `await` keyword. They are offloaded to the Node.js background event loop with a `.catch()` block, guaranteeing that the HTTP response returns to the client instantly.  
 
 ```mermaid
 graph TD
-    A[Origin: AuthService / OrderService] -->|Calls Method| B(NotificationService Facade)
+    A[Origin: UserService / OrderService] -->|Calls Method| B(NotificationService Facade)
     
     B -->|1. Email Dispatch| C[(Redis / BullMQ)]
     C -->|Worker Consumes| D[email.worker.ts]
     D -->|Compiles HTML| E{Nodemailer}
     E -->|SMTP| F[User Inbox]
 
-    B -->|2. In-App Alert| G[(MongoDB)]
+    B -.->|2. Async DB Write| G[(MongoDB)]
     G -->|Saved as Document| H[Notification Collection]
     I[React Frontend] -->|GET /notifications| H
 ```  
@@ -42,40 +45,46 @@ graph TD
 
 ### 1. The Facade Layer (`notification.service.ts`)
 
-The unified entry point for the entire application. It contains highly specific trigger methods that abstract away the payload structures.
+The unified entry point for the entire application. It contains highly specific trigger methods that abstract away the payload structures.  
 
 - `sendOtpEmail(to, firstname, otp)`: Dispatches an OTP to the email queue.
-- `triggerWelcome(userId, email, firstname)`: Hybrid Method. Dispatches the Welcome HTML email to BullMQ and creates a permanent "Welcome" notification document in MongoDB.
+- `triggerWelcome(...)` / `sendPasswordUpdateConfirmation(...)`: Hybrid Methods. Dispatches strictly-typed HTML emails to BullMQ while simultaneously triggering asynchronous "Fire-and-Forget" DB inserts for the In-App dashboard.
 
 ### 2. The Presentation Layer (`notification.controller.ts`)
 
-Unlike the Auth Controller, this HTTP layer only handles the retrieval and management of In-App Notifications. It never dispatches emails.
+Unlike other controllers, this HTTP layer only handles the retrieval and management of In-App Notifications. It never dispatches emails.
 
 - Parses pagination (`page`, `limit`).
 - Guarantees data security by enforcing `req.user._id` ownership before fetching or updating a notification.
 
-### 3. The Compiler (`compileEmailTemplate`)
+### 3. The Compiler & Strict Payload Validation
 
-A strictly-typed utility used exclusively by the background worker to transform raw Queue JSON into HTML.
+A strictly-typed utility (`compileEmailTemplate`) used exclusively by the background worker to transform raw Queue JSON into HTML.  
 
-- **Strict Exhaustiveness:** Utilizes TypeScript's `never` type. If a developer adds a new `EmailJobPayload` type but forgets to add it to the `switch` statement, the application will refuse to compile, preventing broken emails in production.  
+- **Discriminated Unions:** The `EmailJobPayload` utilizes strict TS unions. For example, if a developer dispatches a `PROFILE_UPDATE` job, the compiler enforces that `changedField` and `time` variables must exist in the payload, preventing malformed emails from reaching production.  
+
+- **Strict Exhaustiveness:** Utilizes TypeScript's `never` type. If a new `EmailJobType` is added but missing from the `switch` statement, the application will refuse to compile.  
+
+---  
 
 ## REST API Specifications (In-App Alerts)
 
 Endpoints exposed to the React frontend to manage the user's bell-icon dashboard.
 
-| Method | Endpoint | Access | Purpose & Flow |
-|--------|----------|--------|----------------|
-| GET | `/api/v1/notifications` | Protected | Fetches paginated, unread notifications belonging strictly to the authenticated `req.user`. |
-| PATCH | `/api/v1/notifications/:id/read` | Protected | Marks a specific notification as `isRead: true`. Enforces ownership verification to prevent IDOR attacks. |  
+| Method | Endpoint                               | Access    | Purpose & Flow                                                                                   |
+|--------|----------------------------------------|-----------|--------------------------------------------------------------------------------------------------|
+| GET    | `/api/v1/notifications`                | Protected | Fetches paginated, unread notifications belonging strictly to the authenticated `req.user`.     |
+| PATCH  | `/api/v1/notifications/:id/read`       | Protected | Marks a specific notification as `isRead: true`. Enforces ownership verification to prevent IDOR attacks. |
+
+--- 
 
 ## Background Queue Architecture (BullMQ)
 
-Transactional emails (like OTPs) block the Node.js event loop if processed synchronously. To achieve millisecond response times, we utilize a Producer/Consumer queue architecture.
+Transactional emails block the Node.js event loop if processed synchronously. To achieve enterprise scalability, we utilize a Producer/Consumer queue architecture.
 
 ### 1. The Producer (`email.queue.ts`)
 
-Pushes an `EmailJobPayload` to Redis. The payload contains only primitive data (strings, numbers) necessary to build the email, keeping the memory footprint in Redis extremely small.
+Pushes an `EmailJobPayload` to Redis. The payload contains only primitive data (strings, numbers) necessary to build the email, keeping the memory footprint in Redis extremely small.  
 
 ### 2. The Consumer (`email.worker.ts`)
 
@@ -85,6 +94,8 @@ A background process initialized in `server.ts`. It constantly listens to the Re
 - Passes it to `NotificationService.compileEmailTemplate()` to generate the subject and `html`.
 - Injects the output into `nodemailer` and communicates with the external SMTP server.
 - Includes automatic retry logic (exponential backoff) in case the Gmail/SMTP server temporarily drops the connection.  
+
+---  
 
 ## Security & Reliability Dependencies
 
