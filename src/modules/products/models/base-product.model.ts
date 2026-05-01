@@ -1,5 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 import { IBaseProduct } from "../interfaces";
+import { deleteFromCloudinary } from "@config/cloudinary";
+import logger from "@config/logger";
 
 /**
  * Base Mongoose Configuration
@@ -78,6 +80,49 @@ BaseProductSchema.index({
   mainCategory: 1,
   createdAt: -1,
 });
+
+/**
+ * DOCUMENT DELETION HOOK
+ * Automatically sweeps Cloudinary to delete associated images when a product is destroyed.
+ */
+BaseProductSchema.pre(
+  "findOneAndDelete",
+  async function (this: mongoose.Query<unknown, unknown>) {
+    try {
+      // Retrieve the document that is about to be deleted and strictly cast it
+      const docToDelete = (await this.model
+        .findOne(this.getQuery())
+        .lean()) as IBaseProduct | null;
+
+      // If it has images, loop through and destroy them on the cloud
+      if (
+        docToDelete &&
+        docToDelete.images &&
+        Array.isArray(docToDelete.images)
+      ) {
+        const deletePromises = docToDelete.images.map((imgUrl: string) => {
+          if (typeof imgUrl === "string") {
+            // Using your perfectly engineered existing function
+            return deleteFromCloudinary(imgUrl);
+          }
+          return Promise.resolve();
+        });
+
+        // Await all deletion requests concurrently for maximum performance
+        await Promise.all(deletePromises);
+        logger.info(
+          `[Product Hook] Successfully wiped orphaned images for deleted product.`,
+        );
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        logger.error(
+          `[Pre-Delete Hook] Failed to clean up images: ${error.message}`,
+        );
+      }
+    }
+  },
+);
 
 export const Product = mongoose.model<IBaseProduct>(
   "Product",

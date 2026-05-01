@@ -8,8 +8,12 @@ import { CheckoutInput } from "./dtos/order.dto";
 import razorpay from "@config/razorpay";
 import { verifyRazorpaySignature } from "./payment.utils";
 import logger from "@config/logger";
-import { IOrderItem, IOrder, IRazorpayWebhookBody } from "./interfaces/order.interface";
-import { verifyWebhookEvent } from './payment.utils';
+import {
+  IOrderItem,
+  IOrder,
+  IRazorpayWebhookBody,
+} from "./interfaces/order.interface";
+import { verifyWebhookEvent } from "./payment.utils";
 
 export class OrderService {
   /**
@@ -199,95 +203,110 @@ export class OrderService {
   }
 
   /**
-     * Server-to-Server Webhook Processing
-     * * ARCHITECTURE NOTE:
-     * Catches asynchronous pings from Razorpay. Essential for users who pay successfully
-     * but drop connection before the frontend redirects.
-     */
+   * Server-to-Server Webhook Processing
+   * * ARCHITECTURE NOTE:
+   * Catches asynchronous pings from Razorpay. Essential for users who pay successfully
+   * but drop connection before the frontend redirects.
+   */
 
-  public static async processWebhook(body: IRazorpayWebhookBody, signature: string) {
-        // 1. Cryptographic Handshake
-        // error : Cannot find name 'verifyWebhookEvent'.
-        const isValid = verifyWebhookEvent(JSON.stringify(body), signature);
-        if (!isValid) {
-            logger.error(`[Webhook] Critical: Invalid Razorpay Signature Detected`);
-            throw new AppError(HTTP_STATUS.BAD_REQUEST, "Invalid webhook signature");
-        }
-
-        const event = body.event;
-        
-        // 2. Event Routing
-        if (event === 'order.paid') {
-            const paymentEntity = body.payload.payment.entity;
-            const rzpOrderId = paymentEntity.order_id;
-
-            const order = await Order.findOne({ gatewayOrderId: { $eq: String(rzpOrderId) } });
-            
-            if (!order) return; 
-
-            // 3. Idempotency Wall
-            if (order.paymentStatus === 'PAID') {
-                logger.info(`[Webhook] Order ${order.orderNumber} already PAID. Ignoring idempotent ping.`);
-                return; 
-            }
-
-            // 4. Apply Financial State
-            order.paymentStatus = 'PAID';
-            order.orderStatus = 'PROCESSING';
-            order.gatewayPaymentId = paymentEntity.id;
-            await order.save();
-            
-            logger.info(`[Webhook] Order ${order.orderNumber} successfully marked as PAID via background ping.`);
-        }
+  public static async processWebhook(
+    body: IRazorpayWebhookBody,
+    signature: string,
+  ) {
+    // 1. Cryptographic Handshake
+    // error : Cannot find name 'verifyWebhookEvent'.
+    const isValid = verifyWebhookEvent(JSON.stringify(body), signature);
+    if (!isValid) {
+      logger.error(`[Webhook] Critical: Invalid Razorpay Signature Detected`);
+      throw new AppError(HTTP_STATUS.BAD_REQUEST, "Invalid webhook signature");
     }
 
-    /**
-     * Abandoned Order Recovery (Inventory Defragmentation)
-     * * ARCHITECTURE NOTE:
-     * Finds PENDING orders older than 30 minutes. Iterates through them and uses
-     * ACID transactions to atomically restore reserved stock back to the catalog.
-     */
-    public static async recoverAbandonedOrders() {
-        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-        
-        // Find orders stuck in PENDING
-        const abandonedOrders = await Order.find({
-            orderStatus: 'PENDING',
-            createdAt: { $lt: thirtyMinutesAgo }
-        });
+    const event = body.event;
 
-        if (abandonedOrders.length === 0) return;
+    // 2. Event Routing
+    if (event === "order.paid") {
+      const paymentEntity = body.payload.payment.entity;
+      const rzpOrderId = paymentEntity.order_id;
 
-        logger.info(`[Cron] Found ${abandonedOrders.length} abandoned orders. Beginning inventory restoration.`);
+      const order = await Order.findOne({
+        gatewayOrderId: { $eq: String(rzpOrderId) },
+      });
 
-        for (const order of abandonedOrders) {
-            const session = await mongoose.startSession();
-            session.startTransaction();
-            
-            try {
-                // 1. Mark order as CANCELLED so it isn't picked up again
-                order.orderStatus = 'CANCELLED';
-                
-                // 2. Atomically restore stock for every item in the cart
-                for (const item of order.items) {
-                    await Product.findOneAndUpdate(
-                        { _id: item.product },
-                        { $inc: { currentStock: item.quantity } }, // Add the stock back!
-                        { session }
-                    );
-                }
-                
-                await order.save({ session });
-                await session.commitTransaction();
-                logger.info(`[Cron] Restored inventory for abandoned order: ${order.orderNumber}`);
-                
-            } catch (error) {
-                // If anything fails, rollback this specific order and continue to the next one
-                await session.abortTransaction();
-                logger.error(`[Cron] Failed to restore order ${order.orderNumber}:`, error);
-            } finally {
-                session.endSession();
-            }
-        }
+      if (!order) return;
+
+      // 3. Idempotency Wall
+      if (order.paymentStatus === "PAID") {
+        logger.info(
+          `[Webhook] Order ${order.orderNumber} already PAID. Ignoring idempotent ping.`,
+        );
+        return;
+      }
+
+      // 4. Apply Financial State
+      order.paymentStatus = "PAID";
+      order.orderStatus = "PROCESSING";
+      order.gatewayPaymentId = paymentEntity.id;
+      await order.save();
+
+      logger.info(
+        `[Webhook] Order ${order.orderNumber} successfully marked as PAID via background ping.`,
+      );
     }
+  }
+
+  /**
+   * Abandoned Order Recovery (Inventory Defragmentation)
+   * * ARCHITECTURE NOTE:
+   * Finds PENDING orders older than 30 minutes. Iterates through them and uses
+   * ACID transactions to atomically restore reserved stock back to the catalog.
+   */
+  public static async recoverAbandonedOrders() {
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
+    // Find orders stuck in PENDING
+    const abandonedOrders = await Order.find({
+      orderStatus: "PENDING",
+      createdAt: { $lt: thirtyMinutesAgo },
+    });
+
+    if (abandonedOrders.length === 0) return;
+
+    logger.info(
+      `[Cron] Found ${abandonedOrders.length} abandoned orders. Beginning inventory restoration.`,
+    );
+
+    for (const order of abandonedOrders) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        // 1. Mark order as CANCELLED so it isn't picked up again
+        order.orderStatus = "CANCELLED";
+
+        // 2. Atomically restore stock for every item in the cart
+        for (const item of order.items) {
+          await Product.findOneAndUpdate(
+            { _id: item.product },
+            { $inc: { currentStock: item.quantity } }, // Add the stock back!
+            { session },
+          );
+        }
+
+        await order.save({ session });
+        await session.commitTransaction();
+        logger.info(
+          `[Cron] Restored inventory for abandoned order: ${order.orderNumber}`,
+        );
+      } catch (error) {
+        // If anything fails, rollback this specific order and continue to the next one
+        await session.abortTransaction();
+        logger.error(
+          `[Cron] Failed to restore order ${order.orderNumber}:`,
+          error,
+        );
+      } finally {
+        session.endSession();
+      }
+    }
+  }
 }
