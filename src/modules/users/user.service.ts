@@ -22,7 +22,9 @@ export class UserService {
   public static async getProfile(
     userId: string | Types.ObjectId,
   ): Promise<IUser> {
-    const user = (await User.findById(userId).lean()) as IUser | null;
+    const user = (await User.findOne({
+      _id: { $eq: userId },
+    }).lean()) as IUser | null;
     if (!user) {
       throw new AppError(HTTP_STATUS.NOT_FOUND, "User profile not found");
     }
@@ -39,8 +41,8 @@ export class UserService {
   ): Promise<IUser> {
     // Find by ID and update, returning the newly modified document.
     // runValidators ensures Mongoose Schema rules (like max lengths) are enforced.
-    const updatedUser = (await User.findByIdAndUpdate(
-      userId,
+    const updatedUser = (await User.findOneAndUpdate(
+      { _id: { $eq: userId } },
       { $set: payload },
       { new: true, runValidators: true },
     ).lean()) as IUser | null;
@@ -67,7 +69,9 @@ export class UserService {
     session.startTransaction();
 
     try {
-      const user = await User.findById(userId).session(session);
+      const user = await User.findOne({ _id: { $eq: userId } }).session(
+        session,
+      );
       if (!user) {
         throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found");
       }
@@ -116,7 +120,9 @@ export class UserService {
     session.startTransaction();
 
     try {
-      const user = await User.findById(userId).session(session);
+      const user = await User.findOne({ _id: { $eq: userId } }).session(
+        session,
+      );
       if (!user) {
         throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found");
       }
@@ -165,7 +171,7 @@ export class UserService {
     userId: string | Types.ObjectId,
     addressId: string,
   ): Promise<IUser> {
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: { $eq: userId } });
     if (!user) {
       throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found");
     }
@@ -207,7 +213,9 @@ export class UserService {
   public static async sendPasswordUpdateOtp(
     userId: string | Types.ObjectId,
   ): Promise<void> {
-    const user = (await User.findById(userId).lean()) as IUser | null;
+    const user = (await User.findOne({
+      _id: { $eq: userId },
+    }).lean()) as IUser | null;
     if (!user) throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found");
 
     if (user.authProvider === "GOOGLE") {
@@ -249,7 +257,9 @@ export class UserService {
     }
 
     // Fetch User with hidden password field
-    const user = await User.findById(userId).select("+password");
+    const user = await User.findOne({ _id: { $eq: userId } }).select(
+      "+password",
+    );
     if (!user) throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found");
 
     // Cryptographic Handshake
