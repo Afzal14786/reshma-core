@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { UserController } from "./user.controller";
-import { protect } from '@shared/middlewares/auth.middleware';
-import { validate } from '@shared/middlewares/validate.middleware';
-import { upload } from '@shared/middlewares/upload.middleware';
+import { protect } from "@shared/middlewares/auth.middleware";
+import { validate } from "@shared/middlewares/validate.middleware";
+import { upload } from "@shared/middlewares/upload.middleware";
 import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
-
 
 import { UpdateProfileSchema } from "./dtos/update-profile.dto";
 import { AddAddressSchema, UpdateAddressSchema } from "./dtos/address.dto";
