@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { UserController } from "./user.controller";
-import { protect } from "../../shared/middlewares/auth.middleware";
-import { validate } from "../../shared/middlewares/validate.middleware";
-import { upload } from "../../shared/middlewares/upload.middleware";
+import { protect } from '@shared/middlewares/auth.middleware';
+import { validate } from '@shared/middlewares/validate.middleware';
+import { upload } from '@shared/middlewares/upload.middleware';
+import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
+
 
 import { UpdateProfileSchema } from "./dtos/update-profile.dto";
 import { AddAddressSchema, UpdateAddressSchema } from "./dtos/address.dto";
@@ -15,6 +17,10 @@ const router = Router();
  * All routes in this file are implicitly prefixed with `/api/v1/users`
  * by the main Express application router.
  */
+
+// Global Rate Limiter for all user profile mutations
+// This satisfies CodeQL requirements and prevents CPU exhaustion from brute-force/DoS attacks.
+router.use(standardLimiter);
 
 // IDENTITY & PROFILE MANAGEMENT
 
