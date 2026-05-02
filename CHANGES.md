@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
+
+### Fixed
+- **Security (User Module)**: Resolved a critical NoSQL Injection vulnerability (CWE-943) by implementing explicit `$eq` operators for all database lookups involving user-controlled identifiers.
+- **Security (User Module)**: Hardened the `updateProfile` service against taint analysis alerts by implementing explicit field mapping, ensuring only authorized properties are sent to the database sink.
+- **Security (Product Module)**: Mitigated potential Denial of Service (DoS) and brute-force vectors (CWE-770) by applying global rate-limiting to all public and administrative product routes.
+- **Security (Product Module)**: Protected authorization and database sinks in the product router by enforcing request throttling before authentication checks.
+- **Refactor**: Cleaned up redundant route definitions in `user.routes.ts` and standardized query patterns to use `findOne` and `findOneAndUpdate` for better auditability.  
+
+
 ### Added
 - **Embedded Logistics Engine:** Engineered an `AddressSchema` embedded within the `User` document. Supports up to 10 saved locations with ACID-compliant, atomic transactions to autonomously toggle the `isDefault` delivery address.
 - **Step-Up Authentication:** Upgraded password mutations to banking-level security. Changing a password now requires a two-factor cryptographic handshake: a 6-digit OTP (dispatched via email and cached in Redis for 10m) combined with the user's current bcrypt password.

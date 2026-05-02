@@ -26,6 +26,17 @@ const router = Router();
  * Open access. Protected only by the Global Rate Limiter.
  */
 
+// SECURITY FIX: Apply rate limiting at the top-level.
+// This ensures that expensive database lookups in Public routes AND
+// authorization checks in Admin routes are protected against DoS.
+
+/**
+ * PROTECTED ROUTES (Admin Facing)
+ * Requires Two-Token JWT verification AND 'ADMIN' database role.
+ */
+
+router.use(standardLimiter);
+
 router.get(
   "/",
   validate(GetProductsQuerySchema),
@@ -37,13 +48,6 @@ router.get(
   validate(GetProductByIdSchema),
   PublicProductController.getProductById,
 );
-
-/**
- * PROTECTED ROUTES (Admin Facing)
- * Requires Two-Token JWT verification AND 'ADMIN' database role.
- */
-
-router.use(standardLimiter);
 
 // Apply authentication and authorization to all subsequent routes
 router.use(protect);
