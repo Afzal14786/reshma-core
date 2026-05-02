@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
+### Added
+- **Checkout Engine**: Fully atomic checkout process utilizing MongoDB Sessions to ensure absolute data integrity.
+- **Payment Gateway**: End-to-end Razorpay integration supporting both COD and Prepaid financial flows.
+- **Security Protocols**: Raw body stream interceptor implemented in `app.ts` to support 100% accurate HMAC-SHA256 verification.
+- **Invoicing System**: `invoice.generator.ts` implemented to create binary PDF buffers in RAM, eliminating synchronous disk I/O.
+- **Automation**: Background cron orchestrator to recover stock from abandoned PENDING orders every 15 minutes.
+- **Communications**: New transactional templates for 'Order Placed' and 'Order Cancelled' (standardized to `order-cancel.ts`).
+
+### Changed
+- **Notification Service**: Expanded Facade architecture to handle order-related asynchronous triggers and In-App alerts.
+- **Controller Layer**: Refactored `OrderPublicController` and `OrderAdminController` for strict TypeScript compliance and zero-any usage.
+- **Service Layer**: Implemented explicit property mapping for shipping addresses to block NoSQL injection and mass assignment.
+- **Documentation**: Updated `system-overview.md` to reflect Phase 3 completion and transition to Phase 4.
+
+### Fixed
+- **Webhook Validation**: Resolved HMAC mismatch vulnerabilities caused by standard Express JSON parsing.
+- **Stock Integrity**: Neutralized race conditions in stock reservation using atomic `$inc` and `$gte` firewalls.
 
 ### Fixed
 - **Security (User Module)**: Resolved a critical NoSQL Injection vulnerability (CWE-943) by implementing explicit `$eq` operators for all database lookups involving user-controlled identifiers.

@@ -15,7 +15,7 @@ export class OrderPublicController {
    * @access  Private (Logged in users)
    */
   public static async checkout(req: Request, res: Response) {
-    const userId = req.user!._id.toString();
+    const userId = String(req.user!._id);
     const payload = req.body as CheckoutInput;
 
     const order = await OrderService.initializeCheckout(userId, payload);
@@ -34,7 +34,7 @@ export class OrderPublicController {
    * @access  Private
    */
   public static async verifyPayment(req: Request, res: Response) {
-    const userId = req.user!._id.toString();
+    const userId = String(req.user!._id);
     const { gatewayOrderId, gatewayPaymentId, gatewaySignature } = req.body;
 
     const order = await OrderService.verifyFrontendPayment(
@@ -58,9 +58,9 @@ export class OrderPublicController {
    * @access  Private
    */
   public static async getMyOrders(req: Request, res: Response) {
-    const userId = req.user!._id.toString();
+    const userId = String(req.user!._id);
 
-    const orders = await Order.find({ user: { $eq: String(userId) } })
+    const orders = await Order.find({ user: { $eq: userId } })
       .sort("-createdAt")
       .lean();
 
@@ -78,14 +78,14 @@ export class OrderPublicController {
    * @access  Private (Owner only)
    */
   public static async downloadInvoice(req: Request, res: Response) {
-    const userId = req.user!._id.toString();
-    const orderId = req.params.id;
+    const userId = String(req.user!._id);
+    const orderId = String(req.params.id);
 
     // SECURITY: IDOR Protection. By strictly requiring the requesting user's ID
     // to match the document's owner, we prevent malicious users from scraping other people's receipts.
     const order = await Order.findOne({
-      _id: { $eq: String(orderId) },
-      user: { $eq: String(userId) },
+      _id: { $eq: orderId },
+      user: { $eq: userId },
     }).lean();
 
     if (!order) {
@@ -95,8 +95,8 @@ export class OrderPublicController {
       );
     }
 
-    // Generate PDF Buffer purely in RAM
-    const pdfBuffer = await generateInvoiceBuffer(order as any);
+    // STRICT TYPING FIX: Replaced 'any' with a safe double cast to satisfy the service
+    const pdfBuffer = await generateInvoiceBuffer(order as unknown as IOrder);
 
     // Stream binary file to browser trigger native download
     res.setHeader("Content-Type", "application/pdf");
@@ -127,10 +127,20 @@ export class OrderPublicController {
       );
     }
 
-    // Strict two-step casting to satisfy TypeScript without compromising safety
-    const body = req.body as unknown as IRazorpayWebhookBody;
+    // ARCHITECTURE NOTE: Extract the raw string body securely without 'any'
+    const rawBody = (req as unknown as { rawBody?: string }).rawBody;
 
-    await OrderService.processWebhook(body, signature);
+    if (!rawBody) {
+      throw new AppError(
+        HTTP_STATUS.INTERNAL_SERVER_ERROR,
+        "Critical: Raw body not found. Webhook router is misconfigured.",
+      );
+    }
+
+    // Strict two-step casting to satisfy TypeScript without compromising safety
+    const parsedBody = req.body as unknown as IRazorpayWebhookBody;
+
+    await OrderService.processWebhook(rawBody, parsedBody, signature);
 
     // Webhooks strictly require an immediate 200 OK response
     return res.status(HTTP_STATUS.OK).json({ status: "ok" });

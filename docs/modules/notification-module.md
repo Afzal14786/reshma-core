@@ -45,25 +45,38 @@ graph TD
 
 ### 1. The Facade Layer (`notification.service.ts`)
 
-The unified entry point for the entire application. It contains highly specific trigger methods that abstract away the payload structures.  
+The unified entry point for the entire application. It contains highly specific trigger methods that abstract away the payload structures.
 
 - `sendOtpEmail(to, firstname, otp)`: Dispatches an OTP to the email queue.
-- `triggerWelcome(...)` / `sendPasswordUpdateConfirmation(...)`: Hybrid Methods. Dispatches strictly-typed HTML emails to BullMQ while simultaneously triggering asynchronous "Fire-and-Forget" DB inserts for the In-App dashboard.
+
+- `triggerWelcome(...)`: Hybrid Method. Dispatches a welcome email to BullMQ and triggers an asynchronous In-App dashboard alert.
+
+- `sendPasswordUpdateConfirmation(...)`: Dispatches a security alert email and In-App notification after a password change.
+
+- `sendOrderConfirmationNotification(...)`: (New) Dispatches the `ORDER_CONFIRMATION` job with `orderNumber` and `totalAmount`, while creating a persistent "Order Confirmed" alert in the user's bell icon.
+
+- `sendOrderCancelledNotification(...)`: (New) Dispatches a cancellation alert with the specific reason (e.g., Payment Timeout), ensuring the user is informed of inventory restoration.
+
+- `sendOrderShippedNotification(...)`: Dispatches strictly-typed HTML emails to BullMQ containing `trackingNumber` and `courierName`.  
+
 
 ### 2. The Presentation Layer (`notification.controller.ts`)
 
 Unlike other controllers, this HTTP layer only handles the retrieval and management of In-App Notifications. It never dispatches emails.
 
-- Parses pagination (`page`, `limit`).
-- Guarantees data security by enforcing `req.user._id` ownership before fetching or updating a notification.
+- **Pagination:** Parses `page` and `limit` to handle long notification histories.
+
+- **Security:** Guarantees data integrity by enforcing `req.user._id` ownership before fetching or updating a notification.
 
 ### 3. The Compiler & Strict Payload Validation
 
-A strictly-typed utility (`compileEmailTemplate`) used exclusively by the background worker to transform raw Queue JSON into HTML.  
+A strictly-typed utility (`compileEmailTemplate`) used exclusively by the background worker to transform raw Queue JSON into HTML.
 
-- **Discriminated Unions:** The `EmailJobPayload` utilizes strict TS unions. For example, if a developer dispatches a `PROFILE_UPDATE` job, the compiler enforces that `changedField` and `time` variables must exist in the payload, preventing malformed emails from reaching production.  
+- **Discriminated Unions:** The `EmailJobPayload` utilizes strict TS unions. For example, if a `PROFILE_UPDATE` job is dispatched, the compiler enforces that `changedField` and `time` variables must exist.
 
-- **Strict Exhaustiveness:** Utilizes TypeScript's `never` type. If a new `EmailJobType` is added but missing from the `switch` statement, the application will refuse to compile.  
+- **Order Snapshots:** Updated to handle `orderNumber` and `totalAmount` for professional, human-readable confirmation emails [cite: 1, 2].
+
+- **Strict Exhaustiveness:** Utilizes TypeScript's `never` type. If a new `EmailJobType` is added but missing from the `switch` statement, the application will refuse to compile.
 
 ---  
 
@@ -80,30 +93,29 @@ Endpoints exposed to the React frontend to manage the user's bell-icon dashboard
 
 ## Background Queue Architecture (BullMQ)
 
-Transactional emails block the Node.js event loop if processed synchronously. To achieve enterprise scalability, we utilize a Producer/Consumer queue architecture.
-
 ### 1. The Producer (`email.queue.ts`)
 
-Pushes an `EmailJobPayload` to Redis. The payload contains only primitive data (strings, numbers) necessary to build the email, keeping the memory footprint in Redis extremely small.  
+Pushes an `EmailJobPayload` to Redis. The payload contains only primitive data (strings, numbers) necessary to build the email, keeping the Redis memory footprint small.
 
 ### 2. The Consumer (`email.worker.ts`)
 
-A background process initialized in `server.ts`. It constantly listens to the Redis queue.
+A background process initialized in `server.ts` that constantly listens to the Redis queue.
 
-- Extracts the payload.
-- Passes it to `NotificationService.compileEmailTemplate()` to generate the subject and `html`.
-- Injects the output into `nodemailer` and communicates with the external SMTP server.
-- Includes automatic retry logic (exponential backoff) in case the Gmail/SMTP server temporarily drops the connection.  
+- Extracts the payload and passes it to `NotificationService.compileEmailTemplate()`.
+- Injects output into `nodemailer` and communicates with the SMTP server [cite: 1].
+- **Retry Logic:** Includes automatic exponential backoff in case the SMTP server temporarily drops the connection [cite: 1].  
 
 ---  
 
 ## Security & Reliability Dependencies
 
-- **IDOR Protection:** The `markAsRead` database query explicitly requires both the `_id` of the notification AND the `recipientId: req.user._id`. A malicious user cannot mark another user's notification as read by guessing its ID.
+- **IDOR Protection:** The `markAsRead` query explicitly requires both the notification `_id` AND the `recipientId: req.user._id` [cite: 1].
 
-- **Winston Telemetry:** Every job queued and every in-app alert triggered is logged via Winston to maintain an audit trail for delayed email investigations.
+- **Winston Telemetry:** Every job queued and alert triggered is logged via Winston to maintain an audit trail for delayed email investigations [cite: 1].
 
-- **Express Rate Limiting:** Applied globally to prevent spamming the paginated notification fetch endpoint.
+- **Express Rate Limiting:** Applied globally to prevent spamming the notification fetch endpoint [cite: 1].
+
+- **Template Integrity:** Corrected naming conventions (e.g., `order-cancel.ts`) ensure the compiler never hits file-not-found errors [cite: 1].
 
 ---  
 

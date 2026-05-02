@@ -2,18 +2,19 @@ import mongoose from "mongoose";
 import { Order } from "./order.model";
 import { Cart } from "../cart/cart.model";
 import { Product } from "../products/models/base-product.model";
+import { User } from "../users/user.model"; // Added for Notification data
+import { NotificationService } from "../notifications/notification.service"; // Added Notification Engine
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { CheckoutInput } from "./dtos/order.dto";
 import razorpay from "@config/razorpay";
-import { verifyRazorpaySignature } from "./payment.utils";
 import logger from "@config/logger";
 import {
   IOrderItem,
   IOrder,
   IRazorpayWebhookBody,
 } from "./interfaces/order.interface";
-import { verifyWebhookEvent } from "./payment.utils";
+import { verifyRazorpaySignature, verifyWebhookEvent } from "./payment.utils";
 
 export class OrderService {
   /**
@@ -28,6 +29,8 @@ export class OrderService {
   ) {
     const session = await mongoose.startSession();
     session.startTransaction();
+
+    let savedOrder: IOrder;
 
     try {
       // SECURITY: Strict CodeQL $eq wrapping to prevent query injection
@@ -61,7 +64,7 @@ export class OrderService {
         if (!product) {
           throw new AppError(
             HTTP_STATUS.CONFLICT,
-            `Item out of stock or insufficient quantity: Product ID ${item.product}`,
+            `Item out of stock or insufficient quantity.`,
           );
         }
 
@@ -78,13 +81,9 @@ export class OrderService {
           imageSnapshot: product.images[0] || "",
         };
 
-        // TypeScript Fix: Map strictly to Record<string, string> to satisfy Mongoose Map types
-        if (
-          item.selectedAttributes &&
-          Object.keys(item.selectedAttributes).length > 0
-        ) {
+        if (item.selectedAttributes && item.selectedAttributes instanceof Map) {
           const formattedAttributes: Record<string, string> = {};
-          for (const [key, value] of Object.entries(item.selectedAttributes)) {
+          for (const [key, value] of item.selectedAttributes.entries()) {
             formattedAttributes[key] = String(value);
           }
           historyItem.selectedAttributes = formattedAttributes;
@@ -93,47 +92,50 @@ export class OrderService {
         historicalItems.push(historyItem);
       }
 
-      // Pricing Math (Flat ₹50 shipping if subtotal < ₹2000)
       const shippingCost = subTotal > 2000 ? 0 : 50;
-      const taxAmount = subTotal * 0.18; // 18% GST implementation
+      const taxAmount = subTotal * 0.18;
       const totalAmount = subTotal + shippingCost + taxAmount;
+
+      // SECURITY FIX: Explicit Object Mapping to sever Taint Analysis chain.
+      const safeShippingAddress = {
+        fullName: String(payload.shippingAddress.fullName),
+        phone: String(payload.shippingAddress.phone),
+        streetAddress: String(payload.shippingAddress.streetAddress),
+        city: String(payload.shippingAddress.city),
+        state: String(payload.shippingAddress.state),
+        postalCode: String(payload.shippingAddress.postalCode),
+        country: String(payload.shippingAddress.country || "India"),
+      };
 
       const orderPayload: Partial<IOrder> = {
         user: new mongoose.Types.ObjectId(userId),
         items: historicalItems,
-        shippingAddress: payload.shippingAddress,
-        pricing: {
-          subTotal,
-          shippingCost,
-          taxAmount,
-          totalAmount,
-        },
-        paymentMethod: payload.paymentMethod,
+        shippingAddress: safeShippingAddress,
+        pricing: { subTotal, shippingCost, taxAmount, totalAmount },
+        paymentMethod: payload.paymentMethod === "COD" ? "COD" : "RAZORPAY",
         paymentStatus: "PENDING",
         orderStatus: "PENDING",
       };
 
       const orderDocuments = await Order.create([orderPayload], { session });
-      const order = orderDocuments[0] as IOrder;
+      savedOrder = orderDocuments[0] as IOrder;
 
-      // Gateway Handshake
-      if (payload.paymentMethod === "RAZORPAY") {
-        // SAFETY NET: Convert INR to exact Paise to avoid floating-point math truncation bugs
+      if (orderPayload.paymentMethod === "RAZORPAY") {
         const rzpOrder = await razorpay.orders.create({
           amount: Math.round(totalAmount * 100),
           currency: "INR",
-          receipt: order.orderNumber,
+          receipt: savedOrder.orderNumber,
           notes: { userId: String(userId) },
         });
 
-        order.gatewayOrderId = rzpOrder.id;
-        await order.save({ session });
+        savedOrder.gatewayOrderId = rzpOrder.id;
+        await savedOrder.save({ session });
       } else {
-        order.orderStatus = "PROCESSING";
-        await order.save({ session });
+        // COD Orders proceed directly to processing
+        savedOrder.orderStatus = "PROCESSING";
+        await savedOrder.save({ session });
       }
 
-      // Clear Cart Post-Checkout
       await Cart.findOneAndUpdate(
         { user: { $eq: String(userId) } },
         { $set: { items: [] } },
@@ -142,21 +144,44 @@ export class OrderService {
 
       // COMMIT: Database changes locked in
       await session.commitTransaction();
-      logger.info(`Checkout successful`, { orderId: order._id, userId });
-
-      return order;
+      logger.info(`Checkout successful`, { orderId: savedOrder._id, userId });
     } catch (error) {
-      // ROLLBACK: Instantly restore any deducted stock to the catalog
       await session.abortTransaction();
       throw error;
     } finally {
       session.endSession();
     }
+
+    // --- ASYNC NOTIFICATION ENGINE TRIGGER ---
+    // Safely executed outside the transaction to prevent blocking
+    if (savedOrder.paymentMethod === "COD") {
+      try {
+        const userDoc = await User.findOne({ _id: { $eq: String(userId) } })
+          .select("firstname email")
+          .lean();
+
+        if (userDoc) {
+          await NotificationService.sendOrderConfirmationNotification(
+            userDoc._id as mongoose.Types.ObjectId,
+            userDoc.email,
+            userDoc.firstname,
+            savedOrder.orderNumber,
+            savedOrder.pricing.totalAmount,
+          );
+        }
+      } catch (notifyErr) {
+        logger.error(
+          `Failed to dispatch COD confirmation for ${savedOrder.orderNumber}`,
+          notifyErr,
+        );
+      }
+    }
+
+    return savedOrder;
   }
 
   /**
    * Frontend Cryptographic Handshake
-   * Verifies the payment immediately after the user closes the modal to enable instant UI updates.
    */
   public static async verifyFrontendPayment(
     userId: string,
@@ -171,7 +196,6 @@ export class OrderService {
 
     if (!order) throw new AppError(HTTP_STATUS.NOT_FOUND, "Order not found.");
 
-    // Idempotency: Ignore duplicate success pings to prevent double-processing
     if (order.paymentStatus === "PAID") return order;
 
     const isValid = verifyRazorpaySignature(
@@ -184,48 +208,63 @@ export class OrderService {
       logger.error(`Cryptographic signature mismatch`, { orderId: order._id });
       throw new AppError(
         HTTP_STATUS.BAD_REQUEST,
-        "Payment verification failed. Invalid signature.",
+        "Payment verification failed.",
       );
     }
 
-    // Apply financial state
     order.paymentStatus = "PAID";
     order.orderStatus = "PROCESSING";
     order.gatewayPaymentId = gatewayPaymentId;
     order.gatewaySignature = gatewaySignature;
 
     await order.save();
-
     logger.info(`Order Paid via Frontend Handshake`, {
       orderNumber: order.orderNumber,
     });
+
+    // --- ASYNC NOTIFICATION ENGINE TRIGGER ---
+    try {
+      const userDoc = await User.findOne({ _id: { $eq: String(userId) } })
+        .select("firstname email")
+        .lean();
+
+      if (userDoc) {
+        await NotificationService.sendOrderConfirmationNotification(
+          userDoc._id as mongoose.Types.ObjectId,
+          userDoc.email,
+          userDoc.firstname,
+          order.orderNumber,
+          order.pricing.totalAmount,
+        );
+      }
+    } catch (notifyErr) {
+      logger.error(
+        `Failed to dispatch Razorpay confirmation for ${order.orderNumber}`,
+        notifyErr,
+      );
+    }
+
     return order;
   }
 
   /**
    * Server-to-Server Webhook Processing
-   * * ARCHITECTURE NOTE:
-   * Catches asynchronous pings from Razorpay. Essential for users who pay successfully
-   * but drop connection before the frontend redirects.
    */
-
   public static async processWebhook(
-    body: IRazorpayWebhookBody,
+    rawBody: string,
+    parsedBody: IRazorpayWebhookBody,
     signature: string,
   ) {
-    // 1. Cryptographic Handshake
-    // error : Cannot find name 'verifyWebhookEvent'.
-    const isValid = verifyWebhookEvent(JSON.stringify(body), signature);
+    const isValid = verifyWebhookEvent(rawBody, signature);
     if (!isValid) {
       logger.error(`[Webhook] Critical: Invalid Razorpay Signature Detected`);
       throw new AppError(HTTP_STATUS.BAD_REQUEST, "Invalid webhook signature");
     }
 
-    const event = body.event;
+    const event = parsedBody.event;
 
-    // 2. Event Routing
     if (event === "order.paid") {
-      const paymentEntity = body.payload.payment.entity;
+      const paymentEntity = parsedBody.payload.payment.entity;
       const rzpOrderId = paymentEntity.order_id;
 
       const order = await Order.findOne({
@@ -234,7 +273,6 @@ export class OrderService {
 
       if (!order) return;
 
-      // 3. Idempotency Wall
       if (order.paymentStatus === "PAID") {
         logger.info(
           `[Webhook] Order ${order.orderNumber} already PAID. Ignoring idempotent ping.`,
@@ -242,28 +280,45 @@ export class OrderService {
         return;
       }
 
-      // 4. Apply Financial State
       order.paymentStatus = "PAID";
       order.orderStatus = "PROCESSING";
       order.gatewayPaymentId = paymentEntity.id;
       await order.save();
 
       logger.info(
-        `[Webhook] Order ${order.orderNumber} successfully marked as PAID via background ping.`,
+        `[Webhook] Order ${order.orderNumber} marked as PAID via background ping.`,
       );
+
+      // --- ASYNC NOTIFICATION ENGINE TRIGGER ---
+      try {
+        const userDoc = await User.findOne({ _id: { $eq: String(order.user) } })
+          .select("firstname email")
+          .lean();
+
+        if (userDoc) {
+          await NotificationService.sendOrderConfirmationNotification(
+            userDoc._id as mongoose.Types.ObjectId,
+            userDoc.email,
+            userDoc.firstname,
+            order.orderNumber,
+            order.pricing.totalAmount,
+          );
+        }
+      } catch (notifyErr) {
+        logger.error(
+          `Failed to dispatch Webhook confirmation for ${order.orderNumber}`,
+          notifyErr,
+        );
+      }
     }
   }
 
   /**
    * Abandoned Order Recovery (Inventory Defragmentation)
-   * * ARCHITECTURE NOTE:
-   * Finds PENDING orders older than 30 minutes. Iterates through them and uses
-   * ACID transactions to atomically restore reserved stock back to the catalog.
    */
   public static async recoverAbandonedOrders() {
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
-    // Find orders stuck in PENDING
     const abandonedOrders = await Order.find({
       orderStatus: "PENDING",
       createdAt: { $lt: thirtyMinutesAgo },
@@ -280,14 +335,12 @@ export class OrderService {
       session.startTransaction();
 
       try {
-        // 1. Mark order as CANCELLED so it isn't picked up again
         order.orderStatus = "CANCELLED";
 
-        // 2. Atomically restore stock for every item in the cart
         for (const item of order.items) {
           await Product.findOneAndUpdate(
-            { _id: item.product },
-            { $inc: { currentStock: item.quantity } }, // Add the stock back!
+            { _id: { $eq: String(item.product) } },
+            { $inc: { currentStock: item.quantity } },
             { session },
           );
         }
@@ -298,14 +351,36 @@ export class OrderService {
           `[Cron] Restored inventory for abandoned order: ${order.orderNumber}`,
         );
       } catch (error) {
-        // If anything fails, rollback this specific order and continue to the next one
         await session.abortTransaction();
         logger.error(
           `[Cron] Failed to restore order ${order.orderNumber}:`,
           error,
         );
+        continue; // Skip notification on failure
       } finally {
         session.endSession();
+      }
+
+      // Executed outside the transaction, and only if the commit succeeded
+      try {
+        const userDoc = await User.findOne({ _id: { $eq: String(order.user) } })
+          .select("firstname email")
+          .lean();
+
+        if (userDoc) {
+          await NotificationService.sendOrderCancelledNotification(
+            userDoc._id as mongoose.Types.ObjectId,
+            userDoc.email,
+            userDoc.firstname,
+            order.orderNumber,
+            "Payment timeout. Your order was abandoned at checkout.",
+          );
+        }
+      } catch (notifyErr) {
+        logger.error(
+          `Failed to dispatch cancellation notification for ${order.orderNumber}`,
+          notifyErr,
+        );
       }
     }
   }

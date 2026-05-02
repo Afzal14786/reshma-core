@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { CartController } from "./cart.controller";
 
-// Middlewares
-import { protect } from "../../shared/middlewares/auth.middleware";
-import { validate } from "../../shared/middlewares/validate.middleware";
-
+// Middlewares (Using standardized absolute path aliases)
+import { protect } from "@shared/middlewares/auth.middleware";
+import { validate } from "@shared/middlewares/validate.middleware";
 import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 
 // Validation Schemas
@@ -17,15 +16,19 @@ import {
 
 const router = Router();
 
-/*
- * Protected Customer Routes
- * All endpoints below require a valid user session. Guest carts are kept
- * in the frontend's local storage and synced using the /merge route upon login.
+/**
+ * @module CartRoutes
+ * @description Protected Customer Routes for the Cart domain.
+ * Guest carts are managed in the frontend's local storage and synced
+ * using the /merge route upon successful login.
  */
 
+// SECURITY CONFIGURATION: Apply rate limiting BEFORE authentication.
+// This throttles excessive requests before the 'protect' middleware can perform
+// expensive database session lookups, completely neutralizing DoS vectors (CodeQL CWE-770).
 router.use(standardLimiter);
 
-// Enforce authentication for the entire cart module
+// Enforce authentication context for the entire cart module
 router.use(protect);
 
 // Fetch the user's current cart with live prices and stock

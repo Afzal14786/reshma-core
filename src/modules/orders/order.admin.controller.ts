@@ -1,12 +1,13 @@
 import { Request, Response } from "express";
 import { Order } from "./order.model";
-import { User } from "../users/user.model"; // FIX: Imported User Model for Logistics Hook
+import { User } from "../users/user.model"; // Logistics Hook Dependency
 import { ApiResponse } from "@shared/utils/api-response";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { AppError } from "@shared/utils/app-error";
 import { UpdateOrderStatusInput } from "./dtos/order.dto";
 import { NotificationService } from "../notifications/notification.service";
 import logger from "@config/logger";
+import mongoose from "mongoose";
 
 export class OrderAdminController {
   /**
@@ -34,7 +35,7 @@ export class OrderAdminController {
    * @access  Private (Admin Only)
    */
   public static async updateOrderStatus(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const payload = req.body as UpdateOrderStatusInput;
 
     // SECURITY: Object.create(null) ensures prototype chain is dead, mitigating Prototype Pollution
@@ -45,7 +46,7 @@ export class OrderAdminController {
     if (payload.courierName) sanitizedPayload.courierName = payload.courierName;
 
     const order = await Order.findOneAndUpdate(
-      { _id: { $eq: String(id) } },
+      { _id: { $eq: id } },
       { $set: sanitizedPayload },
       { new: true, runValidators: true },
     );
@@ -65,7 +66,7 @@ export class OrderAdminController {
         if (user) {
           // Fire-and-forget: Route through the Notification Facade (BullMQ Async)
           await NotificationService.sendOrderShippedNotification(
-            user._id as any,
+            user._id as unknown as mongoose.Types.ObjectId,
             user.email,
             user.firstname,
             order.orderNumber,

@@ -9,19 +9,24 @@ const CartItemSchema = new Schema(
   {
     product: {
       type: Schema.Types.ObjectId,
-      ref: "Product", // Establishes the relational link to the Polymorphic Product collection
+      // ARCHITECTURAL FIX: Must reference the polymorphic base collection to allow
+      // population of Bangles, Apparel, Innerwear, etc., from a single reference.
+      ref: "BaseProduct",
       required: true,
     },
     quantity: {
       type: Number,
       required: true,
       min: [1, "Cart item quantity must be at least 1"],
+      max: [10, "Cart item quantity cannot exceed 10"], // Mirrored from the DTO firewall
     },
     selectedAttributes: {
-      // Utilizes a strict Map of Strings/Numbers to avoid Schema.Types.Mixed (which acts as 'any').
-      // This strictly enforces the data types for polymorphic choices.
+      // Utilizes a Map for dynamic polymorphic choices (e.g., size: 'XL', color: 'Red').
+      // SECURITY NOTE: While Schema.Types.Mixed can be a vector for NoSQL injection,
+      // our Zod DTO strictly limits incoming values to safe primitives (String, Number, Boolean).
       type: Map,
-      of: Schema.Types.Mixed, // Replaced below to avoid loose typing
+      of: Schema.Types.Mixed,
+      default: {},
     },
   },
   {
@@ -30,13 +35,6 @@ const CartItemSchema = new Schema(
     _id: false,
   },
 );
-
-// Overriding the loose Mixed type to enforce strict String/Number values at the schema level
-CartItemSchema.path("selectedAttributes", {
-  type: Map,
-  of: String, // Enforces that all attributes (e.g., 'XL', '2.4', 'Red') are cast to and stored as strings
-  default: {},
-});
 
 /**
  * @schema CartSchema

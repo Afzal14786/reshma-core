@@ -6,6 +6,10 @@ import { IOrder } from "./interfaces/order.interface";
  * * ARCHITECTURE NOTE:
  * Generates a purely in-memory PDF Buffer. We strictly avoid `fs.writeFile` to prevent
  * storage bloat and synchronous I/O Event Loop blocking during high-traffic checkouts.
+ *
+ * * SECURITY NOTE:
+ * Safe from injection because it strictly consumes the sanitized `IOrder` database document,
+ * never raw user inputs.
  */
 export const generateInvoiceBuffer = (order: IOrder): Promise<Buffer> => {
   return new Promise((resolve, reject) => {

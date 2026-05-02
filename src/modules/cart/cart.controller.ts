@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { CartService } from "./cart.service";
-import { ApiResponse } from "../../shared/utils/api-response";
-import { HTTP_STATUS } from "../../shared/constant/http-codes";
+import { ApiResponse } from "@shared/utils/api-response";
+import { HTTP_STATUS } from "@shared/constant/http-codes";
 import {
   AddItemToCartInput,
   UpdateCartItemInput,
@@ -22,8 +22,9 @@ export class CartController {
    */
   public static async getCart(req: Request, res: Response) {
     // req.user is guaranteed to exist by the 'protect' authentication middleware.
-    const userId = req.user!._id.toString();
+    const userId = String(req.user!._id);
 
+    // Calls the newly architected dynamic cart engine
     const cartData = await CartService.getCart(userId);
 
     return new ApiResponse(
@@ -39,7 +40,7 @@ export class CartController {
    * @description Adds a new item to the cart or increments the quantity of an exact existing match.
    */
   public static async addItem(req: Request, res: Response) {
-    const userId = req.user!._id.toString();
+    const userId = String(req.user!._id);
 
     // Payload has been strictly validated and sanitized by Zod DTO
     const payload = req.body as AddItemToCartInput;
@@ -59,7 +60,7 @@ export class CartController {
    * @description Directly modifies the quantity of a specific cart item variant.
    */
   public static async updateItem(req: Request, res: Response) {
-    const userId = req.user!._id.toString();
+    const userId = String(req.user!._id);
     const payload = req.body as UpdateCartItemInput;
 
     const updatedCart = await CartService.updateItemQuantity(userId, payload);
@@ -73,12 +74,14 @@ export class CartController {
   }
 
   /**
-   * @method removeItem
+   * @method removeProduct
    * @description Completely removes a product (and all its variants) from the user's cart.
    */
   public static async removeItem(req: Request, res: Response) {
-    const userId = req.user!._id.toString();
-    const productId = req.params.productId as string;
+    const userId = String(req.user!._id);
+
+    // Explicit string conversion to prevent object prototype injection from params
+    const productId = String(req.params.productId);
 
     const updatedCart = await CartService.removeProduct(userId, productId);
 
@@ -95,7 +98,7 @@ export class CartController {
    * @description Empties the cart entirely. Typically called post-checkout or via a user "Empty Cart" button.
    */
   public static async clearCart(req: Request, res: Response) {
-    const userId = req.user!._id.toString();
+    const userId = String(req.user!._id);
 
     await CartService.clearCart(userId);
 
@@ -113,7 +116,7 @@ export class CartController {
    * LocalStorage and securely merges it with their persistent database cart.
    */
   public static async mergeCart(req: Request, res: Response) {
-    const userId = req.user!._id.toString();
+    const userId = String(req.user!._id);
     const payload = req.body as MergeCartInput;
 
     const mergedCart = await CartService.mergeGuestCart(userId, payload.items);

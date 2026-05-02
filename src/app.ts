@@ -15,7 +15,8 @@ import globalRouter from "./routes";
 
 const app: Application = express();
 
-/** * Security & HTTP Middlewares
+/**
+ * Security & HTTP Middlewares
  */
 // Helmet sets secure HTTP headers (prevents XSS, Clickjacking, MIME sniffing)
 app.use(helmet());
@@ -32,19 +33,38 @@ app.use(
 // Apply standard rate limiting to all API routes to prevent basic DDoS attempts
 app.use("/api", standardLimiter);
 
-/** * Payload Parsers
+/**
+ * Payload Parsers
+ * * ARCHITECTURE NOTE:
+ * We use the 'verify' hook to intercept the raw Buffer stream before it gets parsed into JSON.
+ * This is absolutely critical for Razorpay Webhooks, which require the exact, unparsed string
+ * for HMAC SHA256 cryptographic signature validation.
  */
-// Parse incoming JSON payloads (Strict limit to 10kb to prevent Payload Too Large attacks)
-app.use(express.json({ limit: "10kb" }));
+app.use(
+  express.json({
+    limit: "10kb", // Strict limit to prevent Payload Too Large attacks
+    verify: (req: Request, res: Response, buf: Buffer) => {
+      // If the request is targeting our webhook route, safely attach the raw string
+      if (req.originalUrl.includes("/webhook")) {
+        // We cast to an unknown intersection to satisfy TypeScript without using 'any'
+        (req as unknown as { rawBody: string }).rawBody = buf.toString("utf8");
+      }
+    },
+  }),
+);
+
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
+
 // Parse cookies attached to the client request
 app.use(cookieParser(env.JWT_ACCESS_SECRET));
 
-/** * Mount Global Router
+/**
+ * Mount Global Router
  */
 app.use("/api/v1", globalRouter);
 
-/** * 404 Route Catcher
+/**
+ * 404 Route Catcher
  * If the request bypasses the global router, it means the endpoint doesn't exist.
  * We throw an AppError, which immediately drops down to the Global Error Handler.
  */
@@ -57,7 +77,8 @@ app.all(/(.*)/, (req: Request, res: Response, next: NextFunction) => {
   );
 });
 
-/** * Global Error Handler
+/**
+ * Global Error Handler
  * * ARCHITECTURE NOTE:
  * This MUST be the very last middleware mounted. It catches all AppErrors,
  * ZodErrors, and MongooseErrors, formats them securely, and sends the JSON response.
