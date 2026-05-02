@@ -39,11 +39,21 @@ export class UserService {
     userId: string | Types.ObjectId,
     payload: UpdateProfileInput,
   ): Promise<IUser> {
+    // SECURITY FIX: Explicitly map allowed fields from the DTO.
+    // This stops CodeQL from tracing untrusted req.body directly to the DB sink.
+    const updateData: Partial<UpdateProfileInput> = {};
+
+    if (payload.firstname) updateData.firstname = payload.firstname;
+    if (payload.lastname) updateData.lastname = payload.lastname;
+    if (payload.phone) updateData.phone = payload.phone;
+    if (payload.gender) updateData.gender = payload.gender;
+    if (payload.dob) updateData.dob = payload.dob;
+
     // Find by ID and update, returning the newly modified document.
     // runValidators ensures Mongoose Schema rules (like max lengths) are enforced.
     const updatedUser = (await User.findOneAndUpdate(
       { _id: { $eq: userId } },
-      { $set: { ...payload } },
+      { $set: { updateData } },
       { new: true, runValidators: true },
     ).lean()) as IUser | null;
 
