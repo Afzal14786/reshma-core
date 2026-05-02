@@ -9,7 +9,8 @@ import { otpVerificationTemplate } from "./templates/otp-verification";
 import { welcomeEmailTemplate } from "./templates/welcome";
 import { passwordResetTemplate } from "./templates/password-reset";
 import { passwordUpdateTemplate } from "./templates/password-update";
-
+import { orderPlacedTemplate } from "./templates/order-placed";
+import { orderCancelledTemplate } from "./templates/order-cancel";
 /**
  * UNIFIED NOTIFICATION SERVICE
  * * ARCHITECTURE NOTE:
@@ -210,6 +211,76 @@ export class NotificationService {
     );
   }
 
+  /**
+   * Dispatches the "Order Placed/Confirmed" transactional email.
+   */
+  public static async sendOrderConfirmationNotification(
+    userId: Types.ObjectId,
+    email: string,
+    firstname: string,
+    orderNumber: string,
+    totalAmount: number,
+  ): Promise<void> {
+    await dispatchEmailJob({
+      type: "ORDER_CONFIRMATION",
+      to: email,
+      data: { firstname, orderNumber, totalAmount },
+    });
+
+    // Fire-and-Forget In-App Notification
+    Notification.create({
+      recipientId: userId,
+      type: "ORDER",
+      title: "Order Confirmed!",
+      message: `Your order ${orderNumber} for ₹${totalAmount.toFixed(2)} has been successfully placed.`,
+      link: `/orders`,
+    }).catch((err) => {
+      logger.error(
+        `[Notification DB Error] Order Confirmation alert failed for ${userId}`,
+        err,
+      );
+    });
+
+    logger.info(
+      `[Notification] Order Confirmation dispatched for Order: ${orderNumber}`,
+    );
+  }
+
+  /**
+   * Dispatches the "Order Cancelled" transactional email.
+   */
+  public static async sendOrderCancelledNotification(
+    userId: Types.ObjectId,
+    email: string,
+    firstname: string,
+    orderNumber: string,
+    reason: string,
+  ): Promise<void> {
+    await dispatchEmailJob({
+      type: "ORDER_CANCELLED",
+      to: email,
+      data: { firstname, orderNumber, reason },
+    });
+
+    // Fire-and-Forget In-App Notification
+    Notification.create({
+      recipientId: userId,
+      type: "ORDER",
+      title: "Order Cancelled",
+      message: `Your order ${orderNumber} has been cancelled. Reason: ${reason}`,
+      link: `/orders`,
+    }).catch((err) => {
+      logger.error(
+        `[Notification DB Error] Order Cancellation alert failed for ${userId}`,
+        err,
+      );
+    });
+
+    logger.info(
+      `[Notification] Order Cancellation dispatched for Order: ${orderNumber}`,
+    );
+  }
+
   // QUEUE COMPILER (Used ONLY by email.worker.ts)
 
   /**
@@ -253,13 +324,21 @@ export class NotificationService {
         };
       case "ORDER_CONFIRMATION":
         return {
-          subject: `Order Confirmation #${payload.data.orderId}`,
-          html: "<p>Order Confirmed.</p>", // We'll update this template later
+          subject: `Order Confirmation #${payload.data.orderNumber} - Reshma Bangles`,
+          html: orderPlacedTemplate(
+            payload.data.firstname,
+            payload.data.orderNumber,
+            payload.data.totalAmount,
+          ),
         };
       case "ORDER_CANCELLED":
         return {
-          subject: `Order Cancelled #${payload.data.orderId}`,
-          html: "<p>Order Cancelled.</p>", // We'll update this template later
+          subject: `Order Cancelled #${payload.data.orderNumber} - Reshma Bangles`,
+          html: orderCancelledTemplate(
+            payload.data.firstname,
+            payload.data.orderNumber,
+            payload.data.reason,
+          ),
         };
       case "ORDER_SHIPPED":
         return {

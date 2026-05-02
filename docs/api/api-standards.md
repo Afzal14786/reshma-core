@@ -99,7 +99,8 @@ The API strictly adheres to the following HTTP status codes mapping:
 * **Fail-Fast:** If required fields are missing, the API immediately returns a `400 Bad Request`. 
 
 * **Global API Limit:** 100 requests per 15 minutes per IP.
-* **Authentication Limit:** 10 attempts per 15 minutes per IP on all `/auth/*` routes.
+* **Authentication Limit:** 10 attempts per 15 minutes per IP on all `/auth/*` routes.  
+* **Checkout Limit:** 5 attempts per 15 minutes per IP to prevent financial DDoS.
 * **Payload Limit:** Maximum JSON body size is restricted to 10kb. (Images are handled separately via Multer `multipart/form-data` with a 10MB strict limit).  
 
 ---  
@@ -113,8 +114,8 @@ The API strictly adheres to the following HTTP status codes mapping:
 * `POST /auth/refresh` - Issue new access token via HttpOnly Cookie
 * `GET /auth/logout` - Clear session and destroy HttpOnly cookies  
 
-**2. Users Module (`/users`)**  `GET /users/me` - Get current logged-in user profile  
-* `PATCH /users/me` - Update profile details
+**2. Users Module (`/users`)**  `GET /users/profiles` - Get current logged-in user profile  
+* `PATCH /users/profiles` - Update profile details
 * `GET /users` - *(Admin)* List all registered customers  
 
 **3. Products Module (`/products`) - Polymorphic Catalog**  
@@ -133,13 +134,16 @@ The API strictly adheres to the following HTTP status codes mapping:
 * `DELETE /cart/item/:productId` - Completely drop a product from the cart.
 * `DELETE /cart/clear` - Empty the cart (Called post-checkout).
 
-**5. Orders & Checkout (`/orders`) - Upcoming Phase 4.2** * `POST /orders/checkout` - Calculate final price and initialize Razorpay Gateway
-* `POST /orders/verify` - Verify webhook payment signature
-* `GET /orders/my-orders` - List current user's orders
+**5. Orders & Checkout (`/orders`)  
+* `POST /orders/checkout` - Initialize ACID transaction and Razorpay Order.
+* `POST /orders/verify-payment` - Verify webhook payment signature
+* `POST /orders/webhook` - Public HMAC-secured background handler for Razorpay pings.
+* `GET /orders/:id/invoice` - Stream on-the-fly PDF tax invoice
+* `GET /orders/me` - List current user's order history.
 * `GET /orders` - *(Admin)* View all incoming orders
 * `PATCH /orders/:id/status` - *(Admin)* Update order shipping status `PATCH /orders/:id/status` - *(Admin)* Update order shipping status
 
-**6. Returns Module (/returns) - Upcoming Phase 5**  `POST /returns/:orderId` - Submit return request (Requires Cloudinary image proof for Fragile items)  
+**6. Returns Module (/returns) - Upcoming Phase 8**  `POST /returns/:orderId` - Submit return request (Requires Cloudinary image proof for Fragile items)  
 
 * `GET /returns/pending` - *(Admin)* View returns awaiting approval 
 
@@ -147,7 +151,10 @@ The API strictly adheres to the following HTTP status codes mapping:
 
 ## Endpoint Documentation Template  
 
-*(Note: As we build out frontend integrations, specific endpoints will be documented below using this exact template)*. `POST /products`  
+*(Note: As we build out frontend integrations, specific endpoints will be documented below using this exact template)*.  
+
+`POST /products`  
+
 **Description:** Creates a new polymorphic product and processes Cloudinary image streams.  
 
 **Access:** `Protected (Admin)`  
@@ -172,4 +179,8 @@ The API strictly adheres to the following HTTP status codes mapping:
   },
   "timestamp": "2026-04-24T14:30:00.000Z"
 }
-```
+```  
+
+--- 
+
+*Maintained by Md Afzal Ansari | Core System Architecture*

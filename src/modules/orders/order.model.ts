@@ -2,19 +2,37 @@ import mongoose, { Schema } from "mongoose";
 import { IOrder } from "./interfaces/order.interface";
 import crypto from "crypto";
 
+/**
+ * @schema OrderItemSchema
+ * @description Snapshots the product data at the exact moment of purchase.
+ * ARCHITECTURE NOTE: We never rely on the 'product' reference for historical pricing,
+ * as admin price changes would retroactively alter past invoices.
+ */
 const OrderItemSchema = new Schema(
   {
-    product: { type: Schema.Types.ObjectId, ref: "Product", required: true },
+    product: {
+      type: Schema.Types.ObjectId,
+      ref: "BaseProduct",
+      required: true,
+    },
     name: { type: String, required: true },
     sku: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
     priceAtPurchase: { type: Number, required: true, min: 0 },
-    selectedAttributes: { type: Map, of: String },
+
+    // Allows flexible attribute tracking (e.g., size, color) verified securely by Zod DTO
+    selectedAttributes: { type: Map, of: Schema.Types.Mixed },
+
+    // Snapshots the main display image in case the product is deleted later
     imageSnapshot: { type: String, required: true },
   },
-  { _id: false },
-); // PERFORMANCE: Disabling _id for subdocuments saves significant BSON storage space
+  { _id: false }, // PERFORMANCE: Disabling _id for subdocuments saves significant BSON storage space
+);
 
+/**
+ * @schema OrderSchema
+ * @description The central state machine for the checkout and fulfillment pipeline.
+ */
 const OrderSchema = new Schema<IOrder>(
   {
     user: {
@@ -27,6 +45,7 @@ const OrderSchema = new Schema<IOrder>(
 
     items: [OrderItemSchema],
 
+    // Strictly snapshotted shipping details decoupled from the User's address book
     shippingAddress: {
       fullName: { type: String, required: true },
       phone: { type: String, required: true },
@@ -45,6 +64,7 @@ const OrderSchema = new Schema<IOrder>(
     },
 
     paymentMethod: { type: String, enum: ["RAZORPAY", "COD"], required: true },
+
     // INDEXING: Added indexes to statuses to heavily optimize Admin Dashboard filtering queries
     paymentStatus: {
       type: String,
@@ -54,7 +74,16 @@ const OrderSchema = new Schema<IOrder>(
     },
     orderStatus: {
       type: String,
-      enum: ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"],
+      // Expanded to support the upcoming Returns (RMA) Module logic
+      enum: [
+        "PENDING",
+        "PROCESSING",
+        "SHIPPED",
+        "DELIVERED",
+        "CANCELLED",
+        "RETURN_REQUESTED",
+        "RETURNED",
+      ],
       default: "PENDING",
       index: true,
     },
@@ -62,7 +91,8 @@ const OrderSchema = new Schema<IOrder>(
     trackingNumber: { type: String },
     courierName: { type: String },
 
-    // Sparse indexes allow multiple null/undefined values without throwing uniqueness errors
+    // Sparse indexes allow multiple null/undefined values without throwing uniqueness errors.
+    // Crucial for orders that are initialized but abandoned before Razorpay responds.
     gatewayOrderId: { type: String, sparse: true },
     gatewayPaymentId: { type: String, sparse: true },
     gatewaySignature: { type: String },

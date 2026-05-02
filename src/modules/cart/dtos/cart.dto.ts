@@ -25,22 +25,23 @@ const attributeValueValidator = z.union([z.string(), z.number(), z.boolean()]);
  * Target: POST /cart/add
  */
 export const AddItemToCartSchema = z.object({
-  body: z.object({
-    productId: objectIdValidator,
+  body: z
+    .object({
+      productId: objectIdValidator,
 
-    // supported 'message' property to satisfy TypeScript in all Zod versions.
-    quantity: z
-      .number({ message: "Quantity is required and must be a valid number" })
-      .int("Quantity must be a whole number")
-      .min(1, "Quantity must be at least 1"), // Absolute firewall against negative quantity math exploits
+      quantity: z
+        .number({ message: "Quantity is required and must be a valid number" })
+        .int("Quantity must be a whole number")
+        .min(1, "Quantity must be at least 1"), // Absolute firewall against negative quantity math exploits
 
-    selectedAttributes: z
-      .record(z.string(), attributeValueValidator)
-      .optional()
-      .describe(
-        'A map of dynamically selected attributes like size or color (e.g., {"bangleSize": "2.4"})',
-      ),
-  }),
+      selectedAttributes: z
+        .record(z.string(), attributeValueValidator)
+        .optional()
+        .describe(
+          'A map of dynamically selected attributes like size or color (e.g., {"bangleSize": "2.4"})',
+        ),
+    })
+    .strict(),
 });
 
 /**
@@ -64,6 +65,7 @@ export const UpdateCartItemSchema = z.object({
         .record(z.string(), attributeValueValidator)
         .optional(),
     })
+    .strict()
     .refine(
       (data) =>
         data.quantity !== undefined || data.selectedAttributes !== undefined,
@@ -92,25 +94,29 @@ export const RemoveCartItemSchema = z.object({
  * Target: POST /cart/merge
  */
 export const MergeCartSchema = z.object({
-  body: z.object({
-    items: z
-      .array(
-        z.object({
-          productId: objectIdValidator,
-          quantity: z
-            .number({ message: "Quantity must be a valid number" })
-            .int("Quantity must be a whole number")
-            .min(1, "Quantity must be at least 1"),
-          selectedAttributes: z
-            .record(z.string(), attributeValueValidator)
-            .optional(),
-        }),
-      )
-      .max(
-        50,
-        "Cannot merge more than 50 unique items at once to prevent payload abuse",
-      ),
-  }),
+  body: z
+    .object({
+      items: z
+        .array(
+          z
+            .object({
+              productId: objectIdValidator,
+              quantity: z
+                .number({ message: "Quantity must be a valid number" })
+                .int("Quantity must be a whole number")
+                .min(1, "Quantity must be at least 1"),
+              selectedAttributes: z
+                .record(z.string(), attributeValueValidator)
+                .optional(),
+            })
+            .strict(), // Ensures individual items in the array are also strictly validated
+        )
+        .max(
+          50,
+          "Cannot merge more than 50 unique items at once to prevent payload abuse",
+        ),
+    })
+    .strict(),
 });
 
 /**

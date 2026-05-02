@@ -1,29 +1,29 @@
 import crypto from "crypto";
-import env from "@config/env";
+import env from "@config/env"; // Adjust path if necessary
 
 /**
- * Cryptographic Handshake Verification (Frontend Return)
- * * SECURITY NOTE:
- * CodeQL requires mathematical proof of origin before granting financial state changes.
- * This verifies the HMAC SHA-256 signature returned by the frontend, ensuring the user
- * hasn't spoofed a "Success" network response via browser DevTools.
+ * @method verifyRazorpaySignature
+ * @description Verifies the frontend payment success payload.
+ * Prevents malicious users from spoofing successful payments via the client.
  */
 export const verifyRazorpaySignature = (
   orderId: string,
   paymentId: string,
-  razorpaySignature: string,
+  signature: string,
 ): boolean => {
+  const text = `${orderId}|${paymentId}`;
   const generatedSignature = crypto
     .createHmac("sha256", env.RAZORPAY_KEY_SECRET)
-    .update(`${orderId}|${paymentId}`)
+    .update(text)
     .digest("hex");
 
-  return generatedSignature === razorpaySignature;
+  return generatedSignature === signature;
 };
 
 /**
- * Server-to-Server Webhook Verification
- * Defends the async webhook endpoint against unauthorized external pings.
+ * @method verifyWebhookEvent
+ * @description Verifies server-to-server webhook pings.
+ * Prevents attackers from firing fake "order.paid" webhooks to your endpoint.
  */
 export const verifyWebhookEvent = (
   rawBody: string,

@@ -14,84 +14,75 @@
 
 ---
 
-## Overview
+## 1. Overview
 
-The Order Module (`src/modules/orders/`) is the financial core of the Reshma platform. It orchestrates the transition of volatile cart data into immutable financial records. It is engineered with a "Security-First" mindset, utilizing MongoDB sessions for atomic integrity and cryptographic HMAC handshakes to prevent financial fraud.
-
----
-
-## Core Architectural Pillars
-
-### 1. ACID-Compliant Transactions
-To guarantee financial integrity, the checkout process is wrapped in a **MongoDB Multi-Document Transaction** (`mongoose.startSession`).
-* **Atomic Boundary:** Stock deduction, Order document creation, and Cart clearing occur as a single unit of work.
-* **Auto-Rollback:** If any step fails (e.g., an item goes out of stock at the last millisecond), the entire database state is mathematically rolled back.
-
-### 2. Historical Immutability (Snapshotting)
-Unlike other modules that rely on live references, this module utilizes **Deep-Copy Snapshotting**. At the moment of purchase, the system captures:
-* **Captured Data:** `priceAtPurchase`, `sku`, `name`, `selectedAttributes`, and `imageSnapshot`.
-* **Audit Integrity:** If an Admin changes a product's price later, the user's historical receipt remains 100% accurate.
-
-### 3. Atomic Stock Reservation
-We utilize a "Find-and-Update" firewall pattern using MongoDB `$inc` and `$gte` operators within the session.
-* **Race-Condition Defense:** Stock is only deducted if `currentStock >= requestedQuantity`. This prevents "Overselling" during high-traffic flash sales.  
-
-### 4. Inventory Defragmentation (Cron Orchestration)
-To prevent "Inventory Leaks" caused by abandoned checkouts, the module relies on an automated background orchestrator (`node-cron`).
-
-* **The Problem:** When a user initiates checkout, stock is atomically decremented. If they close their browser without paying, that stock remains locked indefinitely.
-* **The Solution:** A worker sweeps the `Order` collection every 15 minutes. It isolates documents where `orderStatus` is `PENDING` and the `createdAt` timestamp is older than 30 minutes.
-* **Atomic Restoration:** For each abandoned order, the worker opens a new transaction, marks the order as `CANCELLED`, and executes an `$inc` operation to return the exact quantity back to the `Product` catalog.
+The Order Module (`src/modules/orders/`) is the financial source of truth for the Reshma platform[cite: 2]. It orchestrates the transition of volatile cart data into immutable financial records[cite: 2]. It is engineered with a "Security-First" mindset, utilizing MongoDB sessions for atomic integrity and cryptographic HMAC handshakes to prevent financial fraud[cite: 2].
 
 ---
 
-## Schema Architecture
+## 2. Core Architectural Pillars
 
-The `Order` schema defines the financial and logistical state of a transaction, divided into four data boundaries.
+### ACID-Compliant Transactions
+To guarantee financial integrity, the checkout process is wrapped in a **MongoDB Multi-Document Transaction** (`mongoose.startSession`)[cite: 2].
+*   **Atomic Boundary:** Stock deduction, Order document creation, and Cart clearing occur as a single unit of work[cite: 2].
+*   **Auto-Rollback:** If any step fails (e.g., an item goes out of stock at the last millisecond), the entire database state is mathematically rolled back[cite: 2].
 
-### 1. Order Identification & Ownership
-| Field | Type | Rules | Description |
-| :--- | :--- | :--- | :--- |
-| `user` | ObjectId | Required, Index | Reference to the `User` who placed the order. |
-| `orderNumber` | String | Unique, Index | Human-readable ID generated via `pre-save` hook (e.g., ORD-7B9F1A). |
-| `items` | Array | Sub-document | Historical snapshots of products purchased. |
+### Historical Immutability (Snapshotting)
+Unlike other modules that rely on live references, this module utilizes **Deep-Copy Snapshotting**[cite: 2]. At the moment of purchase, the system captures:
+*   **Captured Data:** `priceAtPurchase`, `sku`, `name`, `selectedAttributes`, and `imageSnapshot`[cite: 2].
+*   **Audit Integrity:** If an Admin changes a product's price later, the user's historical receipt remains 100% accurate[cite: 2].
 
-### 2. Financials & Payments
-| Field | Type | Rules | Description |
-| :--- | :--- | :--- | :--- |
-| `pricing` | Object | Nested Fields | Tracks `subTotal`, `shippingCost`, `taxAmount`, and `totalAmount`. |
-| `paymentMethod`| Enum | `RAZORPAY`, `COD` | The financial gateway selected by the user. |
-| `paymentStatus`| Enum | `PENDING`, `PAID` | Current state of the financial transaction. |
-| `gatewayOrderId`| String | Sparse Index | The unique ID returned by the Razorpay API. |
-
-### 3. Logistics & Fulfillment
-| Field | Type | Rules | Description |
-| :--- | :--- | :--- | :--- |
-| `orderStatus` | Enum | State Machine | Progression from `PENDING` to `DELIVERED`. |
-| `shippingAddress`| Object | Strict DTO | The validated E.164 phone and PIN code destination. |
-| `trackingNumber` | String | Optional | Attached by Admin when status moves to `SHIPPED`. |
+### Atomic Stock Reservation
+We utilize a "Find-and-Update" firewall pattern using MongoDB `$inc` and `$gte` operators within the session[cite: 2].
+*   **Race-Condition Defense:** Stock is only deducted if `currentStock >= requestedQuantity`[cite: 2]. This prevents "Overselling" during high-traffic flash sales[cite: 2].
 
 ---
 
-## Technical Implementations
+## 3. Financial Business Rules
 
-### On-the-Fly PDF Invoicing
-Invoices are generated in real-time using `pdfkit`.
-* **Memory Management:** PDFs are generated as binary `Buffers` in RAM and streamed directly to the user. We avoid disk I/O to maximize performance.
-* **IDOR Protection:** Every request ensures the `order.user` strictly matches `req.user._id`.
-
-### Automated Logistics Hook
-The module is integrated with the **Notification Engine Facade**:
-* When status moves to `SHIPPED`, a BullMQ job is dispatched to fire an async email.
-* This provides a dual-channel alert: Transactional email and a persistent In-App notification.
+The engine enforces strict logic to ensure tax compliance and shipping profitability:
+*   **GST Implementation:** A flat **18% Tax Amount** is calculated on the subtotal for all orders[cite: 2].
+*   **Shipping Threshold:** A flat **₹50 shipping fee** is applied if the subtotal is under **₹2000**[cite: 2]. Orders above ₹2000 qualify for free shipping[cite: 2].
+*   **Currency Precision:** All amounts are converted to **Paise** (amount * 100) before being sent to Razorpay to avoid floating-point math errors[cite: 2].
 
 ---
 
-## API & Security Firewalls
+## 4. Lifecycle & Operations
 
-* **`checkoutLimiter`**: Extremely strict rate limiting to prevent card-testing bots.
-* **`verifyRazorpaySignature`**: Mathematically verifies HMAC SHA-256 signatures to prevent spoofing.
-* **`zod.strict()`**: Acts as a physical firewall, dropping NoSQL injection or Prototype Pollution attempts at the boundary.
+### Inventory Defragmentation (Cron Orchestration)
+To prevent "Inventory Leaks" caused by abandoned checkouts, the module relies on an automated background orchestrator (`node-cron`)[cite: 2].
+*   **The Problem:** When a user initiates checkout, stock is atomically decremented[cite: 2]. If they close their browser without paying, that stock remains locked indefinitely[cite: 2].
+*   **The Solution:** A worker sweeps the `Order` collection every 15 minutes. It isolates documents where `orderStatus` is `PENDING` and the `createdAt` timestamp is older than 30 minutes[cite: 2].
+*   **Atomic Restoration:** For each abandoned order, the worker opens a new transaction, marks the order as `CANCELLED`, and executes an `$inc` operation to return the quantity to the catalog[cite: 2].
+
+### Order State Machine
+The module tracks the progression of an order through strictly defined states[cite: 2]:
+*   **Standard Flow:** `PENDING`, `PROCESSING`, `SHIPPED`, `DELIVERED`[cite: 2].
+*   **Exception/RMA Flow:** `CANCELLED`, `RETURN_REQUESTED`, `RETURNED`[cite: 2].
+
+---
+
+## 5. Technical Implementations
+
+### Webhook Cryptographic Verification
+To verify Razorpay server-to-server pings, the system implements a **Raw Body Interceptor**[cite: 2]:
+*   **The Challenge:** Standard JSON parsing alters the original payload string, causing HMAC signature mismatches[cite: 2].
+*   **The Fix:** A global `verify` hook in `app.ts` captures the `req.rawBody` as a UTF-8 string specifically for webhook routes[cite: 2].
+*   **Validation:** The `OrderService` uses `crypto.createHmac` to compare the `x-razorpay-signature` against the `rawBody`[cite: 2].
+
+### Automated Communications Hook
+The module is integrated with the **Notification Engine Facade** for real-time customer updates[cite: 1, 2]:
+*   **Order Placed:** Triggers a BullMQ job for an async confirmation email (with PDF attachment) and an in-app "Bell Icon" alert[cite: 1, 2].
+*   **Order Cancelled:** Automated triggers for both user-initiated and cron-initiated cancellations[cite: 1, 2].
+*   **Order Shipped:** Dispatches shipping details and tracking numbers via async worker[cite: 1, 2].
+
+---
+
+## 6. API & Security Firewalls
+
+*   **`checkoutLimiter`**: Extremely strict rate limiting to prevent card-testing bots[cite: 2].
+*   **Taint Chain Severing:** The service layer manually maps `shippingAddress` fields from `req.body` to prevent Object Injection or Mass Assignment[cite: 2].
+*   **`zod.strict()`**: Acts as a physical firewall, dropping NoSQL injection or Prototype Pollution attempts at the boundary[cite: 2].
 
 ---  
 

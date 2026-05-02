@@ -14,12 +14,12 @@
 
 ## 1. Core Architectural Philosophy
 
-Reshma-Core is built to scale gracefully while handling highly diverse e-commerce requirements. The backend enforces the following technical standards:
+Reshma-Core is built to scale gracefully while handling highly diverse e-commerce requirements[cite: 2]. The backend enforces the following technical standards:
 
-1. **Domain-Driven Design (DDD):** Code is logically grouped by business feature (Users, Auth, Products) rather than technical layers (Controllers, Models).
-2. **Strict Type Safety:** Zod enforces runtime payload validation at the Controller boundary, while strict TypeScript ensures compile-time safety.
-3. **Fail-Fast Initialization:** The system refuses to boot if critical environment variables (like JWT secrets or MongoDB URIs) are missing or malformed.
-4. **Polymorphic Database Strategy:** Utilizing Mongoose Discriminators, disparate items (e.g., Glass Bangles and Unstitched Fabrics) share a common `Products` collection while enforcing strictly unique validation rules.
+1. **Domain-Driven Design (DDD):** Code is logically grouped by business feature (Users, Auth, Products) rather than technical layers (Controllers, Models)[cite: 2].
+2. **Strict Type Safety:** Zod enforces runtime payload validation at the Controller boundary, while strict TypeScript ensures compile-time safety[cite: 2].
+3. **Fail-Fast Initialization:** The system refuses to boot if critical environment variables (like JWT secrets or MongoDB URIs) are missing or malformed[cite: 2].
+4. **Polymorphic Database Strategy:** Utilizing Mongoose Discriminators, disparate items (e.g., Glass Bangles and Unstitched Fabrics) share a common `Products` collection while enforcing strictly unique validation rules[cite: 2].
 
 ---
 
@@ -29,31 +29,31 @@ Use the links below to navigate the internal documentation of the Reshma-Core sy
 
 ### Architecture Diagrams & Security
 High-level system design, security protocols, and database schemas.
-* **[Authentication & Security Architecture](./auth-architecture.md)** *(Two-Token JWT, Google OAuth, OTP Flows)*
-* **[Database Design Strategy](./database-design.md)** *(Polymorphic Schema Mapping & ADRs)*
-* **[Product Catalog Schema](./product-catalog.md)** *(Google Sheet Data to Database Mapping)*
-* **[Security Hardening Guide](./security-hardening.md)** *(Helmet, Rate Limiting, Zod Payload Firewalls)*
-* **[Payment Integration Architecture](./payment-integration.md)** *(HMAC-SHA256 Cryptographic Handshakes, ACID Transaction Integrity, and Idempotency Guards)*  
+* **[Authentication & Security Architecture](./auth-architecture.md)** *(Two-Token JWT, Google OAuth, OTP Flows)*[cite: 2]
+* **[Database Design Strategy](./database-design.md)** *(Polymorphic Schema Mapping & ADRs)*[cite: 2]
+* **[Product Catalog Schema](./product-catalog.md)** *(Google Sheet Data to Database Mapping)*[cite: 2]
+* **[Security Hardening Guide](./security-hardening.md)** *(Helmet, Rate Limiting, Zod Payload Firewalls)*[cite: 2]
+* **[Payment Integration Architecture](./payment-integration.md)** *(HMAC-SHA256 Cryptographic Handshakes, ACID Transaction Integrity, and Idempotency Guards)*[cite: 2]
 
 ### Domain Modules
 Deep dives into the specific business logic, DTOs, and services for each core feature.
-* **[User Module](../modules/user-module.md)** *(Identity, RBAC, Password Hashing)*
-* **[Authentication Module](../modules/auth-module.md)** *(Login, Registration, Token Issuance)*
-* **[Notification Engine](../modules/notification-module.md)** *(BullMQ Background Workers, SMTP, In-App Alerts)*
-* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*
-* **[Cart Module](../modules/cart-module.md)** *(Dynamic Pricing, Attribute Hashing, Guest Merging)*
-* **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, State Machine)*
+* **[User Module](../modules/user-module.md)** *(Identity, RBAC, Password Hashing)*[cite: 2]
+* **[Authentication Module](../modules/auth-module.md)** *(Login, Registration, Token Issuance)*[cite: 2]
+* **[Notification Engine](../modules/notification-module.md)** *(BullMQ Background Workers, SMTP, In-App Alerts)*[cite: 2]
+* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*[cite: 2]
+* **[Cart Module](../modules/cart-module.md)** *(Dynamic Pricing, Attribute Hashing, Guest Merging)*[cite: 2]
+* **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, State Machine)*[cite: 2]
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.
-* **[API Design Standards](../api/api-standards.md)** *(Two-Token frontend integration & payload shapes)*
-* **[Global Error Codes](../api/error-codes.md)** *(Standardized HTTP responses & error handling)*
-* **[Authentication Testing Runbook](../testing/auth-runbook.md)** *(Manual integration testing guide)*
+* **[API Design Standards](../api/api-standards.md)** *(Two-Token frontend integration & payload shapes)*[cite: 2]
+* **[Global Error Codes](../api/error-codes.md)** *(Standardized HTTP responses & error handling)*[cite: 2]
+* **[Authentication Testing Runbook](../testing/auth-runbook.md)** *(Manual integration testing guide)*[cite: 2]
 
 ### Setup & Deployment
 Runbooks for getting the server running locally or deploying to production.
-* **[Local Development Setup](../setup/local-development.md)** *(Node, Mongo, Redis Boot Guide)*
-* **[Environment Variables Guide](../setup/environment-variables.md)** *(Zod Validation & .env maps)*
+* **[Local Development Setup](../setup/local-development.md)** *(Node, Mongo, Redis Boot Guide)*[cite: 2]
+* **[Environment Variables Guide](../setup/environment-variables.md)** *(Zod Validation & .env maps)*[cite: 2]
 
 ---
 
@@ -62,28 +62,28 @@ Runbooks for getting the server running locally or deploying to production.
 The development of Reshma-Core is divided into four major epics. 
 
 ### Phase 1: The Foundation (Completed)
-- [x] Environment validation & Fail-Fast server boot.
-- [x] Global Error Handling & Zod Interceptors.
-- [x] User Domain Schema & RBAC integration.
-- [x] Two-Token Authentication (JWT + HttpOnly Cookies).
-- [x] Google OAuth (Client-Side Token Flow) Integration.
-- [x] Background Notification Engine (BullMQ + Redis).
+- [x] Environment validation & Fail-Fast server boot[cite: 2].
+- [x] Global Error Handling & Zod Interceptors[cite: 2].
+- [x] User Domain Schema & RBAC integration[cite: 2].
+- [x] Two-Token Authentication (JWT + HttpOnly Cookies)[cite: 2].
+- [x] Google OAuth (Client-Side Token Flow) Integration[cite: 2].
+- [x] Background Notification Engine (BullMQ + Redis)[cite: 2].
 
 ### Phase 2: The Core Catalog Engine (Completed)
-- [x] Base `Product` schema implementation.
-- [x] Mongoose Discriminators for custom categories (Bangles, Apparel, Fabrics).
-- [x] Cloudinary integration for product image pipelines (Memory Buffers & Rollbacks).
-- [x] Category & Inventory tracking modules.
+- [x] Base `Product` schema implementation[cite: 2].
+- [x] Mongoose Discriminators for custom categories (Bangles, Apparel, Fabrics)[cite: 2].
+- [x] Cloudinary integration for product image pipelines (Memory Buffers & Rollbacks)[cite: 2].
+- [x] Category & Inventory tracking modules[cite: 2].
 
-### Phase 3: The Transaction Pipeline (Up Next)
-- [ ] Cart management (Syncing local state with DB).
-- [ ] Dynamic Checkout Math Engine (GST, COD fees, Heavy Shipping).
-- [ ] Razorpay Payment Gateway integration.
-- [ ] Order generation & status Webhooks.
+### Phase 3: The Transaction Pipeline (Completed)
+- [x] Cart management (Syncing local state with DB)[cite: 2].
+- [x] Dynamic Checkout Math Engine (GST, shipping fees)[cite: 2].
+- [x] Razorpay Payment Gateway integration[cite: 2].
+- [x] Order generation & status Webhooks[cite: 2].
 
-### Phase 4: Operations & Analytics
-- [ ] Return Arbitration Engine (Cloudinary photographic proof requirement).
-- [ ] Admin Dashboard aggregations (Sales volume, top-selling categories).
+### Phase 4: Operations & Analytics (Up Next)
+- [ ] Return Arbitration Engine (Phase 8 Implementation)[cite: 2].
+- [ ] Admin Dashboard aggregations (Sales volume, top-selling categories)[cite: 2].
 
 ---
 *Maintained by Md Afzal Ansari | Core System Architecture*

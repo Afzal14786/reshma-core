@@ -3,7 +3,7 @@ import { OrderPublicController } from "./order.public.controller";
 import { OrderAdminController } from "./order.admin.controller";
 
 // Global Middlewares
-import { protect } from "../../shared/middlewares/auth.middleware";
+import { protect } from "@shared/middlewares/auth.middleware";
 import { restrictTo } from "@shared/middlewares/role.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
 import {
@@ -19,8 +19,10 @@ const router = Router();
 /**
  * UNPROTECTED ROUTES (System Webhooks)
  * Guarded strictly by HMAC cryptographic signatures, not JWTs.
+ *
+ * ARCHITECTURE NOTE: The raw Buffer stream is intercepted and attached to req.rawBody
+ * globally in app.ts, keeping this router perfectly clean.
  */
-
 router.post("/webhook", OrderPublicController.handleRazorpayWebhook);
 
 /**

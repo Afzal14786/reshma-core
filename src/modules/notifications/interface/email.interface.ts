@@ -42,12 +42,12 @@ export interface IProfileUpdateJob extends BaseEmailJob {
 
 export interface IOrderConfirmationJob extends BaseEmailJob {
   type: "ORDER_CONFIRMATION";
-  data: { firstname: string; orderId: string; totalAmount: number };
+  data: { firstname: string; orderNumber: string; totalAmount: number };
 }
 
 export interface IOrderCancelledJob extends BaseEmailJob {
   type: "ORDER_CANCELLED";
-  data: { firstname: string; orderId: string; reason: string };
+  data: { firstname: string; orderNumber: string; reason: string };
 }
 
 export interface IOrderShippedJob extends BaseEmailJob {
