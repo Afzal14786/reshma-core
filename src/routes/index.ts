@@ -5,6 +5,7 @@ import { ProductRoutes } from "@modules/products/product.routes";
 import { CartRoutes } from "@modules/cart/cart.route";
 import { OrderRoutes } from "@modules/orders/order.routes";
 import { userRoutes } from "@modules/users/user.routes";
+import { ReturnRoutes } from "@modules/returns/return.route";
 
 const router = Router();
 
@@ -28,6 +29,7 @@ const moduleRoutes = [
   { path: "/carts", route: CartRoutes },
   { path: "/orders", route: OrderRoutes },
   { path: "/users", route: userRoutes },
+  { path: "/returns", route: ReturnRoutes },
 ];
 
 // Iteratively mount all routes

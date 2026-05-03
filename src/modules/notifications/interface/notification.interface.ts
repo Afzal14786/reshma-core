@@ -1,6 +1,6 @@
 import { Document, Types } from "mongoose";
 
-export type NotificationType = "SYSTEM" | "ORDER" | "PROMOTION" | "SECURITY";
+export type NotificationType = "SYSTEM" | "ORDER" | "PROMOTION" | "SECURITY" | "RETURN";
 
 /**
  * In-App Database Notification Interface
