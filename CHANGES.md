@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
 ### Added
+- **Returns (RMA) Module:** Complete reverse-logistics pipeline with a 3-stage state machine (Initiation, Arbitration, Refund/Restock).
+- **Razorpay Refunds Integration:** Automated partial and full refund processing directly to the original payment source.
+- **Atomic Restocking:** Automatic inventory restoration using MongoDB `$inc` operations upon successful return processing.
+- **Return Notification Templates:** Four new transactional email templates and In-App alerts (`RETURN_REQUESTED`, `RETURN_APPROVED`, `RETURN_REJECTED`, `RETURN_REFUNDED`).
+- **RMA Policy Firewalls:** Automated rejection for items past the 7-day delivery window and strict enforcement of the `INNERWEAR` hygiene policy.
+
+### Security
+- **Financial Taint Protection:** Refund values are mathematically derived strictly from locked historical order snapshots, preventing client-side payload manipulation.
+- **Double-Refund Prevention:** Added unique compound indexes and native `11000` duplicate key interception to neutralize concurrent return-request race conditions.
+- **Arbitration Mandates:** Admin rejections now physically require a rejection reason to be sent to the customer via Zod schema enforcement.
+
+### Added
 - **Checkout Engine**: Fully atomic checkout process utilizing MongoDB Sessions to ensure absolute data integrity.
 - **Payment Gateway**: End-to-end Razorpay integration supporting both COD and Prepaid financial flows.
 - **Security Protocols**: Raw body stream interceptor implemented in `app.ts` to support 100% accurate HMAC-SHA256 verification.

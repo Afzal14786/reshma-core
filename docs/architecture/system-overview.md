@@ -37,12 +37,13 @@ High-level system design, security protocols, and database schemas.
 
 ### Domain Modules
 Deep dives into the specific business logic, DTOs, and services for each core feature.
-* **[User Module](../modules/user-module.md)** *(Identity, RBAC, Password Hashing)*[cite: 2]
-* **[Authentication Module](../modules/auth-module.md)** *(Login, Registration, Token Issuance)*[cite: 2]
-* **[Notification Engine](../modules/notification-module.md)** *(BullMQ Background Workers, SMTP, In-App Alerts)*[cite: 2]
-* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*[cite: 2]
-* **[Cart Module](../modules/cart-module.md)** *(Dynamic Pricing, Attribute Hashing, Guest Merging)*[cite: 2]
-* **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, State Machine)*[cite: 2]
+* **[User Module](../modules/user-module.md)** *(Identity, RBAC, Password Hashing)*
+* **[Authentication Module](../modules/auth-module.md)** *(Login, Registration, Token Issuance)*
+* **[Notification Engine](../modules/notification-module.md)** *(BullMQ Background Workers, SMTP, In-App Alerts)*
+* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*
+* **[Cart Module](../modules/cart-module.md)** *(Dynamic Pricing, Attribute Hashing, Guest Merging)*
+* **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, State Machine)*
+* **[Return Module](../modules/return-module.md)** *(RMA State Machine, Razorpay Refunds, Atomic Restocks)*
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.
@@ -81,9 +82,9 @@ The development of Reshma-Core is divided into four major epics.
 - [x] Razorpay Payment Gateway integration[cite: 2].
 - [x] Order generation & status Webhooks[cite: 2].
 
-### Phase 4: Operations & Analytics (Up Next)
-- [ ] Return Arbitration Engine (Phase 8 Implementation)[cite: 2].
-- [ ] Admin Dashboard aggregations (Sales volume, top-selling categories)[cite: 2].
+### Phase 4: Operations & Analytics (In Progress)
+- [x] Return Arbitration Engine (Phase 8 Implementation).
+- [ ] Admin Dashboard aggregations (Sales volume, top-selling categories).
 
 ---
 *Maintained by Md Afzal Ansari | Core System Architecture*

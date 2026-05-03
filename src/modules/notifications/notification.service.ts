@@ -11,6 +11,12 @@ import { passwordResetTemplate } from "./templates/password-reset";
 import { passwordUpdateTemplate } from "./templates/password-update";
 import { orderPlacedTemplate } from "./templates/order-placed";
 import { orderCancelledTemplate } from "./templates/order-cancel";
+
+import { returnRequestedTemplate } from "./templates/return-requested";
+import { returnApprovedTemplate } from "./templates/return-approved";
+import { returnRejectedTemplate } from "./templates/return-rejected";
+import { returnRefundedTemplate } from "./templates/return-refunded";
+
 /**
  * UNIFIED NOTIFICATION SERVICE
  * * ARCHITECTURE NOTE:
@@ -181,6 +187,104 @@ export class NotificationService {
     );
   }
 
+    /**
+   * Return Lifecycle: Stage 1 - Initiation
+   */
+  public static async sendReturnRequestedNotification(
+    userId: Types.ObjectId,
+    email: string,
+    firstname: string,
+    orderNumber: string,
+  ): Promise<void> {
+    await dispatchEmailJob({
+      type: "RETURN_REQUESTED",
+      to: email,
+      data: { firstname, orderNumber },
+    });
+
+    Notification.create({
+      recipientId: userId,
+      type: "RETURN",
+      title: "Return Request Received",
+      message: `We are reviewing your return request for order ${orderNumber}.`,
+      link: `/returns`,
+    }).catch((err) => logger.error(`[Notification DB Error] Return Requested failed for ${userId}`, err));
+  }
+
+  /**
+   * Return Lifecycle: Stage 2 - Approved
+   */
+  public static async sendReturnApprovedNotification(
+    userId: Types.ObjectId,
+    email: string,
+    firstname: string,
+    orderNumber: string,
+  ): Promise<void> {
+    await dispatchEmailJob({
+      type: "RETURN_APPROVED",
+      to: email,
+      data: { firstname, orderNumber },
+    });
+
+    Notification.create({
+      recipientId: userId,
+      type: "RETURN",
+      title: "Return Approved",
+      message: `Your return for order ${orderNumber} was approved. Please check your email for shipping instructions.`,
+      link: `/returns`,
+    }).catch((err) => logger.error(`[Notification DB Error] Return Approved failed for ${userId}`, err));
+  }
+
+  /**
+   * Return Lifecycle: Stage 2 - Rejected
+   */
+  public static async sendReturnRejectedNotification(
+    userId: Types.ObjectId,
+    email: string,
+    firstname: string,
+    orderNumber: string,
+    reason: string,
+  ): Promise<void> {
+    await dispatchEmailJob({
+      type: "RETURN_REJECTED",
+      to: email,
+      data: { firstname, orderNumber, reason },
+    });
+
+    Notification.create({
+      recipientId: userId,
+      type: "RETURN",
+      title: "Return Declined",
+      message: `Your return for order ${orderNumber} was declined: ${reason}`,
+      link: `/returns`,
+    }).catch((err) => logger.error(`[Notification DB Error] Return Rejected failed for ${userId}`, err));
+  }
+
+  /**
+   * Return Lifecycle: Stage 3 - Refunded
+   */
+  public static async sendReturnRefundedNotification(
+    userId: Types.ObjectId,
+    email: string,
+    firstname: string,
+    orderNumber: string,
+    refundAmount: number,
+  ): Promise<void> {
+    await dispatchEmailJob({
+      type: "RETURN_REFUNDED",
+      to: email,
+      data: { firstname, orderNumber, refundAmount },
+    });
+
+    Notification.create({
+      recipientId: userId,
+      type: "RETURN",
+      title: "Refund Processed",
+      message: `A refund of ₹${refundAmount.toFixed(2)} has been processed for order ${orderNumber}.`,
+      link: `/returns`,
+    }).catch((err) => logger.error(`[Notification DB Error] Return Refunded failed for ${userId}`, err));
+  }
+
   // IN-APP NOTIFICATION MANAGEMENT
 
   /**
@@ -348,6 +452,26 @@ export class NotificationService {
               <p>Your order <strong>${payload.data.orderNumber}</strong> has been handed over to <strong>${payload.data.courierName}</strong>.</p>
               <p>Your Tracking Number is: <strong>${payload.data.trackingNumber}</strong></p>
           `,
+        };
+      case "RETURN_REQUESTED":
+        return {
+          subject: `Return Request Received - ${payload.data.orderNumber}`,
+          html: returnRequestedTemplate(payload.data.firstname, payload.data.orderNumber),
+        };
+      case "RETURN_APPROVED":
+        return {
+          subject: `Return Approved - ${payload.data.orderNumber}`,
+          html: returnApprovedTemplate(payload.data.firstname, payload.data.orderNumber),
+        };
+      case "RETURN_REJECTED":
+        return {
+          subject: `Return Request Update - ${payload.data.orderNumber}`,
+          html: returnRejectedTemplate(payload.data.firstname, payload.data.orderNumber, payload.data.reason),
+        };
+      case "RETURN_REFUNDED":
+        return {
+          subject: `Refund Processed - ${payload.data.orderNumber}`,
+          html: returnRefundedTemplate(payload.data.firstname, payload.data.orderNumber, payload.data.refundAmount),
         };
       default:
         // We stringify the raw payload to capture the bug in server logs.
