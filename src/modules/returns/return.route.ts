@@ -9,10 +9,10 @@ import { validate } from "@shared/middlewares/validate.middleware";
 import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 
 // Validation Firewalls
-import { 
-  InitiateReturnSchema, 
-  ArbitrateReturnSchema, 
-  ProcessReturnSchema 
+import {
+  InitiateReturnSchema,
+  ArbitrateReturnSchema,
+  ProcessReturnSchema,
 } from "./dtos/return.dto";
 
 const router = Router();
@@ -28,15 +28,12 @@ router.use(protect); // Applies to ALL routes below this point
 router.post(
   "/:orderId/initiate",
   validate(InitiateReturnSchema), // Drops NoSQL injection and mass-assignprofilent payloads
-  ReturnPublicController.initiateReturn
+  ReturnPublicController.initiateReturn,
 );
 
-// GET /api/v1/returns/me 
+// GET /api/v1/returns/me
 // (Changed from /profile to /me to match standard REST API conventions for fetching own data)
-router.get(
-  "/me",
-  ReturnPublicController.getMyReturns
-);
+router.get("/me", ReturnPublicController.getMyReturns);
 
 /**
  * ADMIN ROUTES: LOGISTICS & FINANCIAL BOUNDARY
@@ -45,23 +42,20 @@ router.get(
 router.use("/admin", restrictTo("ADMIN"));
 
 // GET /api/v1/returns/admin
-router.get(
-  "/admin",
-  ReturnAdminController.getAllReturns
-);
+router.get("/admin", ReturnAdminController.getAllReturns);
 
 // PATCH /api/v1/returns/admin/:returnId/arbitrate
 router.patch(
   "/admin/:returnId/arbitrate",
   validate(ArbitrateReturnSchema), // Forces admin to provide a reason if rejecting
-  ReturnAdminController.arbitrateReturn
+  ReturnAdminController.arbitrateReturn,
 );
 
 // POST /api/v1/returns/admin/:returnId/process
 router.post(
   "/admin/:returnId/process",
   validate(ProcessReturnSchema), // Validates the Hex ID params
-  ReturnAdminController.processRefund
+  ReturnAdminController.processRefund,
 );
 
 export const ReturnRoutes = router;

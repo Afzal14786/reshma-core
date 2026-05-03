@@ -1,7 +1,10 @@
 import { baseEmailLayout } from "./layout";
 import env from "@config/env";
 
-export const returnApprovedTemplate = (firstname: string, orderNumber: string): string => {
+export const returnApprovedTemplate = (
+  firstname: string,
+  orderNumber: string,
+): string => {
   const content = `
       <h2 style="margin-top: 0; color: #059669; font-size: 24px;">Return Approved</h2>
       <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">

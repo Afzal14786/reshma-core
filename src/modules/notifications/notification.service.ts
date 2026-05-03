@@ -187,7 +187,7 @@ export class NotificationService {
     );
   }
 
-    /**
+  /**
    * Return Lifecycle: Stage 1 - Initiation
    */
   public static async sendReturnRequestedNotification(
@@ -208,7 +208,12 @@ export class NotificationService {
       title: "Return Request Received",
       message: `We are reviewing your return request for order ${orderNumber}.`,
       link: `/returns`,
-    }).catch((err) => logger.error(`[Notification DB Error] Return Requested failed for ${userId}`, err));
+    }).catch((err) =>
+      logger.error(
+        `[Notification DB Error] Return Requested failed for ${userId}`,
+        err,
+      ),
+    );
   }
 
   /**
@@ -232,7 +237,12 @@ export class NotificationService {
       title: "Return Approved",
       message: `Your return for order ${orderNumber} was approved. Please check your email for shipping instructions.`,
       link: `/returns`,
-    }).catch((err) => logger.error(`[Notification DB Error] Return Approved failed for ${userId}`, err));
+    }).catch((err) =>
+      logger.error(
+        `[Notification DB Error] Return Approved failed for ${userId}`,
+        err,
+      ),
+    );
   }
 
   /**
@@ -257,7 +267,12 @@ export class NotificationService {
       title: "Return Declined",
       message: `Your return for order ${orderNumber} was declined: ${reason}`,
       link: `/returns`,
-    }).catch((err) => logger.error(`[Notification DB Error] Return Rejected failed for ${userId}`, err));
+    }).catch((err) =>
+      logger.error(
+        `[Notification DB Error] Return Rejected failed for ${userId}`,
+        err,
+      ),
+    );
   }
 
   /**
@@ -282,7 +297,12 @@ export class NotificationService {
       title: "Refund Processed",
       message: `A refund of ₹${refundAmount.toFixed(2)} has been processed for order ${orderNumber}.`,
       link: `/returns`,
-    }).catch((err) => logger.error(`[Notification DB Error] Return Refunded failed for ${userId}`, err));
+    }).catch((err) =>
+      logger.error(
+        `[Notification DB Error] Return Refunded failed for ${userId}`,
+        err,
+      ),
+    );
   }
 
   // IN-APP NOTIFICATION MANAGEMENT
@@ -456,22 +476,36 @@ export class NotificationService {
       case "RETURN_REQUESTED":
         return {
           subject: `Return Request Received - ${payload.data.orderNumber}`,
-          html: returnRequestedTemplate(payload.data.firstname, payload.data.orderNumber),
+          html: returnRequestedTemplate(
+            payload.data.firstname,
+            payload.data.orderNumber,
+          ),
         };
       case "RETURN_APPROVED":
         return {
           subject: `Return Approved - ${payload.data.orderNumber}`,
-          html: returnApprovedTemplate(payload.data.firstname, payload.data.orderNumber),
+          html: returnApprovedTemplate(
+            payload.data.firstname,
+            payload.data.orderNumber,
+          ),
         };
       case "RETURN_REJECTED":
         return {
           subject: `Return Request Update - ${payload.data.orderNumber}`,
-          html: returnRejectedTemplate(payload.data.firstname, payload.data.orderNumber, payload.data.reason),
+          html: returnRejectedTemplate(
+            payload.data.firstname,
+            payload.data.orderNumber,
+            payload.data.reason,
+          ),
         };
       case "RETURN_REFUNDED":
         return {
           subject: `Refund Processed - ${payload.data.orderNumber}`,
-          html: returnRefundedTemplate(payload.data.firstname, payload.data.orderNumber, payload.data.refundAmount),
+          html: returnRefundedTemplate(
+            payload.data.firstname,
+            payload.data.orderNumber,
+            payload.data.refundAmount,
+          ),
         };
       default:
         // We stringify the raw payload to capture the bug in server logs.

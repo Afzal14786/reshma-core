@@ -1,6 +1,10 @@
 import { baseEmailLayout } from "./layout";
 
-export const returnRejectedTemplate = (firstname: string, orderNumber: string, reason: string): string => {
+export const returnRejectedTemplate = (
+  firstname: string,
+  orderNumber: string,
+  reason: string,
+): string => {
   const content = `
       <h2 style="margin-top: 0; color: #ef4444; font-size: 24px;">Return Request Declined</h2>
       <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
