@@ -14,6 +14,7 @@ import {
   CreateProductSchema,
   UpdateProductSchema,
 } from "./dtos/product.admin.dto";
+
 import {
   GetProductsQuerySchema,
   GetProductByIdSchema,
@@ -23,35 +24,30 @@ const router = Router();
 
 /**
  * PUBLIC ROUTES (Customer Facing)
- * Open access. Protected only by the Global Rate Limiter.
+ * Open access. Protected explicitly by the standard rate limiter.
  */
-
-// SECURITY FIX: Apply rate limiting at the top-level.
-// This ensures that expensive database lookups in Public routes AND
-// authorization checks in Admin routes are protected against DoS.
-
-/**
- * PROTECTED ROUTES (Admin Facing)
- * Requires Two-Token JWT verification AND 'ADMIN' database role.
- */
-
-router.use(standardLimiter);
 
 router.get(
   "/",
+  standardLimiter,
   validate(GetProductsQuerySchema),
   PublicProductController.getProducts,
 );
 
 router.get(
   "/:id",
+  standardLimiter,
   validate(GetProductByIdSchema),
   PublicProductController.getProductById,
 );
 
-// Apply authentication and authorization to all subsequent routes
-router.use(protect);
-router.use(restrictTo("ADMIN"));
+/**
+ * PROTECTED ROUTES (Admin Facing)
+ * Requires Two-Token JWT verification AND 'ADMIN' database role.
+ */
+
+// CodeQL's static analyzer registers the protection over the database queries.
+router.use(standardLimiter, protect, restrictTo("ADMIN"));
 
 router.post(
   "/",

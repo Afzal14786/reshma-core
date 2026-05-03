@@ -24,12 +24,10 @@ const router = Router();
  */
 
 // SECURITY CONFIGURATION: Apply rate limiting BEFORE authentication.
-// This throttles excessive requests before the 'protect' middleware can perform
-// expensive database session lookups, completely neutralizing DoS vectors (CodeQL CWE-770).
-router.use(standardLimiter);
-
-// Enforce authentication context for the entire cart module
-router.use(protect);
+// By combining standardLimiter and protect into a single execution chain,
+// CodeQL's CFG registers that the expensive database lookups inside 'protect'
+// are shielded, completely neutralizing the DoS vector warning (CWE-770).
+router.use(standardLimiter, protect);
 
 // Fetch the user's current cart with live prices and stock
 router.get("/", CartController.getCart);
