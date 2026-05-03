@@ -7,6 +7,7 @@ on:
   # 2. Run the scan on every Pull Request targeting the main branch
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
   # 3. Run a deep scan once a week (Sunday at 1:30 AM) just to be safe
   schedule:
     - cron: '30 1 * * 0'
