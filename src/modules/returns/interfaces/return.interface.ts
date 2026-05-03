@@ -1,14 +1,14 @@
-import { Document, Types } from 'mongoose';
+import { Document, Types } from "mongoose";
 
 /**
- * Strict State Machine for Returns. 
+ * Strict State Machine for Returns.
  * An order return must linearly transition through these states.
  */
 export enum ReturnStatus {
-  PENDING_APPROVAL = 'PENDING_APPROVAL',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
-  REFUNDED = 'REFUNDED',
+  PENDING_APPROVAL = "PENDING_APPROVAL",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
+  REFUNDED = "REFUNDED",
 }
 
 /**
@@ -16,10 +16,10 @@ export enum ReturnStatus {
  * rather than allowing free-text strings that cannot be aggregated.
  */
 export enum ReturnReason {
-  DEFECTIVE = 'DEFECTIVE',
-  WRONG_ITEM = 'WRONG_ITEM',
-  SIZE_ISSUE = 'SIZE_ISSUE',
-  NOT_NEEDED = 'NOT_NEEDED',
+  DEFECTIVE = "DEFECTIVE",
+  WRONG_ITEM = "WRONG_ITEM",
+  SIZE_ISSUE = "SIZE_ISSUE",
+  NOT_NEEDED = "NOT_NEEDED",
 }
 
 export interface IReturnItem {
@@ -35,7 +35,7 @@ export interface IReturn extends Document {
   items: IReturnItem[];
   status: ReturnStatus;
   proofOfDamageImages: string[]; // Strictly populated via Cloudinary middleware
-  refundAmountEstimate: number;  // Financial Boundary: Computed strictly by backend, never trusted from frontend
+  refundAmountEstimate: number; // Financial Boundary: Computed strictly by backend, never trusted from frontend
   adminRejectionReason?: string;
   createdAt: Date;
   updatedAt: Date;

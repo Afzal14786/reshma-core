@@ -1,6 +1,10 @@
 import { baseEmailLayout } from "./layout";
 
-export const returnRefundedTemplate = (firstname: string, orderNumber: string, refundAmount: number): string => {
+export const returnRefundedTemplate = (
+  firstname: string,
+  orderNumber: string,
+  refundAmount: number,
+): string => {
   const content = `
       <h2 style="margin-top: 0; color: #059669; font-size: 24px;">Refund Processed!</h2>
       <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">

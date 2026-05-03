@@ -1,5 +1,9 @@
-import { Schema, model } from 'mongoose';
-import { IReturn, ReturnStatus, ReturnReason } from './interfaces/return.interface';
+import { Schema, model } from "mongoose";
+import {
+  IReturn,
+  ReturnStatus,
+  ReturnReason,
+} from "./interfaces/return.interface";
 
 /**
  * Sub-document schema for the specific items being returned.
@@ -10,13 +14,13 @@ const ReturnItemSchema = new Schema(
   {
     product: {
       type: Schema.Types.ObjectId,
-      ref: 'Product', // References the Polymorphic Product schema
+      ref: "Product", // References the Polymorphic Product schema
       required: true,
     },
     quantity: {
       type: Number,
       required: true,
-      min: [1, 'Quantity must be at least 1'],
+      min: [1, "Quantity must be at least 1"],
     },
     reason: {
       type: String,
@@ -26,23 +30,23 @@ const ReturnItemSchema = new Schema(
     customerNote: {
       type: String,
       trim: true,
-      maxlength: [500, 'Note cannot exceed 500 characters'],
+      maxlength: [500, "Note cannot exceed 500 characters"],
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const ReturnSchema = new Schema<IReturn>(
   {
     user: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
-      index: true, 
+      index: true,
     },
     order: {
       type: Schema.Types.ObjectId,
-      ref: 'Order',
+      ref: "Order",
       required: true,
       unique: true, // SECURITY: Physical database lock preventing double-refund fraud
     },
@@ -59,7 +63,7 @@ const ReturnSchema = new Schema<IReturn>(
     refundAmountEstimate: {
       type: Number,
       required: true,
-      min: [0, 'Refund amount cannot be negative'], // Financial integrity constraint
+      min: [0, "Refund amount cannot be negative"], // Financial integrity constraint
     },
     adminRejectionReason: {
       type: String,
@@ -68,7 +72,7 @@ const ReturnSchema = new Schema<IReturn>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-export const ReturnModel = model<IReturn>('Return', ReturnSchema);
+export const ReturnModel = model<IReturn>("Return", ReturnSchema);

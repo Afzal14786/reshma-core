@@ -6,13 +6,12 @@ import { ArbitrateReturnInput } from "./dtos/return.dto";
 
 /**
  * ADMIN RETURN CONTROLLER (Internal Operations)
- * 
+ *
  * SECURITY BOUNDARY:
  * These routes must be protected by the `restrictTo("ADMIN")` middleware.
  * Exposes financial mutation methods (Refunds) and Inventory overrides (Restocks).
  */
 export class ReturnAdminController {
-
   /**
    * @route   GET /api/v1/returns/admin
    * @desc    View all return requests across the platform (The Arbitration Queue)
@@ -29,13 +28,17 @@ export class ReturnAdminController {
       query.status = { $eq: String(req.query.status) };
     }
 
-    const { returns, meta } = await ReturnService.fetchReturns(query, limit, skip);
+    const { returns, meta } = await ReturnService.fetchReturns(
+      query,
+      limit,
+      skip,
+    );
 
     return new ApiResponse(
       res,
       HTTP_STATUS.OK,
       "Platform return queue fetched successfully.",
-      { returns, meta }
+      { returns, meta },
     ).send();
   }
 
@@ -48,13 +51,16 @@ export class ReturnAdminController {
     const returnId = String(req.params.returnId);
     const payload = req.body as ArbitrateReturnInput;
 
-    const returnRequest = await ReturnService.arbitrateReturn(returnId, payload);
+    const returnRequest = await ReturnService.arbitrateReturn(
+      returnId,
+      payload,
+    );
 
     return new ApiResponse(
       res,
       HTTP_STATUS.OK,
       `Return request successfully ${payload.status.toLowerCase()}.`,
-      { returnRequest }
+      { returnRequest },
     ).send();
   }
 
@@ -72,7 +78,7 @@ export class ReturnAdminController {
       res,
       HTTP_STATUS.OK,
       "Refund processed successfully and inventory has been restocked.",
-      { returnRequest }
+      { returnRequest },
     ).send();
   }
 }
