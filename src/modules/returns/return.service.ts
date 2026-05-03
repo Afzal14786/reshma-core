@@ -24,6 +24,7 @@ import { IOrderItem } from "@modules/orders/interfaces/order.interface";
  * - Financial calculations are NEVER derived from client input.
  * - All DB queries use strict `$eq` wrapping to prevent NoSQL injection.
  * - Exact Optional Property Types are physically respected to prevent TS crashes.
+ * - All logged variables are sanitized against CRLF injection to prevent log forging (CWE-117).
  */
 export class ReturnService {
   /**
@@ -37,9 +38,13 @@ export class ReturnService {
     orderId: string,
     payload: InitiateReturnInput,
   ) {
+    const safeOrderId = String(orderId).replace(/[\r\n]/g, "");
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+
     logger.info(
-      `[ReturnService] Initiating return for Order: ${orderId} by User: ${userId}`,
+      `[ReturnService] Initiating return for Order: ${safeOrderId} by User: ${safeUserId}`,
     );
+    
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -52,7 +57,7 @@ export class ReturnService {
 
       if (!order) {
         logger.warn(
-          `[SECURITY] IDOR attempt or missing order. User: ${userId}, Target: ${orderId}`,
+          `[SECURITY] IDOR attempt or missing order. User: ${safeUserId}, Target: ${safeOrderId}`,
         );
         throw new AppError(
           HTTP_STATUS.NOT_FOUND,
@@ -97,8 +102,9 @@ export class ReturnService {
         }
 
         if (reqItem.quantity > purchasedItem.quantity) {
+          const safeSku = String(reqItem.productId).replace(/[\r\n]/g, "");
           logger.warn(
-            `[FRAUD] User ${userId} attempted to return more units than purchased for SKU ${reqItem.productId}`,
+            `[FRAUD] User ${safeUserId} attempted to return more units than purchased for SKU ${safeSku}`,
           );
           throw new AppError(
             HTTP_STATUS.BAD_REQUEST,
@@ -144,6 +150,7 @@ export class ReturnService {
           "Photographic proof of damage is legally required for fragile items (e.g., Glass Bangles).",
         );
       }
+      
       const formattedItems = payload.items.map((item) => {
         const mappedItem: {
           product: Types.ObjectId;
@@ -189,7 +196,7 @@ export class ReturnService {
 
       await session.commitTransaction();
       logger.info(
-        `[ReturnService] Return ${createdReturn._id} successfully generated for Order ${orderId}`,
+        `[ReturnService] Return ${createdReturn._id} successfully generated for Order ${safeOrderId}`,
       );
 
       // Fire-and-Forget Notification Trigger
@@ -217,7 +224,7 @@ export class ReturnService {
         error.code === 11000
       ) {
         logger.warn(
-          `[ReturnService] Intercepted duplicate return request for Order: ${orderId}`,
+          `[ReturnService] Intercepted duplicate return request for Order: ${safeOrderId}`,
         );
         throw new AppError(
           HTTP_STATUS.CONFLICT,
@@ -238,8 +245,11 @@ export class ReturnService {
     returnId: string,
     payload: ArbitrateReturnInput,
   ) {
+    const safeReturnId = String(returnId).replace(/[\r\n]/g, "");
+    const safeStatus = String(payload.status).replace(/[\r\n]/g, "");
+
     logger.info(
-      `[ReturnService] Admin arbitrating Return: ${returnId} to ${payload.status}`,
+      `[ReturnService] Admin arbitrating Return: ${safeReturnId} to ${safeStatus}`,
     );
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -353,8 +363,10 @@ export class ReturnService {
    * the DB transaction to sync our internal state.
    */
   public static async processRefundAndRestock(returnId: string) {
+    const safeReturnId = String(returnId).replace(/[\r\n]/g, "");
+
     logger.info(
-      `[ReturnService] Executing Refund & Restock for Return: ${returnId}`,
+      `[ReturnService] Executing Refund & Restock for Return: ${safeReturnId}`,
     );
 
     // Fetch data required for the Razorpay handshake
@@ -388,6 +400,7 @@ export class ReturnService {
 
     // Network Boundary: Call Razorpay API
     try {
+      // Gateway ID is sourced from DB, not client payload, inherently safe.
       logger.info(
         `[Razorpay] Initiating Rs. ${refundAmountInRupees} refund against Gateway ID: ${order.gatewayPaymentId}`,
       );
@@ -403,7 +416,7 @@ export class ReturnService {
       logger.info(`[Razorpay] Refund Success. Receipt ID: ${refundReceipt.id}`);
     } catch (error: unknown) {
       logger.error(
-        `[Razorpay ERROR] Refund failed for Return: ${returnId}`,
+        `[Razorpay ERROR] Refund failed for Return: ${safeReturnId}`,
         error,
       );
       throw new AppError(
@@ -421,7 +434,7 @@ export class ReturnService {
       const bulkOps = returnRequest.items.map((item) => ({
         updateOne: {
           filter: { _id: { $eq: String(item.product) } },
-          update: { $inc: { currentStock: item.quantity } }, // Referencing currentStock from your Product schema
+          update: { $inc: { currentStock: item.quantity } },
         },
       }));
 
@@ -462,7 +475,7 @@ export class ReturnService {
       await session.abortTransaction();
       // CRITICAL ALERT: Distributed system failure. Financial state and DB state are desynchronized.
       logger.error(
-        `[CRITICAL DESYNC] Razorpay processed the refund, but MongoDB restock failed. Manual reconciliation required for Return: ${returnId}`,
+        `[CRITICAL DESYNC] Razorpay processed the refund, but MongoDB restock failed. Manual reconciliation required for Return: ${safeReturnId}`,
         error,
       );
       throw new AppError(
