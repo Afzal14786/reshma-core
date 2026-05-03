@@ -1,5 +1,4 @@
 import { baseEmailLayout } from "./layout";
-import env from "@config/env";
 
 export const returnRequestedTemplate = (
   firstname: string,
