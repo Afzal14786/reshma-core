@@ -44,7 +44,7 @@ export class ReturnService {
     logger.info(
       `[ReturnService] Initiating return for Order: ${safeOrderId} by User: ${safeUserId}`,
     );
-    
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -150,7 +150,7 @@ export class ReturnService {
           "Photographic proof of damage is legally required for fragile items (e.g., Glass Bangles).",
         );
       }
-      
+
       const formattedItems = payload.items.map((item) => {
         const mappedItem: {
           product: Types.ObjectId;
