@@ -238,6 +238,13 @@ export class ReturnService {
     returnId: string,
     payload: ArbitrateReturnInput,
   ) {
+    const safeReturnId = String(returnId).replace(/[\r\n]/g, "");
+    const safeStatus = String(payload.status).replace(/[\r\n]/g, "");
+
+    logger.info(
+      `[ReturnService] Admin arbitrating Return: ${safeReturnId} to ${safeStatus}`,
+    );
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -327,6 +334,11 @@ export class ReturnService {
    * Mongoose bulkWrite to restore inventory levels atomically.
    */
   public static async processRefundAndRestock(returnId: string) {
+    const safeReturnId = String(returnId).replace(/[\r\n]/g, "");
+    logger.info(
+      `[ReturnService] Executing Refund & Restock for Return: ${safeReturnId}`,
+    );
+
     const returnRequest = await ReturnModel.findOne({
       _id: { $eq: String(returnId) },
     }).populate("user", "email firstname");
@@ -358,7 +370,10 @@ export class ReturnService {
         speed: "optimum",
       });
     } catch (error) {
-      logger.error(`[Razorpay Refund Failure] ReturnID: ${returnId}`, error);
+      logger.error(
+        `[Razorpay Refund Failure] ReturnID: ${safeReturnId}`,
+        error,
+      );
       throw new AppError(
         HTTP_STATUS.INTERNAL_SERVER_ERROR,
         "Razorpay rejected the refund. Check gateway logs.",
@@ -408,7 +423,7 @@ export class ReturnService {
     } catch (error) {
       await session.abortTransaction();
       logger.error(
-        `[CRITICAL DESYNC] Refund issued but DB sync failed for Return: ${returnId}`,
+        `[CRITICAL DESYNC] Refund issued but DB sync failed for Return: ${safeReturnId}`,
         error,
       );
       throw new AppError(
