@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
 ### Added
+- **Interactions Module:** Implemented a high-throughput, concurrency-safe engine for product reviews and threaded comments utilizing the Adjacency List pattern.
+- **Async Aggregation Engine:** Added background `$cond` aggregation pipelines via `setImmediate()` to recalculate average ratings and 5-star distribution curves without blocking the main event loop.
+- **Cross-Module Trust Layer:** Implemented internal validation against the `Orders` collection to mathematically grant the "Verified Purchase" badge.
+- **Atomic Voting:** Integrated `$addToSet` and `$pull` operators for concurrency-safe helpful/unhelpful interaction voting.
+- **Documentation:** Added `interaction-module.md` architecture blueprint and `interaction-runbook.md` for Thunder Client QA testing. Updated `api-standards.md` with the new endpoint directory.
+
+### Fixed
+- **Return Module (Mongoose 8+):** Resolved strict TypeScript `never` iterator errors by migrating `ReturnModel.create` to an array-based multi-document initialization signature.
+- **Type Safety:** Corrected `exactOptionalPropertyTypes` compilation failures by explicitly conditionally mapping `customerNote` in DTO transformations.
+- **CI/CD Pipeline:** Enforced strict Prettier formatting across the Returns service to satisfy GitHub Actions automated checks.
+- **Runtime Integrity:** Replaced blind `as unknown as` assertions with physical runtime type guards for populated MongoDB relationships.
+
+### Security
+- **CWE-117 (Log Injection):** Hardened the `ReturnService` against CRLF injection by implementing strict newline stripping (`/[\r\n]/g`) on all user-controlled identifiers before passing them to the Winston transport layer.
+- **CWE-400 (Memory Exhaustion):** Implemented strict mathematical bounds (`Math.min/max`) on the public Interaction `GET` route to prevent pagination-based heap exhaustion.
+- **CWE-943 (NoSQL Injection):** Enforced physical `$eq` query wrappers across both Return and Interaction data access layers.
+
+### Added
 - **Returns (RMA) Module:** Complete reverse-logistics pipeline with a 3-stage state machine (Initiation, Arbitration, Refund/Restock).
 - **Razorpay Refunds Integration:** Automated partial and full refund processing directly to the original payment source.
 - **Atomic Restocking:** Automatic inventory restoration using MongoDB `$inc` operations upon successful return processing.
