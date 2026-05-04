@@ -134,7 +134,7 @@ The API strictly adheres to the following HTTP status codes mapping:
 * `DELETE /cart/item/:productId` - Completely drop a product from the cart.
 * `DELETE /cart/clear` - Empty the cart (Called post-checkout).
 
-**5. Orders & Checkout (`/orders`)  
+**5. Orders & Checkout (`/orders`)**  
 * `POST /orders/checkout` - Initialize ACID transaction and Razorpay Order.
 * `POST /orders/verify-payment` - Verify webhook payment signature
 * `POST /orders/webhook` - Public HMAC-secured background handler for Razorpay pings.
@@ -146,6 +146,12 @@ The API strictly adheres to the following HTTP status codes mapping:
 **6. Returns Module (/returns) - Upcoming Phase 8**  `POST /returns/:orderId` - Submit return request (Requires Cloudinary image proof for Fragile items)  
 
 * `GET /returns/pending` - *(Admin)* View returns awaiting approval 
+
+**7. Interactions Module (/interactions)**  
+
+* `GET /interactions/product/:productId` - (*Public*) Fetch paginated top-level reviews for a product.
+* `POST /interactions` - Create a new review or threaded comment.
+* `PATCH /interactions/:interactionId/vote` - Upvote or downvote a specific interaction.  
 
 --- 
 
