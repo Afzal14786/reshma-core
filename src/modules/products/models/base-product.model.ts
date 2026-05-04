@@ -66,6 +66,31 @@ const BaseProductSchema = new Schema<IBaseProduct>(
         message: "Minimum one image required",
       },
     },
+
+    // rating & review meta data
+    ratingsMetadata: {
+      averageRating: {
+        type: Number,
+        default: 0,
+        min: [0, "Average rating cannot be below 0"],
+        max: [5, "Average rating cannot exceed 5"],
+        // Rounds to 1 decimal place (e.g., 4.74 -> 4.7)
+        set: (val: number) => Math.round(val * 10) / 10,
+      },
+      totalReviews: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      ratingDistribution: {
+        1: { type: Number, default: 0, min: 0 },
+        2: { type: Number, default: 0, min: 0 },
+        3: { type: Number, default: 0, min: 0 },
+        4: { type: Number, default: 0, min: 0 },
+        5: { type: Number, default: 0, min: 0 },
+      },
+    },
+
     tags: { type: [String], default: [] },
     isActive: { type: Boolean, default: true },
   },

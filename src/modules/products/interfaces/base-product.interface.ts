@@ -24,6 +24,28 @@ export type SellingUnit =
   | "Pack";
 
 /**
+ * Tracks the exact distribution of star ratings for highly optimized UI rendering
+ * (e.g., building the 5-bar rating chart seen on Amazon/Flipkart).
+ */
+export interface IRatingsDistribution {
+  1: number;
+  2: number;
+  3: number;
+  4: number;
+  5: number;
+}
+
+/**
+ * Denormalized metadata summary. Prevents the need to run heavy MongoDB
+ * aggregations on the Interactions collection during standard catalog browsing.
+ */
+export interface IRatingsMetadata {
+  averageRating: number;
+  totalReviews: number;
+  ratingDistribution: IRatingsDistribution;
+}
+
+/**
  * Base Product Contract
  * * ARCHITECTURE NOTE:
  * This interface represents the minimum required data for any item to exist
@@ -45,6 +67,11 @@ export interface IBaseProduct extends Document {
   isFragile: boolean; // Triggers mandatory image upload on return requests
   images: string[]; // Cloudinary URLs
   tags: string[]; // Keywords for MongoDB text search
+  /**
+   * Automatically managed by the Interactions Module.
+   * DO NOT update manually through standard Product controllers.
+   */
+  ratingsMetadata: IRatingsMetadata;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
