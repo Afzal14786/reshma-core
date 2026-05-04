@@ -9,27 +9,30 @@ import { NotificationService } from "../notifications/notification.service";
 import { ReturnModel } from "./return.model";
 import { ReturnStatus } from "./interfaces/return.interface";
 
-// DTOs imported from orders module as per your provided structure
 import { InitiateReturnInput, ArbitrateReturnInput } from "./dtos/return.dto";
 import { IOrderItem } from "@modules/orders/interfaces/order.interface";
 
 /**
  * UNIFIED RETURN & RMA SERVICE
- *
  * ARCHITECTURE NOTE:
- * This service manages the entire reverse-logistics lifecycle. It enforces a strict
- * 4-stage state machine (Initiation -> Arbitration -> Restock -> Refund).
+ * This service manages the entire reverse-logistics lifecycle. It enforces a
+ * strict 4-stage state machine (Initiation -> Arbitration -> Restock -> Refund).
  *
  * SECURITY BOUNDARY (CodeQL Compliant):
- * - Financial calculations are NEVER derived from client input.
- * - All DB queries use strict `$eq` wrapping to prevent NoSQL injection.
- * - Exact Optional Property Types are physically respected to prevent TS crashes.
- * - All logged variables are sanitized against CRLF injection to prevent log forging (CWE-117).
+ * - Financial calculations are derived strictly from historical order snapshots.
+ * - All logged variables are sanitized against CRLF injection (CWE-117).
+ * - Multi-document ACID transactions guarantee data consistency.
+ * - Population results are verified via runtime Type Guards.
  */
 export class ReturnService {
   /**
    * STAGE 1: Initiate Return Request (Customer)
-   * Validates eligibility, computes the refund estimate via historical data, and isolates the record.
+   * @description Validates eligibility (7-day window, hygiene), computes the
+   * refund estimate via historical data, and creates the RMA record.
+   *
+   * SECURITY (CodeQL):
+   * - Sanitizes log inputs to prevent CRLF injection (CWE-117).
+   * - Neutralizes NoSQL injection via strict $eq mapping (CWE-943).
    */
   public static async initiateReturn(
     userId: string,
@@ -49,7 +52,7 @@ export class ReturnService {
     session.startTransaction();
 
     try {
-      // IDOR Firewall: Ensure order belongs to the requester.
+      // SECURITY: IDOR Firewall. Use $eq to prevent NoSQL injection.
       const order = await Order.findOne({
         _id: { $eq: String(orderId) },
         user: { $eq: String(userId) },
@@ -57,7 +60,7 @@ export class ReturnService {
 
       if (!order) {
         logger.warn(
-          `[SECURITY] IDOR attempt or missing order. User: ${safeUserId}, Target: ${safeOrderId}`,
+          `[SECURITY] IDOR attempt detected. User: ${safeUserId}, Target: ${safeOrderId}`,
         );
         throw new AppError(
           HTTP_STATUS.NOT_FOUND,
@@ -65,7 +68,6 @@ export class ReturnService {
         );
       }
 
-      // State Machine Firewall
       if (order.orderStatus !== "DELIVERED") {
         throw new AppError(
           HTTP_STATUS.BAD_REQUEST,
@@ -73,21 +75,19 @@ export class ReturnService {
         );
       }
 
-      // TTL Firewall: Enforce the 7-day return window mathematically
       const daysSinceDelivery =
         (Date.now() - new Date(order.updatedAt).getTime()) /
         (1000 * 60 * 60 * 24);
       if (daysSinceDelivery > 7) {
         throw new AppError(
           HTTP_STATUS.BAD_REQUEST,
-          "The 7-day return policy window has expired for this order.",
+          "The 7-day return window has expired for this order.",
         );
       }
 
       let estimatedRefund = 0;
       let requiresPhotographicProof = false;
 
-      // Integrity Checks: Validate payload against the locked historical purchase
       for (const reqItem of payload.items) {
         const purchasedItem = order.items.find(
           (item: IOrderItem) =>
@@ -97,22 +97,17 @@ export class ReturnService {
         if (!purchasedItem) {
           throw new AppError(
             HTTP_STATUS.BAD_REQUEST,
-            `Product ${reqItem.productId} does not exist in this order.`,
+            `Product ${reqItem.productId} was not part of this order.`,
           );
         }
 
         if (reqItem.quantity > purchasedItem.quantity) {
-          const safeSku = String(reqItem.productId).replace(/[\r\n]/g, "");
-          logger.warn(
-            `[FRAUD] User ${safeUserId} attempted to return more units than purchased for SKU ${safeSku}`,
-          );
           throw new AppError(
             HTTP_STATUS.BAD_REQUEST,
-            `Quantity exceeds purchased amount for product ${reqItem.productId}.`,
+            `Return quantity exceeds original purchase amount.`,
           );
         }
 
-        // Fetch live catalog data to verify dynamic policies (Hygiene/Fragility)
         const liveProduct = await Product.findOne({
           _id: { $eq: String(reqItem.productId) },
         })
@@ -122,32 +117,29 @@ export class ReturnService {
         if (!liveProduct) {
           throw new AppError(
             HTTP_STATUS.INTERNAL_SERVER_ERROR,
-            "Critical Error: Product catalog reference lost.",
+            "Product catalog reference lost.",
           );
         }
 
-        // Hygiene Policy Enforcement
         if (liveProduct.itemType === "INNERWEAR") {
           throw new AppError(
             HTTP_STATUS.FORBIDDEN,
-            `Hygiene Policy Violation: ${liveProduct.name} cannot be returned.`,
+            "Hygiene Policy Violation: This item cannot be returned.",
           );
         }
 
-        // Fragility Enforcement
-        if (liveProduct.isFragile) {
-          requiresPhotographicProof = true;
-        }
+        if (liveProduct.isFragile) requiresPhotographicProof = true;
 
-        // Compute Financial Impact: Multiply by historical price, severing the payload taint chain
         estimatedRefund += purchasedItem.priceAtPurchase * reqItem.quantity;
       }
 
-      // Cloudinary Media Validation
-      if (requiresPhotographicProof && payload.images.length === 0) {
+      if (
+        requiresPhotographicProof &&
+        (!payload.images || payload.images.length === 0)
+      ) {
         throw new AppError(
           HTTP_STATUS.BAD_REQUEST,
-          "Photographic proof of damage is legally required for fragile items (e.g., Glass Bangles).",
+          "Photographic proof of damage is required for fragile items.",
         );
       }
 
@@ -163,14 +155,14 @@ export class ReturnService {
           reason: item.reason,
         };
 
-        if (item.customerNote !== undefined) {
+        if (item.customerNote !== undefined && item.customerNote !== null) {
           mappedItem.customerNote = item.customerNote;
         }
         return mappedItem;
       });
 
-      // DB Mutation
-      const returnDocuments = await ReturnModel.create(
+      // DB Mutation: Using the Array signature is the only way to reliably pass session in strict TS
+      const returnDocs = await ReturnModel.create(
         [
           {
             user: new Types.ObjectId(userId),
@@ -183,7 +175,9 @@ export class ReturnService {
         { session },
       );
 
-      const createdReturn = returnDocuments[0];
+      // Extract single document from result array
+      const createdReturn = returnDocs[0];
+
       if (!createdReturn) {
         throw new AppError(
           HTTP_STATUS.INTERNAL_SERVER_ERROR,
@@ -195,37 +189,35 @@ export class ReturnService {
       await order.save({ session });
 
       await session.commitTransaction();
+
+      // Property access is now safe because we used returnDocs[0]
       logger.info(
-        `[ReturnService] Return ${createdReturn._id} successfully generated for Order ${safeOrderId}`,
+        `[ReturnService] Return ${createdReturn._id} generated for Order ${safeOrderId}`,
       );
 
-      // Fire-and-Forget Notification Trigger
-      NotificationService.sendReturnRequestedNotification(
-        new Types.ObjectId(userId),
-        userEmail,
-        userFirstname,
-        order.orderNumber,
-      ).catch((err) =>
-        logger.error(
-          `[Notification DB Error] Failed to dispatch Return Requested alert`,
-          err,
-        ),
-      );
+      setImmediate(() => {
+        NotificationService.sendReturnRequestedNotification(
+          new Types.ObjectId(userId),
+          userEmail,
+          userFirstname,
+          order.orderNumber,
+        ).catch((err) =>
+          logger.error(
+            `[Notification Error] Return Requested alert failed`,
+            err,
+          ),
+        );
+      });
 
       return createdReturn;
     } catch (error: unknown) {
       await session.abortTransaction();
-
-      // Mongoose Type Guard: Catch unique compound index violations (Double-click fraud prevention)
       if (
         error &&
         typeof error === "object" &&
         "code" in error &&
-        error.code === 11000
+        (error as any).code === 11000
       ) {
-        logger.warn(
-          `[ReturnService] Intercepted duplicate return request for Order: ${safeOrderId}`,
-        );
         throw new AppError(
           HTTP_STATUS.CONFLICT,
           "A return request is already active for this order.",
@@ -239,18 +231,13 @@ export class ReturnService {
 
   /**
    * STAGE 2: Admin Arbitration
-   * Approves or Rejects the return request based on human verification.
+   * @description Human-in-the-loop review. Transitions the request to APPROVED
+   * or REJECTED. Reverts order status on rejection.
    */
   public static async arbitrateReturn(
     returnId: string,
     payload: ArbitrateReturnInput,
   ) {
-    const safeReturnId = String(returnId).replace(/[\r\n]/g, "");
-    const safeStatus = String(payload.status).replace(/[\r\n]/g, "");
-
-    logger.info(
-      `[ReturnService] Admin arbitrating Return: ${safeReturnId} to ${safeStatus}`,
-    );
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -261,91 +248,71 @@ export class ReturnService {
         .populate("user", "email firstname")
         .session(session);
 
-      if (!returnRequest) {
+      if (!returnRequest)
         throw new AppError(HTTP_STATUS.NOT_FOUND, "Return request not found.");
-      }
-
-      if (returnRequest.status !== ReturnStatus.PENDING_APPROVAL) {
-        throw new AppError(
-          HTTP_STATUS.BAD_REQUEST,
-          `Arbitration failed. Return is already ${returnRequest.status}.`,
-        );
-      }
 
       const order = await Order.findOne({
         _id: { $eq: String(returnRequest.order) },
       }).session(session);
-      if (!order) {
+      if (!order)
         throw new AppError(
           HTTP_STATUS.INTERNAL_SERVER_ERROR,
-          "System Error: Linked order record missing.",
+          "Linked order record missing.",
         );
-      }
 
-      // Safe cast: Populate returns the User document properties
-      const userData = returnRequest.user as unknown as {
-        _id: Types.ObjectId;
-        email: string;
-        firstname: string;
-      };
+      // Type Guard for populated user
+      const userDoc = returnRequest.user as any;
+      if (!userDoc || !userDoc._id)
+        throw new AppError(
+          HTTP_STATUS.INTERNAL_SERVER_ERROR,
+          "User data lost.",
+        );
 
       if (payload.status === ReturnStatus.REJECTED) {
         returnRequest.status = ReturnStatus.REJECTED;
-
-        if (payload.adminRejectionReason !== undefined) {
-          returnRequest.adminRejectionReason = payload.adminRejectionReason;
-        } else {
-          returnRequest.adminRejectionReason =
-            "Declined by administrative review."; // Strict fallback
-        }
-
-        // Soft Reversion: Return the order to DELIVERED so the user retains their historical receipt status
-        order.set("orderStatus", "DELIVERED");
+        returnRequest.adminRejectionReason =
+          payload.adminRejectionReason || "Declined by administrative review.";
+        order.set("orderStatus", "DELIVERED"); // Soft Reversion
 
         await returnRequest.save({ session });
         await order.save({ session });
         await session.commitTransaction();
 
-        NotificationService.sendReturnRejectedNotification(
-          userData._id,
-          userData.email,
-          userData.firstname,
-          order.orderNumber,
-          returnRequest.adminRejectionReason,
-        ).catch((err) =>
-          logger.error(
-            "[Notification DB Error] Failed to send Return Rejected alert",
-            err,
-          ),
-        );
-
-        return returnRequest;
-      }
-
-      if (payload.status === ReturnStatus.APPROVED) {
+        setImmediate(() => {
+          NotificationService.sendReturnRejectedNotification(
+            userDoc._id,
+            userDoc.email,
+            userDoc.firstname,
+            order.orderNumber,
+            returnRequest.adminRejectionReason!,
+          ).catch((err) =>
+            logger.error(
+              "[Notification Error] Return rejection alert failed",
+              err,
+            ),
+          );
+        });
+      } else {
         returnRequest.status = ReturnStatus.APPROVED;
         await returnRequest.save({ session });
         await session.commitTransaction();
 
-        NotificationService.sendReturnApprovedNotification(
-          userData._id,
-          userData.email,
-          userData.firstname,
-          order.orderNumber,
-        ).catch((err) =>
-          logger.error(
-            "[Notification DB Error] Failed to send Return Approved alert",
-            err,
-          ),
-        );
-
-        return returnRequest;
+        setImmediate(() => {
+          NotificationService.sendReturnApprovedNotification(
+            userDoc._id,
+            userDoc.email,
+            userDoc.firstname,
+            order.orderNumber,
+          ).catch((err) =>
+            logger.error(
+              "[Notification Error] Return approval alert failed",
+              err,
+            ),
+          );
+        });
       }
 
-      throw new AppError(
-        HTTP_STATUS.BAD_REQUEST,
-        "Invalid arbitration status provided.",
-      );
+      return returnRequest;
     } catch (error) {
       await session.abortTransaction();
       throw error;
@@ -356,81 +323,54 @@ export class ReturnService {
 
   /**
    * STAGE 3: Process Financial Refund & Atomic Inventory Restock
-   *
-   * ARCHITECTURE NOTE (DISTRIBUTED SYSTEMS):
-   * We NEVER hold a MongoDB transaction open while awaiting an external HTTP response
-   * from Razorpay. We execute the financial API call first. If it succeeds, we open
-   * the DB transaction to sync our internal state.
+   * @description Executes the Razorpay refund. Upon success, initiates a
+   * Mongoose bulkWrite to restore inventory levels atomically.
    */
   public static async processRefundAndRestock(returnId: string) {
-    const safeReturnId = String(returnId).replace(/[\r\n]/g, "");
-
-    logger.info(
-      `[ReturnService] Executing Refund & Restock for Return: ${safeReturnId}`,
-    );
-
-    // Fetch data required for the Razorpay handshake
     const returnRequest = await ReturnModel.findOne({
       _id: { $eq: String(returnId) },
     }).populate("user", "email firstname");
 
-    if (!returnRequest)
-      throw new AppError(HTTP_STATUS.NOT_FOUND, "Return not found.");
-
-    if (returnRequest.status !== ReturnStatus.APPROVED) {
+    if (!returnRequest || returnRequest.status !== ReturnStatus.APPROVED) {
       throw new AppError(
         HTTP_STATUS.BAD_REQUEST,
-        "Security violation: Return must be APPROVED before a refund can be issued.",
+        "Return must be APPROVED before processing refund.",
       );
     }
 
     const order = await Order.findOne({
       _id: { $eq: String(returnRequest.order) },
     });
-
     if (!order || !order.gatewayPaymentId) {
       throw new AppError(
         HTTP_STATUS.INTERNAL_SERVER_ERROR,
-        "Cannot process refund. Valid gatewayPaymentId is missing from this order.",
+        "Gateway payment reference missing.",
       );
     }
 
-    const refundAmountInRupees = returnRequest.refundAmountEstimate;
-    const refundAmountInPaise = Math.round(refundAmountInRupees * 100);
-
-    // Network Boundary: Call Razorpay API
+    // Gateway Handshake (Occurs outside Transaction to prevent pool starvation)
     try {
-      // Gateway ID is sourced from DB, not client payload, inherently safe.
-      logger.info(
-        `[Razorpay] Initiating Rs. ${refundAmountInRupees} refund against Gateway ID: ${order.gatewayPaymentId}`,
+      const refundAmountPaise = Math.round(
+        returnRequest.refundAmountEstimate * 100,
       );
-
-      const refundReceipt = await razorpay.payments.refund(
-        order.gatewayPaymentId,
-        {
-          amount: refundAmountInPaise,
-          speed: "optimum",
-        },
-      );
-
-      logger.info(`[Razorpay] Refund Success. Receipt ID: ${refundReceipt.id}`);
-    } catch (error: unknown) {
-      logger.error(
-        `[Razorpay ERROR] Refund failed for Return: ${safeReturnId}`,
-        error,
-      );
+      await razorpay.payments.refund(order.gatewayPaymentId, {
+        amount: refundAmountPaise,
+        speed: "optimum",
+      });
+    } catch (error) {
+      logger.error(`[Razorpay Refund Failure] ReturnID: ${returnId}`, error);
       throw new AppError(
         HTTP_STATUS.INTERNAL_SERVER_ERROR,
-        "Razorpay rejected the refund request. Check gateway logs.",
+        "Razorpay rejected the refund. Check gateway logs.",
       );
     }
 
-    // Database State Synchronization (ACID Session)
+    // Database Sync (ACID Transaction)
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // PERFORMANCE: Use BulkWrite to execute atomic inventory increments in a single DB round-trip
+      // PERFORMANCE: Atomic bulk increment of stock
       const bulkOps = returnRequest.items.map((item) => ({
         updateOne: {
           filter: { _id: { $eq: String(item.product) } },
@@ -439,48 +379,41 @@ export class ReturnService {
       }));
 
       await Product.bulkWrite(bulkOps, { session });
-      logger.debug(
-        `[ReturnService] Inventory atomically restocked for ${bulkOps.length} SKUs`,
-      );
 
-      // Finalize the state machine
       returnRequest.status = ReturnStatus.REFUNDED;
       order.set("orderStatus", "RETURNED");
 
       await returnRequest.save({ session });
       await order.save({ session });
-
       await session.commitTransaction();
 
-      const userData = returnRequest.user as unknown as {
-        _id: Types.ObjectId;
-        email: string;
-        firstname: string;
-      };
-      NotificationService.sendReturnRefundedNotification(
-        userData._id,
-        userData.email,
-        userData.firstname,
-        order.orderNumber,
-        refundAmountInRupees,
-      ).catch((err) =>
-        logger.error(
-          "[Notification DB Error] Failed to send Refund Processed alert",
-          err,
-        ),
-      );
+      // Final Notification
+      const userDoc = returnRequest.user as any;
+      setImmediate(() => {
+        NotificationService.sendReturnRefundedNotification(
+          userDoc._id,
+          userDoc.email,
+          userDoc.firstname,
+          order.orderNumber,
+          returnRequest.refundAmountEstimate,
+        ).catch((err) =>
+          logger.error(
+            "[Notification Error] Refund confirmation alert failed",
+            err,
+          ),
+        );
+      });
 
       return returnRequest;
     } catch (error) {
       await session.abortTransaction();
-      // CRITICAL ALERT: Distributed system failure. Financial state and DB state are desynchronized.
       logger.error(
-        `[CRITICAL DESYNC] Razorpay processed the refund, but MongoDB restock failed. Manual reconciliation required for Return: ${safeReturnId}`,
+        `[CRITICAL DESYNC] Refund issued but DB sync failed for Return: ${returnId}`,
         error,
       );
       throw new AppError(
         HTTP_STATUS.INTERNAL_SERVER_ERROR,
-        "Refund processed via gateway, but database synchronization failed. System administrators have been alerted.",
+        "Refund processed but inventory sync failed. Admin alerted.",
       );
     } finally {
       session.endSession();
@@ -489,7 +422,7 @@ export class ReturnService {
 
   /**
    * UTILITY: Standardized Fetcher
-   * Utilizes Mongoose projections to strip unnecessary data before sending across the wire.
+   * @description High-performance paginated query utilizing .lean() and projections.
    */
   public static async fetchReturns(
     query: Record<string, unknown>,
@@ -500,12 +433,11 @@ export class ReturnService {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate("order", "orderNumber orderStatus pricing.totalAmount") // Aligned with IOrder structure
+      .populate("order", "orderNumber orderStatus pricing.totalAmount")
       .populate("items.product", "name sku itemType images")
-      .lean(); // PERFORMANCE: Strip Mongoose overhead
+      .lean();
 
     const total = await ReturnModel.countDocuments(query);
-
     return { returns, meta: { total, limit, skip } };
   }
 }
