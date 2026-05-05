@@ -60,6 +60,12 @@ const OrderSchema = new Schema<IOrder>(
       subTotal: { type: Number, required: true },
       shippingCost: { type: Number, required: true, default: 0 },
       taxAmount: { type: Number, required: true, default: 0 },
+      discountAmount: { type: Number, required: true, default: 0 },
+      appliedCoupon: {
+        type: Schema.Types.ObjectId,
+        ref: "Coupon",
+        default: null,
+      },
       totalAmount: { type: Number, required: true },
     },
 
