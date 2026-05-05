@@ -6,7 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-*(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
+*(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
+
+### Added
+- **Logistics & Tracking Engine (Epic 1):** Integrated Shiprocket 3PL aggregator for automated fulfillment.
+- **Shiprocket Auth Manager:** Built a Redis-backed Singleton (`src/config/shiprocket.ts`) to manage rolling 10-day JWT authentication tokens with an 8-day autonomous refresh cycle.
+- **Dispatch Orchestrator:** Implemented `ShiprocketService.dispatchOrder` to map MongoDB documents to Shiprocket schemas, generate Airway Bills (AWB), and schedule physical courier pickups.
+- **Webhook State Machine:** Implemented `ShiprocketService.processWebhook` to autonomously translate courier GPS tracking events into internal MongoDB state changes.
+- **Order Delivered Notifications:** Added the `ORDER_DELIVERED` BullMQ job type, HTML template, and trigger method to the Notification Engine.
+- **Admin Endpoints:** Exposed `POST /api/v1/orders/admin/:id/dispatch` for one-click fulfillment.
+- **Public Webhooks:** Exposed `POST /api/v1/orders/shiprocket-webhook` for server-to-server tracking pings.
+- **Documentation:** Authored the `order-runbook.md` Thunder Client guide and heavily expanded `order-module.md` to cover physical logistics architecture.
+
+### Changed
+- **Order Model:** Expanded `order.model.ts` and `order.interface.ts` to include `trackingNumber`, `courierName`, `shiprocketOrderId`, and `shiprocketShipmentId`.
+- **Order Status Types:** Synchronized `OrderStatus` union type to formally accept `RETURN_REQUESTED` and `RETURNED`.
+- **Environment Schema:** Updated `env.ts` to enforce `SHIPROCKET_EMAIL`, `SHIPROCKET_PASSWORD`, and `SHIPROCKET_WEBHOOK_SECRET` via strict Zod validation.
+
+### Security
+- **Taint-Severing Boundary:** The Dispatch orchestrator manually constructs external JSON payloads, mathematically preventing internal MongoDB document properties from leaking to the Shiprocket network.
+- **Idempotency Firewalls:** The dispatch service strictly blocks double-execution to prevent accidental double-billing of the corporate wallet.
+- **Webhook Authentication:** The Shiprocket webhook route enforces a strict `x-api-key` header verification to prevent malicious delivery-state manipulation.
 
 ### Added
 - **Wishlist Module:** Deployed the complete deferred-purchase intent engine (`src/modules/wishlists`).

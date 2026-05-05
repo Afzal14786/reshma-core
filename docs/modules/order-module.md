@@ -84,6 +84,29 @@ The module is integrated with the **Notification Engine Facade** for real-time c
 *   **Taint Chain Severing:** The service layer manually maps `shippingAddress` fields from `req.body` to prevent Object Injection or Mass Assignment[cite: 2].
 *   **`zod.strict()`**: Acts as a physical firewall, dropping NoSQL injection or Prototype Pollution attempts at the boundary[cite: 2].
 
+## 7. Logistics & Fulfillment Engine (Shiprocket)
+
+To bridge the digital transaction with the physical delivery of goods, the Order Module integrates with **Shiprocket**, a Third-Party Logistics (3PL) aggregator. This entirely automates the generation of Airway Bills (AWBs), courier allocation, and package tracking.
+
+### A. The Rolling Auth Manager
+Shiprocket relies on a JWT that expires every 10 days. To prevent the Reshma-Core server from executing an expensive login HTTP request on every single order dispatch, we implemented a **Rolling Auth Manager** (`src/config/shiprocket.ts`).
+* **Caching:** The token is requested once and cached in Redis with an 8-day TTL.
+* **Autonomous Refresh:** On the 8th day, the Redis key expires, gracefully forcing the next dispatch request to seamlessly negotiate a fresh 10-day token.
+
+### B. The Dispatch Orchestrator (`shiprocket.service.ts`)
+The `dispatchOrder` service is a distributed orchestrator. It bridges our ACID-compliant database with the highly volatile Shiprocket API.
+* **Idempotency Firewall:** The service actively checks if `orderStatus === 'SHIPPED'` or if a `trackingNumber` already exists. This physically guarantees an Admin cannot double-click the "Dispatch" button, which would generate two tracking numbers and double-bill the company wallet.
+* **Taint-Severing Boundary:** We do not blindly pass the Mongoose `Order` document to Shiprocket. The service explicitly maps only the required fields into Shiprocket's strict JSON schema, preventing internal data leaks.
+* **Network-First Updates:** MongoDB is *only* updated with the AWB and Shipment ID *after* the entire 3-step Shiprocket handshake (Create -> Generate Label -> Schedule Pickup) resolves successfully.
+
+### C. The Webhook Automation Loop
+Once the courier picks up the physical package, the system relies on server-to-server Webhooks to track its journey.
+1. **The Ping:** When a delivery agent marks a package as "Delivered" on their handheld device, Shiprocket fires a `POST` request to our `/api/v1/orders/shiprocket-webhook` endpoint.
+2. **Cryptographic Validation:** The endpoint is completely unauthenticated (no JWTs). Instead, it relies on a static `x-api-key` header mapped to `SHIPROCKET_WEBHOOK_SECRET` to verify the payload's origin.
+3. **State Machine Sync:** The service translates Shiprocket's micro-statuses into our macro database enums (e.g., converting "RTO ACKNOWLEDGED" to `RETURNED`).
+4. **Asynchronous Notification:** Upon a successful transition to `DELIVERED`, the system triggers the `NotificationService` to queue a final "Order Delivered" email to the customer via BullMQ.  
+
+
 ---  
 
 **Standard Documentation | Reshma-Core Architecture**
