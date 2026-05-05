@@ -2,13 +2,14 @@ import mongoose from "mongoose";
 import { Order } from "./order.model";
 import { Cart } from "../cart/cart.model";
 import { Product } from "../products/models/base-product.model";
-import { User } from "../users/user.model"; // Added for Notification data
-import { NotificationService } from "../notifications/notification.service"; // Added Notification Engine
+import { User } from "../users/user.model";
+import { NotificationService } from "../notifications/notification.service";
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { CheckoutInput } from "./dtos/order.dto";
 import razorpay from "@config/razorpay";
 import logger from "@config/logger";
+import { CouponModel } from "@modules/coupons/coupon.model";
 import {
   IOrderItem,
   IOrder,
@@ -17,6 +18,14 @@ import {
 import { verifyRazorpaySignature, verifyWebhookEvent } from "./payment.utils";
 
 export class OrderService {
+  /**
+   * SECURITY UTILITY: CodeQL CWE-117 Neutralizer
+   * @description Cleans strings of control characters before logging.
+   */
+  private static safeLog(message: string): string {
+    return message.replace(/[\r\n]/g, "");
+  }
+
   /**
    * Atomic Checkout Engine
    * * ARCHITECTURE NOTE:
@@ -31,11 +40,12 @@ export class OrderService {
     session.startTransaction();
 
     let savedOrder: IOrder;
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
 
     try {
       // SECURITY: Strict CodeQL $eq wrapping to prevent query injection
       const cart = await Cart.findOne({
-        user: { $eq: String(userId) },
+        user: { $eq: safeUserId },
       }).session(session);
 
       if (!cart || cart.items.length === 0) {
@@ -48,7 +58,6 @@ export class OrderService {
       // Atomic Stock Reservation Loop
       for (const item of cart.items) {
         // FIREWALL: Find and decrement stock in the exact same atomic query.
-        // This eliminates Race Conditions (overselling) during high-traffic flash sales.
         const product = await Product.findOneAndUpdate(
           {
             _id: { $eq: String(item.product) },
@@ -92,9 +101,40 @@ export class OrderService {
         historicalItems.push(historyItem);
       }
 
+      if (cart.appliedCoupon) {
+        const couponCheck = await CouponModel.findById(cart.appliedCoupon)
+          .session(session)
+          .lean();
+
+        if (
+          !couponCheck ||
+          !couponCheck.isActive ||
+          new Date() > couponCheck.expiryDate ||
+          couponCheck.usedCount >= couponCheck.usageLimit
+        ) {
+          throw new AppError(
+            HTTP_STATUS.CONFLICT,
+            "The promotional code applied to your cart has expired or reached its usage limit just now. Please refresh your cart.",
+          );
+        }
+      }
+
+      const discountAmount = cart.discountAmount || 0;
+      const appliedCoupon = cart.appliedCoupon || null;
+
       const shippingCost = subTotal > 2000 ? 0 : 50;
       const taxAmount = subTotal * 0.18;
-      const totalAmount = subTotal + shippingCost + taxAmount;
+
+      // Calculate final total including the discount
+      const totalAmount = subTotal + shippingCost + taxAmount - discountAmount;
+
+      // Failsafe: Prevent negative totals
+      if (totalAmount < 0) {
+        throw new AppError(
+          HTTP_STATUS.BAD_REQUEST,
+          "Total amount cannot be negative.",
+        );
+      }
 
       // SECURITY FIX: Explicit Object Mapping to sever Taint Analysis chain.
       const safeShippingAddress = {
@@ -108,10 +148,17 @@ export class OrderService {
       };
 
       const orderPayload: Partial<IOrder> = {
-        user: new mongoose.Types.ObjectId(userId),
+        user: new mongoose.Types.ObjectId(safeUserId),
         items: historicalItems,
         shippingAddress: safeShippingAddress,
-        pricing: { subTotal, shippingCost, taxAmount, totalAmount },
+        pricing: {
+          subTotal,
+          shippingCost,
+          taxAmount,
+          discountAmount,
+          appliedCoupon,
+          totalAmount,
+        },
         paymentMethod: payload.paymentMethod === "COD" ? "COD" : "RAZORPAY",
         paymentStatus: "PENDING",
         orderStatus: "PENDING",
@@ -120,12 +167,19 @@ export class OrderService {
       const orderDocuments = await Order.create([orderPayload], { session });
       savedOrder = orderDocuments[0] as IOrder;
 
+      if (!savedOrder) {
+        throw new AppError(
+          HTTP_STATUS.INTERNAL_SERVER_ERROR,
+          "Order creation failed.",
+        );
+      }
+
       if (orderPayload.paymentMethod === "RAZORPAY") {
         const rzpOrder = await razorpay.orders.create({
           amount: Math.round(totalAmount * 100),
           currency: "INR",
           receipt: savedOrder.orderNumber,
-          notes: { userId: String(userId) },
+          notes: { userId: safeUserId },
         });
 
         savedOrder.gatewayOrderId = rzpOrder.id;
@@ -134,29 +188,54 @@ export class OrderService {
         // COD Orders proceed directly to processing
         savedOrder.orderStatus = "PROCESSING";
         await savedOrder.save({ session });
+
+        // ---> ATOMIC SCARCITY: Increment usage immediately for COD orders
+        if (appliedCoupon) {
+          await CouponModel.findOneAndUpdate(
+            { _id: { $eq: appliedCoupon } },
+            { $inc: { usedCount: 1 } },
+            { session },
+          );
+        }
       }
 
+      // Empty the cart and reset promotional properties completely
       await Cart.findOneAndUpdate(
-        { user: { $eq: String(userId) } },
-        { $set: { items: [] } },
+        { user: { $eq: safeUserId } },
+        {
+          $set: {
+            items: [],
+            appliedCoupon: null,
+            discountAmount: 0,
+            totalAfterDiscount: 0,
+          },
+        },
         { session },
       );
 
       // COMMIT: Database changes locked in
       await session.commitTransaction();
-      logger.info(`Checkout successful`, { orderId: savedOrder._id, userId });
+      logger.info(
+        this.safeLog(
+          `Checkout successful for order ${savedOrder._id} and user ${safeUserId}`,
+        ),
+      );
     } catch (error) {
       await session.abortTransaction();
+      logger.error(
+        this.safeLog(
+          `[OrderService.initializeCheckout] Transaction Aborted: ${error instanceof Error ? error.message : "Unknown"}`,
+        ),
+      );
       throw error;
     } finally {
-      session.endSession();
+      await session.endSession();
     }
 
     // --- ASYNC NOTIFICATION ENGINE TRIGGER ---
-    // Safely executed outside the transaction to prevent blocking
     if (savedOrder.paymentMethod === "COD") {
       try {
-        const userDoc = await User.findOne({ _id: { $eq: String(userId) } })
+        const userDoc = await User.findOne({ _id: { $eq: safeUserId } })
           .select("firstname email")
           .lean();
 
@@ -171,8 +250,9 @@ export class OrderService {
         }
       } catch (notifyErr) {
         logger.error(
-          `Failed to dispatch COD confirmation for ${savedOrder.orderNumber}`,
-          notifyErr,
+          this.safeLog(
+            `Failed to dispatch COD confirmation for ${savedOrder.orderNumber}`,
+          ),
         );
       }
     }
@@ -189,9 +269,12 @@ export class OrderService {
     gatewayPaymentId: string,
     gatewaySignature: string,
   ) {
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+    const safeGatewayOrderId = String(gatewayOrderId).replace(/[\r\n]/g, "");
+
     const order = await Order.findOne({
-      gatewayOrderId: { $eq: String(gatewayOrderId) },
-      user: { $eq: String(userId) },
+      gatewayOrderId: { $eq: safeGatewayOrderId },
+      user: { $eq: safeUserId },
     });
 
     if (!order) throw new AppError(HTTP_STATUS.NOT_FOUND, "Order not found.");
@@ -205,7 +288,9 @@ export class OrderService {
     );
 
     if (!isValid) {
-      logger.error(`Cryptographic signature mismatch`, { orderId: order._id });
+      logger.error(
+        this.safeLog(`Cryptographic signature mismatch for order ${order._id}`),
+      );
       throw new AppError(
         HTTP_STATUS.BAD_REQUEST,
         "Payment verification failed.",
@@ -218,13 +303,13 @@ export class OrderService {
     order.gatewaySignature = gatewaySignature;
 
     await order.save();
-    logger.info(`Order Paid via Frontend Handshake`, {
-      orderNumber: order.orderNumber,
-    });
+    logger.info(
+      this.safeLog(`Order Paid via Frontend Handshake: ${order.orderNumber}`),
+    );
 
     // --- ASYNC NOTIFICATION ENGINE TRIGGER ---
     try {
-      const userDoc = await User.findOne({ _id: { $eq: String(userId) } })
+      const userDoc = await User.findOne({ _id: { $eq: safeUserId } })
         .select("firstname email")
         .lean();
 
@@ -239,8 +324,9 @@ export class OrderService {
       }
     } catch (notifyErr) {
       logger.error(
-        `Failed to dispatch Razorpay confirmation for ${order.orderNumber}`,
-        notifyErr,
+        this.safeLog(
+          `Failed to dispatch Razorpay confirmation for ${order.orderNumber}`,
+        ),
       );
     }
 
@@ -257,7 +343,9 @@ export class OrderService {
   ) {
     const isValid = verifyWebhookEvent(rawBody, signature);
     if (!isValid) {
-      logger.error(`[Webhook] Critical: Invalid Razorpay Signature Detected`);
+      logger.error(
+        this.safeLog(`[Webhook] Critical: Invalid Razorpay Signature Detected`),
+      );
       throw new AppError(HTTP_STATUS.BAD_REQUEST, "Invalid webhook signature");
     }
 
@@ -275,7 +363,9 @@ export class OrderService {
 
       if (order.paymentStatus === "PAID") {
         logger.info(
-          `[Webhook] Order ${order.orderNumber} already PAID. Ignoring idempotent ping.`,
+          this.safeLog(
+            `[Webhook] Order ${order.orderNumber} already PAID. Ignoring idempotent ping.`,
+          ),
         );
         return;
       }
@@ -285,8 +375,31 @@ export class OrderService {
       order.gatewayPaymentId = paymentEntity.id;
       await order.save();
 
+      // ---> ATOMIC SCARCITY: Increment usage when Razorpay confirms money is in the bank
+      if (order.pricing && order.pricing.appliedCoupon) {
+        try {
+          await CouponModel.findOneAndUpdate(
+            { _id: { $eq: order.pricing.appliedCoupon } },
+            { $inc: { usedCount: 1 } },
+          );
+          logger.info(
+            this.safeLog(
+              `[Webhook] Incremented usage count for coupon on order ${order.orderNumber}`,
+            ),
+          );
+        } catch (couponErr) {
+          logger.error(
+            this.safeLog(
+              `[Webhook] Failed to increment coupon usage for order ${order.orderNumber}`,
+            ),
+          );
+        }
+      }
+
       logger.info(
-        `[Webhook] Order ${order.orderNumber} marked as PAID via background ping.`,
+        this.safeLog(
+          `[Webhook] Order ${order.orderNumber} marked as PAID via background ping.`,
+        ),
       );
 
       // --- ASYNC NOTIFICATION ENGINE TRIGGER ---
@@ -306,8 +419,9 @@ export class OrderService {
         }
       } catch (notifyErr) {
         logger.error(
-          `Failed to dispatch Webhook confirmation for ${order.orderNumber}`,
-          notifyErr,
+          this.safeLog(
+            `Failed to dispatch Webhook confirmation for ${order.orderNumber}`,
+          ),
         );
       }
     }
@@ -327,7 +441,9 @@ export class OrderService {
     if (abandonedOrders.length === 0) return;
 
     logger.info(
-      `[Cron] Found ${abandonedOrders.length} abandoned orders. Beginning inventory restoration.`,
+      this.safeLog(
+        `[Cron] Found ${abandonedOrders.length} abandoned orders. Beginning inventory restoration.`,
+      ),
     );
 
     for (const order of abandonedOrders) {
@@ -348,17 +464,18 @@ export class OrderService {
         await order.save({ session });
         await session.commitTransaction();
         logger.info(
-          `[Cron] Restored inventory for abandoned order: ${order.orderNumber}`,
+          this.safeLog(
+            `[Cron] Restored inventory for abandoned order: ${order.orderNumber}`,
+          ),
         );
       } catch (error) {
         await session.abortTransaction();
         logger.error(
-          `[Cron] Failed to restore order ${order.orderNumber}:`,
-          error,
+          this.safeLog(`[Cron] Failed to restore order ${order.orderNumber}`),
         );
-        continue; // Skip notification on failure
+        continue;
       } finally {
-        session.endSession();
+        await session.endSession();
       }
 
       // Executed outside the transaction, and only if the commit succeeded
@@ -378,8 +495,9 @@ export class OrderService {
         }
       } catch (notifyErr) {
         logger.error(
-          `Failed to dispatch cancellation notification for ${order.orderNumber}`,
-          notifyErr,
+          this.safeLog(
+            `Failed to dispatch cancellation notification for ${order.orderNumber}`,
+          ),
         );
       }
     }
