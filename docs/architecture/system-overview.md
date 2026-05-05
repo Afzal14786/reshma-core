@@ -45,12 +45,20 @@ Deep dives into the specific business logic, DTOs, and services for each core fe
 * **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, State Machine)*
 * **[Return Module](../modules/return-module.md)** *(RMA State Machine, Razorpay Refunds, Atomic Restocks)*  
 * **[Interaction Module](../modules/interaction-module.md)** *(Threaded Comments, Async Aggregation, Verified Purchases)*
+* **[Coupon Module](../modules/coupon-module.md)** *(Temporal Firewalls, Cart Auto-Recalculation, TOCTOU Defense)*
+* **[Wishlist Module](../modules/wishlist-module.md)** *(Lazy Initialization, Atomic Arrays, Move-to-Cart Pipeline)*
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.
-* **[API Design Standards](../api/api-standards.md)** *(Two-Token frontend integration & payload shapes)*[cite: 2]
-* **[Global Error Codes](../api/error-codes.md)** *(Standardized HTTP responses & error handling)*[cite: 2]
-* **[Authentication Testing Runbook](../testing/auth-runbook.md)** *(Manual integration testing guide)*[cite: 2]
+
+* **[API Design Standards](../api/api-standards.md)** *(Frontend integration & payload shapes)*
+* **[Global Error Codes](../api/error-codes.md)** *(Standardized HTTP responses & error handling)*
+* **[Auth Runbook](../api/thunder-tests/auth-runbook.md)** *(Manual integration testing guide)*
+* **[Catalog Runbook](../api/thunder-tests/product-runbook.md)** *(Polymorphic creation and image uploads)*
+* **[Coupon Runbook](../api/thunder-tests/coupon-runbook.md)** *(Discount logic and cart hooks)*
+* **[Interaction Runbook](../api/thunder-tests/interaction-runbook.md)** *(Reviews, threaded comments, and voting)*
+* **[Return Runbook](../api/thunder-tests/return-runbook.md)** *(RMA arbitration and refund processing)*
+* **[Wishlist Runbook](../api/thunder-tests/wishlist-runbook.md)** *(Lazy initialization and cart transfers)*
 
 ### Setup & Deployment
 Runbooks for getting the server running locally or deploying to production.
