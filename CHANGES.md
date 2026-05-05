@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Features & Architecture
+* **Typesense RAM Search Integration (Dual-Database Architecture):**
+  * Deployed a C++ based, sub-50ms in-memory search engine to bypass heavy MongoDB aggregations.
+  * Created `TypesenseManager` singleton (`src/config/typesense.ts`) with strict RAM schema initialization.
+  * Implemented fail-fast boot sequence in `server.ts` to guarantee search infrastructure is available before accepting HTTP traffic.
+* **Eventual Consistency Pipeline (`ProductService`):**
+  * Surgically injected non-blocking network hooks (`syncToSearchEngine`, `removeFromSearchEngine`).
+  * Mongoose CRUD operations now autonomously sync BSON documents to the RAM cluster.
+  * Includes resilient error catching so Typesense network drops do not crash primary ACID transactions.
+* **Faceted Search API (`SearchModule`):**
+  * Built `executeSearch` using strict generic typings (`ITypesenseProductDoc`) to satisfy `exactOptionalPropertyTypes` compiler rules.
+  * Implemented Typo-Tolerance (`num_typos: 2`) and dynamic UI faceting.
+  * Protected via `standardLimiter` and `SearchQuerySchema` Zod payload firewall.
+
+### Bug Fixes & CodeQL Hardening
+* **Returns Module (`ReturnService`):**
+  * Fixed strict Type Mismatches and Mongoose `.create()` overload crashes.
+  * Enforced explicit enum casting for `ReturnReason` to align Zod inferences with Mongoose definitions.
+  * Resolved the TS `never` type error by safely casting the created document array, restoring `_id` accessibility for telemetry.
+* **Product Update Typing:**
+  * Eradicated the forbidden `any` keyword from `product.service.ts`.
+  * Removed redundant complex type casting in `.lean()` execution, relying natively on the `IBaseProduct` interface.
+
+### Documentation
+* Created `docs/modules/search-module.md` outlining the eventual consistency strategy.
+* Created `docs/api/thunder-tests/search-runbook.md` for QA testing.
+* Updated `system-overview.md`, `environment-variables.md`, and `api-standards.md` to reflect the new infrastructure.
+
 ### Added
 - **Logistics & Tracking Engine (Epic 1):** Integrated Shiprocket 3PL aggregator for automated fulfillment.
 - **Shiprocket Auth Manager:** Built a Redis-backed Singleton (`src/config/shiprocket.ts`) to manage rolling 10-day JWT authentication tokens with an 8-day autonomous refresh cycle.
