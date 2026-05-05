@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
 ### Added
+- **Wishlist Module:** Deployed the complete deferred-purchase intent engine (`src/modules/wishlists`).
+- **Wishlist Domain Models:** Implemented `Wishlist` and `WishlistItem` Mongoose schemas with strict one-to-one User mapping and `_id: false` sub-document optimization to prevent BSON bloat.
+- **Wishlist Service Engine:** Engineered a highly read-optimized service layer featuring:
+  - **Lazy Initialization:** Wishlist database documents are only generated upon the first item addition, preventing blank-document database bloat.
+  - **Self-Healing Reads:** The `getWishlist` pipeline automatically detects inactive or deleted products and executes an atomic `$pull` to silently purge ghost items from the array.
+  - **Cross-Module Handoff:** Built the `moveToCart` method, which securely transfers payloads to the `CartService` ACID transaction before surgically removing the item from the wishlist.
+- **Wishlist Zod Firewalls:** Added `AddWishlistItemSchema`, `RemoveWishlistItemSchema`, and `MoveToCartSchema` with `.strict()` boundaries and ReDoS-safe ObjectId regex validation.
+- **Wishlist REST API:** Exposed 5 protected endpoints (`GET /`, `POST /add`, `POST /move-to-cart/:productId`, `DELETE /item/:productId`, `DELETE /clear`) secured by the global rate limiter and JWT middleware.
+- **Documentation:** Authored `wishlist-module.md` detailing concurrency mitigations, updated `api-standards.md` with new endpoints, and added the `wishlist-runbook.md` Thunder Client testing guide.
+
+### Changed
+- **Global Router:** Mounted the `WishlistRoutes` to the `/api/v1/wishlists` namespace in `src/routes/index.ts`.
+- **System Overview:** Updated the master documentation index (`docs/architecture/system-overview.md`) to include the new Wishlist and Coupon modules.
+- **API Standards:** Updated the Master Endpoint Directory to reflect the completed state of the Returns module (removing the "Phase 8" tag) and appended the missing Notification endpoints.
+
+### Security
+- **CWE-400 (Memory Exhaustion) Mitigation:** Enforced a hard 100-item ceiling on the wishlist array at the Service layer to prevent malicious database bloat.
+- **Race Condition Prevention:** Completely bypassed Mongoose `.save()` for array mutations, utilizing MongoDB atomic operators (`$push` and `$pull`) with query-level idempotency checks to prevent "Lost Update" anomalies.
+
+### Added
 - **Coupon Module:** Implemented centralized `CouponService` for executing promotional business logic, including temporal, scarcity, margin, and acquisition firewalls.
 - **Public Discovery API:** Added `GET /api/v1/coupons/available` utilizing MongoDB `$expr` to dynamically display valid coupons based on active cart subtotal.
 - **Cart Promotional Hooks:** Added `POST /cart/coupon/apply` and `DELETE /cart/coupon/remove` to manage active cart promotions.

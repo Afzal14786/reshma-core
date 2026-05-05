@@ -145,9 +145,12 @@ The API strictly adheres to the following HTTP status codes mapping:
 * `GET /orders` - *(Admin)* View all incoming orders
 * `PATCH /orders/:id/status` - *(Admin)* Update order shipping status `PATCH /orders/:id/status` - *(Admin)* Update order shipping status
 
-**6. Returns Module (/returns) - Upcoming Phase 8**  `POST /returns/:orderId` - Submit return request (Requires Cloudinary image proof for Fragile items)  
-
-* `GET /returns/pending` - *(Admin)* View returns awaiting approval 
+**6. Returns Module (/returns)**
+* `POST /returns/:orderId/initiate` - Submit return request (Requires Cloudinary image proof for Fragile items).
+* `GET /returns/me` - Fetch the authenticated user's return history.
+* `GET /returns/admin` - *(Admin)* View the global returns arbitration queue.
+* `PATCH /returns/admin/:returnId/arbitrate` - *(Admin)* Approve or Reject a return request.
+* `POST /returns/admin/:returnId/process` - *(Admin)* Execute Razorpay refund and atomically restock inventory.  
 
 **7. Interactions Module (/interactions)**  
 
@@ -159,7 +162,18 @@ The API strictly adheres to the following HTTP status codes mapping:
 * `GET /coupons/available` - *(Public)* Dynamically fetch active coupons based on `?cartValue=X`.
 * `POST /coupons` - *(Admin)* Generate a new promotional code.
 * `PATCH /coupons/:id` - *(Admin)* Update coupon limits or toggle kill-switch.
-* `GET /coupons` - *(Admin)* Paginated and filtered fetching of system promotions.
+* `GET /coupons` - *(Admin)* Paginated and filtered fetching of system promotions. 
+
+**9. Wishlist Module (`/wishlists`)**
+* `GET /wishlists` - Fetch the user's populated wishlist (Includes self-healing ghost item removal).
+* `POST /wishlists/add` - Add a product to the wishlist (Enforces 100-item limit).
+* `POST /wishlists/move-to-cart/:productId` - Cross-module transfer into the active cart ACID transaction.
+* `DELETE /wishlists/item/:productId` - Remove a specific product.
+* `DELETE /wishlists/clear` - Empty the entire wishlist array.
+
+**10. Notifications Module (`/notifications`)**
+* `GET /notifications` - Fetch paginated, unread In-App alerts for the user's dashboard.
+* `PATCH /notifications/:notificationId/read` - Mark a specific alert as read (Protected by IDOR ownership checks).
 
 --- 
 
