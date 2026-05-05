@@ -7,7 +7,12 @@ import { Order } from "@modules/orders/order.model";
 import { Product } from "@modules/products/models/base-product.model";
 import { NotificationService } from "../notifications/notification.service";
 import { ReturnModel } from "./return.model";
-import { ReturnStatus } from "./interfaces/return.interface";
+import {
+  ReturnStatus,
+  IReturn,
+  IReturnItem,
+  ReturnReason,
+} from "./interfaces/return.interface";
 
 import { InitiateReturnInput, ArbitrateReturnInput } from "./dtos/return.dto";
 import { IOrderItem } from "@modules/orders/interfaces/order.interface";
@@ -143,21 +148,18 @@ export class ReturnService {
         );
       }
 
-      const formattedItems = payload.items.map((item) => {
-        const mappedItem: {
-          product: Types.ObjectId;
-          quantity: number;
-          reason: string;
-          customerNote?: string;
-        } = {
+      const formattedItems: IReturnItem[] = payload.items.map((item) => {
+        const mappedItem: IReturnItem = {
           product: new Types.ObjectId(item.productId),
           quantity: item.quantity,
-          reason: item.reason,
+          reason: item.reason as ReturnReason, // Explicit cast to Enum
         };
 
-        if (item.customerNote !== undefined && item.customerNote !== null) {
+        // Handle exactOptionalPropertyTypes compliance
+        if (item.customerNote) {
           mappedItem.customerNote = item.customerNote;
         }
+
         return mappedItem;
       });
 
@@ -168,15 +170,16 @@ export class ReturnService {
             user: new Types.ObjectId(userId),
             order: new Types.ObjectId(orderId),
             items: formattedItems,
-            proofOfDamageImages: payload.images,
+            proofOfDamageImages: payload.images ?? [],
             refundAmountEstimate: estimatedRefund,
+            status: ReturnStatus.PENDING_APPROVAL,
           },
         ],
         { session },
       );
 
       // Extract single document from result array
-      const createdReturn = returnDocs[0];
+      const createdReturn = returnDocs[0] as unknown as IReturn;
 
       if (!createdReturn) {
         throw new AppError(
