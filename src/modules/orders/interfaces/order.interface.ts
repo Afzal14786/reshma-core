@@ -6,7 +6,9 @@ export type OrderStatus =
   | "PROCESSING"
   | "SHIPPED"
   | "DELIVERED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "RETURN_REQUESTED" // Added for Returns RMA module
+  | "RETURNED"; // Added for Shiprocket RTO and Returns RMA module
 export type PaymentMethod = "RAZORPAY" | "COD";
 
 export interface IOrderShippingAddress {
@@ -61,6 +63,10 @@ export interface IOrder extends Document {
   trackingNumber?: string;
   courierName?: string;
 
+  // --- Shiprocket Identifiers ---
+  shiprocketOrderId?: string;
+  shiprocketShipmentId?: string;
+
   // Gateway Specific Identifiers (Nullable for COD)
   gatewayOrderId?: string; // e.g., Razorpay order_id
   gatewayPaymentId?: string; // e.g., Razorpay payment_id
@@ -83,4 +89,17 @@ export interface IRazorpayWebhookBody {
       };
     };
   };
+}
+
+/**
+ * Strict Typings for Shiprocket Webhook Events
+ * Contains only the fields required for our physical state machine.
+ */
+export interface IShiprocketWebhookPayload {
+  awb: string;
+  courier_name: string;
+  current_status: string;
+  current_status_id: number;
+  shipment_status: string;
+  channel_order_id: string; // This maps to our internal orderNumber
 }

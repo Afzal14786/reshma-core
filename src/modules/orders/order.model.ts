@@ -97,6 +97,11 @@ const OrderSchema = new Schema<IOrder>(
     trackingNumber: { type: String },
     courierName: { type: String },
 
+    // --- Shiprocket Identifiers ---
+    // Sparse allows them to be uniquely indexed later if needed, without crashing on nulls
+    shiprocketOrderId: { type: String, sparse: true },
+    shiprocketShipmentId: { type: String, sparse: true },
+
     // Sparse indexes allow multiple null/undefined values without throwing uniqueness errors.
     // Crucial for orders that are initialized but abandoned before Razorpay responds.
     gatewayOrderId: { type: String, sparse: true },

@@ -57,7 +57,30 @@ export const UpdateOrderStatusSchema = z.object({
     .strict(),
 });
 
+/**
+ * Logistics Dispatch Schema
+ * Strictly validates the physical dimensions of the shipping box.
+ * Dimensions are typically in centimeters (cm) and weight in kilograms (kg).
+ */
+export const DispatchOrderSchema = z.object({
+  params: z.object({
+    id: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "Invalid MongoDB Order ID format"),
+  }),
+  body: z
+    .object({
+      length: z.number().positive("Length must be greater than 0"),
+      breadth: z.number().positive("Breadth must be greater than 0"),
+      height: z.number().positive("Height must be greater than 0"),
+      weight: z.number().positive("Weight must be greater than 0"),
+    })
+    .strict(),
+});
+
 export type CheckoutInput = z.infer<typeof CheckoutSchema>["body"];
 export type UpdateOrderStatusInput = z.infer<
   typeof UpdateOrderStatusSchema
 >["body"];
+
+export type DispatchOrderInput = z.infer<typeof DispatchOrderSchema>["body"];
