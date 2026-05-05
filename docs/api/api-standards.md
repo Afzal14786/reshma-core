@@ -176,6 +176,10 @@ The API strictly adheres to the following HTTP status codes mapping:
 * `GET /notifications` - Fetch paginated, unread In-App alerts for the user's dashboard.
 * `PATCH /notifications/:notificationId/read` - Mark a specific alert as read (Protected by IDOR ownership checks).
 
+**11. Search Module (`/search`)**
+* `GET /search` - *(Public)* Execute sub-50ms typo-tolerant searches against the Typesense RAM cluster. Supports faceted filtering (`?itemType=BANGLE&minPrice=500`) and strict pagination.  
+
+
 --- 
 
 ## Endpoint Documentation Template  

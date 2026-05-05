@@ -76,6 +76,13 @@ Integrated for processing secure payments and handling automated refund logic.
 - **RAZORPAY_KEY_ID**: The public key used by the frontend to initialize the checkout widget.
 - **RAZORPAY_KEY_SECRET**: The private key used by the backend to verify signatures and process refunds.
 
+## 8. Search Engine (Typesense)
+Powers the sub-50ms product discovery, faceted filtering, and typo tolerance. Can be run locally via binary/Docker or remotely via Typesense Cloud.
+- **TYPESENSE_HOST**: The IP or Cloud URL (e.g., `127.0.0.1` or `xxx-1.a1.typesense.net`).
+- **TYPESENSE_PORT**: Usually `8108` for local, or `443` for Cloud.
+- **TYPESENSE_PROTOCOL**: `http` for local, `https` for Cloud.
+- **TYPESENSE_API_KEY**: The **ADMIN** API Key required to build schemas and synchronize data. Do NOT use the Search-Only key here.
+
 ---
 
 ## Security Best Practices

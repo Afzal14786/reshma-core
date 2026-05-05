@@ -1,6 +1,7 @@
 import app from "./app";
 import env from "@config/env";
 import logger from "@config/logger";
+import { typesenseManager } from "@config/typesense";
 import mongoose from "mongoose";
 import { redisClient, connectRedis } from "@config/redis";
 import { Server } from "http";
@@ -117,6 +118,9 @@ const bootstrap = async (): Promise<void> => {
 
     // Initialize Background Workers (Inventory Recovery)
     startCronJobs();
+
+    // Initialize Search Engine Schema
+    await typesenseManager.initializeSchema();
 
     // Connect to Redis
     await connectRedis();

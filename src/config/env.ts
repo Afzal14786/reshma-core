@@ -71,6 +71,12 @@ const envSchema = z.object({
   SHIPROCKET_WEBHOOK_SECRET: z
     .string()
     .min(1, "Shiprocket Webhook Secret is required"),
+
+  // --- Search Engine (Typesense) ---
+  TYPESENSE_HOST: z.string().min(1, "Typesense host is required"),
+  TYPESENSE_PORT: z.coerce.number().default(8108),
+  TYPESENSE_PROTOCOL: z.enum(["http", "https"]).default("http"),
+  TYPESENSE_API_KEY: z.string().min(1, "Typesense API key is required"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

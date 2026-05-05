@@ -48,6 +48,7 @@ Deep dives into the specific business logic, DTOs, and services for each core fe
 * **[Coupon Module](../modules/coupon-module.md)** *(Temporal Firewalls, Cart Auto-Recalculation, TOCTOU Defense)*
 * **[Wishlist Module](../modules/wishlist-module.md)** *(Lazy Initialization, Atomic Arrays, Move-to-Cart Pipeline)*
 * **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, Shiprocket 3PL Dispatch, Delivery Automation)*
+* **[Search Module](../modules/search-module.md)** *(Typesense RAM Cluster, Eventual Consistency, Faceted Discovery)*
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.
@@ -61,6 +62,7 @@ Rules for RESTful communication and Postman/Thunder Client testing protocols.
 * **[Return Runbook](../api/thunder-tests/return-runbook.md)** *(RMA arbitration and refund processing)*
 * **[Wishlist Runbook](../api/thunder-tests/wishlist-runbook.md)** *(Lazy initialization and cart transfers)*
 * **[Order & Logistics Runbook](../api/thunder-tests/order-runbook.md)** *(Checkout, Shiprocket Dispatch, and Webhook Simulation)*
+* **[Search Runbook](../api/thunder-tests/search-runbook.md)** *(Typo-tolerance, pagination, and filter simulations)*
 
 ### Setup & Deployment
 Runbooks for getting the server running locally or deploying to production.

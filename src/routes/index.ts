@@ -9,6 +9,7 @@ import { ReturnRoutes } from "@modules/returns/return.route";
 import { interactionRoutes } from "@modules/interactions/interaction.routes";
 import { CouponRoutes } from "@modules/coupons/coupon.routes";
 import { WishlistRoutes } from "@modules/wishlists/wishlist.routes";
+import { searchRoutes } from "@modules/search/search.routes";
 
 const router = Router();
 
@@ -36,6 +37,7 @@ const moduleRoutes = [
   { path: "/interactions", route: interactionRoutes },
   { path: "/coupons", route: CouponRoutes },
   { path: "/wishlists", route: WishlistRoutes },
+  { path: "/search", route: searchRoutes },
 ];
 
 // Iteratively mount all routes
