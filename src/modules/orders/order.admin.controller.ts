@@ -99,6 +99,18 @@ export class OrderAdminController {
    */
   public static async dispatchOrder(req: Request, res: Response) {
     const orderId = String(req.params.id);
+
+    // SECURITY FIREWALL (CodeQL Mitigation)
+    // CodeQL flags `req.body.length` as a Type Confusion vulnerability because an attacker 
+    // could pass a JSON Array where `.length` evaluates to an integer.
+    // While our Zod middleware intercepts this, this explicit guard provides static proof to CodeQL.
+    if (!req.body || Array.isArray(req.body) || typeof req.body !== "object") {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        "Invalid payload format. Expected a strict JSON object."
+      );
+    }
+
     const dimensions = req.body as DispatchOrderInput;
 
     // This service handles the 3-step Shiprocket handshake and atomic MongoDB updates
@@ -110,7 +122,7 @@ export class OrderAdminController {
     return new ApiResponse(
       res,
       HTTP_STATUS.OK,
-      `Order successfully dispatched via Shiprocket. AWB Generated.`,
+      "Order successfully dispatched via Shiprocket. AWB Generated.",
       { order: updatedOrder },
     ).send();
   }
