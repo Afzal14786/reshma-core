@@ -50,6 +50,22 @@ const CartSchema = new Schema<ICart>(
       index: true, // Optimizes query performance when fetching the cart during the checkout flow
     },
     items: [CartItemSchema],
+    appliedCoupon: {
+      type: Schema.Types.ObjectId,
+      ref: "Coupon",
+      default: null,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Optional but highly recommended for frontend calculation:
+    totalAfterDiscount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   {
     // Automatically manages 'createdAt' and 'updatedAt' timestamps

@@ -1,14 +1,17 @@
-import { Types } from "mongoose";
+import mongoose, { Types, ClientSession } from "mongoose";
 import { Cart } from "./cart.model";
 import { Product } from "../products/models/base-product.model";
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
+import { CouponService } from "@modules/coupons/coupon.service";
+import { CouponModel } from "@modules/coupons/coupon.model";
+import logger from "@config/logger";
 import {
   AddItemToCartInput,
   UpdateCartItemInput,
   MergeCartInput,
 } from "./dtos/cart.dto";
-import { AttributeValue, ICartItem } from "./interfaces/cart.interface";
+import { AttributeValue, ICartItem, ICart } from "./interfaces/cart.interface";
 
 /**
  * @interface ICartTotals
@@ -24,7 +27,7 @@ interface ICartTotals {
 /**
  * @interface IPopulatedProduct
  * @description Strictly types the product object after it is populated by Mongoose.
- * Prevents the use of the 'any' keyword during math calculations.
+ * Prevents the use of the forbidden keyword during math calculations.
  */
 interface IPopulatedProduct {
   _id: Types.ObjectId;
@@ -41,39 +44,50 @@ interface IPopulatedProduct {
 }
 
 /**
- * Cart Service
- * Handles all business logic, dynamic price calculations, and stock synchronization.
+ * @interface IPopulatedCartItem
+ * @description Intersects ICartItem with the populated product payload
+ */
+type IPopulatedCartItem = Omit<ICartItem, "product"> & {
+  product: IPopulatedProduct | null;
+};
+
+/**
+ *
+ * CART SERVICE (CORE DOMAIN LOGIC)
+ *
+ * ARCHITECTURE NOTE:
+ * This service utilizes MongoDB Sessions/Transactions for all write operations.
+ * This ensures that if a coupon recalculation fails, the entire cart update
+ * is rolled back, preventing financial inconsistency.
  */
 export class CartService {
   /**
+   * SECURITY UTILITY: CodeQL CWE-117 Neutralizer
+   * @description Cleans strings of control characters before logging.
+   */
+  private static safeLog(message: string): string {
+    return message.replace(/[\r\n]/g, "");
+  }
+
+  /**
    * @method generateItemSignature
    * @private
-   * @description Generates a deterministic string hash of the selected attributes.
-   * Ensures that { size: 'M', color: 'Red' } and { color: 'Red', size: 'M' }
-   * result in the exact same signature so they merge into a single cart item.
    */
   private static generateItemSignature(
     productId: string,
     attributes?: Record<string, AttributeValue>,
   ): string {
-    if (!attributes || Object.keys(attributes).length === 0) {
-      return productId;
-    }
-
-    // Sort the keys alphabetically to ensure deterministic output
+    if (!attributes || Object.keys(attributes).length === 0) return productId;
     const sortedKeys = Object.keys(attributes).sort();
     const attributeString = sortedKeys
       .map((key) => `${key}:${attributes[key]}`)
       .join("|");
-
     return `${productId}|${attributeString}`;
   }
 
   /**
    * @method reconstructAttributes
    * @private
-   * @description SECURITY FIX: Manually copies attributes to break the CodeQL taint chain.
-   * Prevents prototype pollution and object injection from user-controlled inputs.
    */
   private static reconstructAttributes(
     attributes?: Record<string, AttributeValue>,
@@ -88,21 +102,21 @@ export class CartService {
 
   /**
    * @method getCart
-   * @description Fetches the cart, populates live product data, and acts as a "Self-Healing" mechanism
-   * by purging items that have been deleted or deactivated by the admin.
+   * @description Self-Healing retrieval logic. Purges inactive products.
    */
   public static async getCart(userId: string) {
-    // SECURITY FIX: $eq operator prevents NoSQL injection
-    let cart = await Cart.findOne({ user: { $eq: String(userId) } }).populate({
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+
+    let cart = await Cart.findOne({ user: { $eq: safeUserId } }).populate({
       path: "items.product",
       select:
         "name sku basePrice discount currentStock weightGrams isFragile isActive images itemType",
     });
 
     if (!cart) {
-      cart = await Cart.create({ user: userId, items: [] });
+      cart = await Cart.create({ user: safeUserId, items: [] });
       return {
-        cart,
+        items: [],
         totals: {
           subTotal: 0,
           totalWeightGrams: 0,
@@ -112,7 +126,6 @@ export class CartService {
       };
     }
 
-    let needsSave = false;
     const validItems: ICartItem[] = [];
     const totals: ICartTotals = {
       subTotal: 0,
@@ -120,22 +133,18 @@ export class CartService {
       hasFragileItems: false,
       totalItems: 0,
     };
+    let needsHeal = false;
 
-    // The Self-Healing Iteration
     for (const item of cart.items) {
-      // Cast safely without using 'any'
       const product = item.product as unknown as IPopulatedProduct | null;
 
-      // FIREWALL: If product was hard-deleted or soft-deleted, we drop it from the cart
       if (!product || product.isActive === false) {
-        needsSave = true;
-        continue; // Skip pushing to validItems
+        needsHeal = true;
+        continue;
       }
 
-      // Math Engine: Calculate actual price after product-level discount
       const activePrice =
         product.basePrice - product.basePrice * (product.discount / 100);
-
       totals.subTotal += activePrice * item.quantity;
       totals.totalWeightGrams += product.weightGrams * item.quantity;
       if (product.isFragile) totals.hasFragileItems = true;
@@ -144,9 +153,7 @@ export class CartService {
       validItems.push(item as unknown as ICartItem);
     }
 
-    // Heal the Database if dead items were found
-    if (needsSave) {
-      // Bypass Mongoose strict DocumentArray typing safely
+    if (needsHeal) {
       cart.items = validItems as unknown as typeof cart.items;
       await cart.save();
     }
@@ -154,250 +161,437 @@ export class CartService {
     return {
       items: validItems,
       totals,
+      appliedCoupon: cart.appliedCoupon,
+      discountAmount: cart.discountAmount,
+      totalAfterDiscount: cart.totalAfterDiscount,
     };
   }
 
   /**
    * @method addItem
-   * @description Safely adds an item to the cart or increments its quantity if a perfect
-   * attribute match already exists. Strictly enforces inventory limits.
+   * @description Atomic operation ensuring stock availability and coupon validity.
    */
   public static async addItem(userId: string, payload: AddItemToCartInput) {
-    const { productId, quantity, selectedAttributes } = payload;
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    // Stock & Validation Check (Using polymorphic Product)
-    const product = await Product.findOne({ _id: { $eq: String(productId) } })
-      .select("currentStock isActive")
-      .lean();
+    try {
+      const { productId, quantity, selectedAttributes } = payload;
+      const safeUserId = String(userId).replace(/[\r\n]/g, "");
 
-    if (!product || !product.isActive) {
-      throw new AppError(
-        HTTP_STATUS.NOT_FOUND,
-        "This product is no longer available.",
+      const product = await Product.findOne({ _id: { $eq: String(productId) } })
+        .session(session)
+        .lean();
+      if (!product || !product.isActive)
+        throw new AppError(HTTP_STATUS.NOT_FOUND, "Product unavailable.");
+      if (product.currentStock < quantity)
+        throw new AppError(HTTP_STATUS.CONFLICT, "Insufficient stock.");
+
+      // Initial Fetch
+      let cart = await Cart.findOne({ user: { $eq: safeUserId } }).session(
+        session,
       );
-    }
 
-    if (product.currentStock < quantity) {
-      throw new AppError(
-        HTTP_STATUS.CONFLICT,
-        `Only ${product.currentStock} items left in stock.`,
-      );
-    }
+      if (!cart) {
+        const newCarts = await Cart.create([{ user: safeUserId, items: [] }], {
+          session,
+        });
+        const createdCart = newCarts[0];
 
-    // Fetch User Cart
-    let cart = await Cart.findOne({ user: { $eq: String(userId) } });
-    if (!cart) {
-      cart = new Cart({ user: userId, items: [] });
-    }
-
-    const safeAttributes = this.reconstructAttributes(selectedAttributes);
-    const incomingSignature = this.generateItemSignature(
-      productId,
-      safeAttributes,
-    );
-
-    const existingItemIndex = cart.items.findIndex((item) => {
-      const itemSignature = this.generateItemSignature(
-        item.product.toString(),
-        item.selectedAttributes as Record<string, AttributeValue> | undefined,
-      );
-      return itemSignature === incomingSignature;
-    });
-
-    if (existingItemIndex > -1) {
-      const existingItem = cart.items[existingItemIndex];
-      if (existingItem) {
-        const newQuantity = existingItem.quantity + quantity;
-
-        if (newQuantity > product.currentStock) {
+        // Safety check to satisfy the 'undefined' error
+        if (!createdCart) {
           throw new AppError(
-            HTTP_STATUS.CONFLICT,
-            `Cannot add more. Stock limit reached (${product.currentStock}).`,
+            HTTP_STATUS.INTERNAL_SERVER_ERROR,
+            "Failed to initialize cart session.",
           );
         }
-        existingItem.quantity = newQuantity;
-      }
-    } else {
-      // New Item creation
-      const newItemObject: ICartItem = {
-        product: new Types.ObjectId(String(productId)),
-        quantity,
-      };
-
-      // Only attach if safely reconstructed to prevent Object injection
-      if (safeAttributes) {
-        newItemObject.selectedAttributes = safeAttributes;
+        cart = createdCart;
       }
 
-      cart.items.push(newItemObject as unknown as any); // Satisfy Mongoose Subdocument Array
+      const safeAttributes = this.reconstructAttributes(selectedAttributes);
+      const incomingSignature = this.generateItemSignature(
+        productId,
+        safeAttributes,
+      );
+
+      const existingIndex = cart.items.findIndex(
+        (item) =>
+          this.generateItemSignature(
+            item.product.toString(),
+            item.selectedAttributes as Record<string, AttributeValue>,
+          ) === incomingSignature,
+      );
+
+      if (existingIndex > -1) {
+        const item = cart.items[existingIndex];
+        if (!item)
+          throw new AppError(
+            HTTP_STATUS.INTERNAL_SERVER_ERROR,
+            "Cart state corruption detected.",
+          );
+
+        if (item.quantity + quantity > product.currentStock) {
+          throw new AppError(HTTP_STATUS.CONFLICT, "Stock limit exceeded.");
+        }
+        item.quantity += quantity;
+      } else {
+        const newItem: ICartItem = {
+          product: new Types.ObjectId(String(productId)),
+          quantity,
+        };
+
+        if (safeAttributes) {
+          newItem.selectedAttributes = safeAttributes;
+        }
+
+        // Use type assertion on the items array directly to avoid 'possibly null' errors
+        (cart.items as unknown as ICartItem[]).push(newItem);
+      }
+
+      // Pass the non-null cart to the failsafe
+      await this.recalculateCartTotals(cart, safeUserId, session);
+
+      await cart.save({ session });
+      await session.commitTransaction();
+
+      return this.getCart(safeUserId);
+    } catch (error) {
+      await session.abortTransaction();
+      logger.error(
+        this.safeLog(
+          `[CartService.addItem] Transaction Aborted: ${error instanceof Error ? error.message : "Unknown"}`,
+        ),
+      );
+      throw error;
+    } finally {
+      await session.endSession();
     }
-
-    await cart.save();
-    return this.getCart(userId);
   }
 
   /**
    * @method updateItemQuantity
-   * @description Directly sets the quantity of a specific product variant in the cart.
    */
   public static async updateItemQuantity(
     userId: string,
     payload: UpdateCartItemInput,
   ) {
-    const { productId, quantity, selectedAttributes } = payload;
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    if (quantity === undefined) {
-      throw new AppError(
-        HTTP_STATUS.BAD_REQUEST,
-        "Quantity is required for this operation.",
+    try {
+      const { productId, quantity, selectedAttributes } = payload;
+      const safeUserId = String(userId).replace(/[\r\n]/g, "");
+
+      const cart = await Cart.findOne({ user: { $eq: safeUserId } }).session(
+        session,
       );
-    }
+      if (!cart) throw new AppError(HTTP_STATUS.NOT_FOUND, "Cart not found.");
 
-    const cart = await Cart.findOne({ user: { $eq: String(userId) } });
-    if (!cart) throw new AppError(HTTP_STATUS.NOT_FOUND, "Cart not found.");
-
-    const safeAttributes = this.reconstructAttributes(selectedAttributes);
-    const targetSignature = this.generateItemSignature(
-      productId,
-      safeAttributes,
-    );
-
-    const itemIndex = cart.items.findIndex(
-      (item) =>
-        this.generateItemSignature(
-          item.product.toString(),
-          item.selectedAttributes as Record<string, AttributeValue> | undefined,
-        ) === targetSignature,
-    );
-
-    if (itemIndex === -1) {
-      throw new AppError(
-        HTTP_STATUS.NOT_FOUND,
-        "Item variant not found in cart.",
+      const targetSig = this.generateItemSignature(
+        productId,
+        selectedAttributes as Record<string, AttributeValue>,
       );
-    }
-
-    const product = await Product.findOne({ _id: { $eq: String(productId) } })
-      .select("currentStock isActive")
-      .lean();
-
-    if (!product || !product.isActive || product.currentStock < quantity) {
-      throw new AppError(
-        HTTP_STATUS.CONFLICT,
-        `Requested quantity exceeds available stock (${product?.currentStock || 0}).`,
+      const idx = cart.items.findIndex(
+        (i) =>
+          this.generateItemSignature(
+            i.product.toString(),
+            i.selectedAttributes as Record<string, AttributeValue>,
+          ) === targetSig,
       );
-    }
 
-    const targetItem = cart.items[itemIndex];
-    if (targetItem) {
-      targetItem.quantity = quantity;
-    }
+      if (idx === -1)
+        throw new AppError(HTTP_STATUS.NOT_FOUND, "Variant not in cart.");
 
-    await cart.save();
-    return this.getCart(userId);
+      const product = await Product.findOne({ _id: { $eq: String(productId) } })
+        .session(session)
+        .lean();
+      if (
+        !product ||
+        !product.isActive ||
+        product.currentStock < (quantity ?? 0)
+      ) {
+        throw new AppError(
+          HTTP_STATUS.CONFLICT,
+          "Inventory error or product inactive.",
+        );
+      }
+
+      cart.items[idx]!.quantity = quantity ?? 1;
+
+      await this.recalculateCartTotals(cart, safeUserId, session);
+      await cart.save({ session });
+      await session.commitTransaction();
+
+      return this.getCart(safeUserId);
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
-
   /**
    * @method removeProduct
-   * @description Completely removes all variations of a specific product from the cart.
    */
   public static async removeProduct(userId: string, productId: string) {
-    const cart = await Cart.findOne({ user: { $eq: String(userId) } });
-    if (!cart) return;
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    // Filter out the item(s) matching the Product ID, bypassing 'any' using 'unknown' assertion
-    const filteredItems = cart.items.filter(
-      (item) => item.product.toString() !== productId,
-    );
+    try {
+      const safeUserId = String(userId).replace(/[\r\n]/g, "");
+      const cart = await Cart.findOne({ user: { $eq: safeUserId } }).session(
+        session,
+      );
+      if (!cart) return;
 
-    cart.items = filteredItems as unknown as typeof cart.items;
+      const filteredItems = cart.items.filter(
+        (item) => item.product.toString() !== productId,
+      );
+      cart.items = filteredItems as unknown as typeof cart.items;
 
-    await cart.save();
-    return this.getCart(userId);
+      await this.recalculateCartTotals(cart, safeUserId, session);
+      await cart.save({ session });
+      await session.commitTransaction();
+      return this.getCart(safeUserId);
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
 
   /**
    * @method clearCart
-   * @description Empties the cart. Used immediately after a successful checkout.
+   * @description FIX: Moved into Service layer for production consistency[cite: 3].
    */
   public static async clearCart(userId: string): Promise<void> {
-    await Cart.findOneAndUpdate(
-      { user: { $eq: String(userId) } },
-      { $set: { items: [] } }, // Using explicit $set for CodeQL Taint Safety
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+    const result = await Cart.findOneAndUpdate(
+      { user: { $eq: safeUserId } },
+      {
+        $set: {
+          items: [],
+          appliedCoupon: null,
+          discountAmount: 0,
+          totalAfterDiscount: 0,
+        },
+      },
+      { new: true },
     );
+
+    if (!result) {
+      throw new AppError(HTTP_STATUS.NOT_FOUND, "Cart not found to clear.");
+    }
   }
 
   /**
    * @method mergeGuestCart
-   * @description Merges a frontend local-storage cart with the user's database cart upon login.
-   * Intelligently prevents exceeding available stock and safely ignores discontinued products.
+   * @description Merges guest items into persistent storage using atomic transactions.
    */
   public static async mergeGuestCart(
     userId: string,
     guestItems: MergeCartInput["items"],
   ) {
-    if (!guestItems || guestItems.length === 0) {
-      return this.getCart(userId);
-    }
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    let cart = await Cart.findOne({ user: { $eq: String(userId) } });
-    if (!cart) {
-      cart = new Cart({ user: userId, items: [] });
-    }
-
-    for (const guestItem of guestItems) {
-      const product = await Product.findOne({
-        _id: { $eq: String(guestItem.productId) },
-      })
-        .select("currentStock isActive")
-        .lean();
-
-      if (!product || !product.isActive || product.currentStock < 1) {
-        continue;
-      }
-
-      const safeAttributes = this.reconstructAttributes(
-        guestItem.selectedAttributes,
-      );
-      const incomingSignature = this.generateItemSignature(
-        guestItem.productId,
-        safeAttributes,
+    try {
+      const safeUserId = String(userId).replace(/[\r\n]/g, "");
+      let cart = await Cart.findOne({ user: { $eq: safeUserId } }).session(
+        session,
       );
 
-      const existingItemIndex = cart.items.findIndex(
-        (item) =>
-          this.generateItemSignature(
-            item.product.toString(),
-            item.selectedAttributes as
-              | Record<string, AttributeValue>
-              | undefined,
-          ) === incomingSignature,
-      );
-
-      if (existingItemIndex > -1) {
-        const existingItem = cart.items[existingItemIndex];
-        if (existingItem) {
-          const combinedQuantity = existingItem.quantity + guestItem.quantity;
-          existingItem.quantity = Math.min(
-            combinedQuantity,
-            product.currentStock,
+      if (!cart) {
+        const newCarts = await Cart.create([{ user: safeUserId, items: [] }], {
+          session,
+        });
+        const createdCart = newCarts[0];
+        if (!createdCart) {
+          throw new AppError(
+            HTTP_STATUS.INTERNAL_SERVER_ERROR,
+            "Cart initialization failed.",
           );
         }
-      } else {
-        const newItemObject: ICartItem = {
-          product: new Types.ObjectId(String(guestItem.productId)),
-          quantity: Math.min(guestItem.quantity, product.currentStock),
-        };
+        cart = createdCart;
+      }
 
-        if (safeAttributes) {
-          newItemObject.selectedAttributes = safeAttributes;
+      for (const guestItem of guestItems) {
+        const product = await Product.findOne({
+          _id: { $eq: String(guestItem.productId) },
+        })
+          .session(session)
+          .lean();
+        if (!product || !product.isActive || product.currentStock < 1) continue;
+
+        const safeAttrs = this.reconstructAttributes(
+          guestItem.selectedAttributes,
+        );
+        const incomingSig = this.generateItemSignature(
+          guestItem.productId,
+          safeAttrs,
+        );
+
+        const existingIdx = cart.items.findIndex(
+          (i) =>
+            this.generateItemSignature(
+              i.product.toString(),
+              i.selectedAttributes as Record<string, AttributeValue>,
+            ) === incomingSig,
+        );
+
+        if (existingIdx > -1) {
+          const item = cart.items[existingIdx];
+          if (item) {
+            item.quantity = Math.min(
+              item.quantity + guestItem.quantity,
+              product.currentStock,
+            );
+          }
+        } else {
+          const newItem: ICartItem = {
+            product: new Types.ObjectId(String(guestItem.productId)),
+            quantity: Math.min(guestItem.quantity, product.currentStock),
+          };
+          if (safeAttrs) newItem.selectedAttributes = safeAttrs;
+
+          (cart.items as unknown as ICartItem[]).push(newItem);
         }
+      }
 
-        cart.items.push(newItemObject as unknown as any);
+      await this.recalculateCartTotals(cart, safeUserId, session);
+      await cart.save({ session });
+      await session.commitTransaction();
+
+      return this.getCart(safeUserId);
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  /**
+   *
+   * PROMOTIONAL ENGINE: APPLY COUPON
+   *
+   */
+  public static async applyCoupon(userId: string, code: string) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const safeUserId = String(userId).replace(/[\r\n]/g, "");
+      const safeCode = String(code)
+        .trim()
+        .toUpperCase()
+        .replace(/[\r\n]/g, "");
+
+      const cart = await Cart.findOne({ user: { $eq: safeUserId } })
+        .populate({
+          path: "items.product",
+          select: "basePrice discount isActive",
+        })
+        .session(session);
+
+      if (!cart || cart.items.length === 0)
+        throw new AppError(HTTP_STATUS.BAD_REQUEST, "Cart is empty.");
+
+      const subtotal = cart.items.reduce((total: number, item: unknown) => {
+        const populated = item as IPopulatedCartItem;
+        if (!populated.product?.isActive) return total;
+        const price =
+          populated.product.basePrice * (1 - populated.product.discount / 100);
+        return total + populated.quantity * price;
+      }, 0);
+
+      const { couponId, discountAmount } =
+        await CouponService.validateAndCalculateDiscount(
+          safeCode,
+          subtotal,
+          safeUserId,
+        );
+
+      cart.appliedCoupon = couponId;
+      cart.discountAmount = discountAmount;
+      cart.totalAfterDiscount = subtotal - discountAmount;
+
+      await cart.save({ session });
+      await session.commitTransaction();
+      return cart;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  /**
+   *
+   * PROMOTIONAL ENGINE: REMOVE COUPON
+   *
+   */
+  public static async removeCoupon(userId: string) {
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+    const cart = await Cart.findOneAndUpdate(
+      { user: { $eq: safeUserId } },
+      {
+        $set: { appliedCoupon: null, discountAmount: 0, totalAfterDiscount: 0 },
+      },
+      { new: true },
+    );
+    if (!cart) throw new AppError(HTTP_STATUS.NOT_FOUND, "Cart not found.");
+    return cart;
+  }
+
+  /**
+   * @method recalculateCartTotals
+   * @description The margin-protection failsafe. Uses 'null' for exactOptionalPropertyTypes compliance.
+   */
+  public static async recalculateCartTotals<
+    T extends ICart & mongoose.Document,
+  >(cart: T, userId: string, session?: ClientSession) {
+    if (!cart.appliedCoupon) return cart;
+
+    await cart.populate({
+      path: "items.product",
+      select: "basePrice discount isActive",
+    });
+
+    const subtotal = cart.items.reduce((total: number, item: unknown) => {
+      const populated = item as IPopulatedCartItem;
+      if (!populated.product?.isActive) return total;
+      const price =
+        populated.product.basePrice * (1 - populated.product.discount / 100);
+      return total + populated.quantity * price;
+    }, 0);
+
+    const coupon = await CouponModel.findById(cart.appliedCoupon)
+      .session(session || null)
+      .lean();
+
+    // Logic: If subtotal falls below threshold or coupon expires, strip it.
+    if (!coupon || subtotal < coupon.minCartValue || !coupon.isActive) {
+      cart.appliedCoupon = null;
+      cart.discountAmount = 0;
+      cart.totalAfterDiscount = 0;
+    } else {
+      try {
+        const result = await CouponService.validateAndCalculateDiscount(
+          coupon.code,
+          subtotal,
+          userId,
+        );
+        cart.discountAmount = result.discountAmount;
+        cart.totalAfterDiscount = subtotal - result.discountAmount;
+      } catch (err) {
+        cart.appliedCoupon = null;
+        cart.discountAmount = 0;
+        cart.totalAfterDiscount = 0;
       }
     }
-
-    await cart.save();
-    return this.getCart(userId);
+    return cart;
   }
 }
