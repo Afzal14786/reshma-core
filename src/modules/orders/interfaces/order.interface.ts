@@ -39,6 +39,8 @@ export interface IOrderPricing {
   subTotal: number;
   shippingCost: number;
   taxAmount: number;
+  discountAmount: number;
+  appliedCoupon: Types.ObjectId | null;
   totalAmount: number;
 }
 

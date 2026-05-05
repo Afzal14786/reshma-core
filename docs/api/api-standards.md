@@ -127,12 +127,14 @@ The API strictly adheres to the following HTTP status codes mapping:
 * `DELETE /products/:id` - *(Admin)* Soft-delete a product to preserve historical receipts. 
 
 **4. Cart Module (`/cart`)**
-* `GET /cart` - Retrieve the active user's cart (Dynamically populated & Self-Healing).
-* `POST /cart/merge` - Triggered post-login. Merges a frontend `localStorage` guest cart into the database.
-* `POST /cart/add` - Add a new item or increment an existing variant's quantity.
-* `PATCH /cart/update` - Explicitly override the quantity of a specific cart item.
-* `DELETE /cart/item/:productId` - Completely drop a product from the cart.
-* `DELETE /cart/clear` - Empty the cart (Called post-checkout).
+* `GET /cart` - Retrieve the active user's cart
+* `POST /cart/merge` - Merge guest carts
+* `POST /cart/add` - Add/increment items
+* `PATCH /cart/update` - Override specific quantity
+* `DELETE /cart/item/:productId` - Drop product
+* `DELETE /cart/clear` - Empty cart
+* `POST /cart/coupon/apply` - **(New)** Apply a promotional code to the cart.
+* `DELETE /cart/coupon/remove` - **(New)** Strip the active promotional code.
 
 **5. Orders & Checkout (`/orders`)**  
 * `POST /orders/checkout` - Initialize ACID transaction and Razorpay Order.
@@ -151,7 +153,13 @@ The API strictly adheres to the following HTTP status codes mapping:
 
 * `GET /interactions/product/:productId` - (*Public*) Fetch paginated top-level reviews for a product.
 * `POST /interactions` - Create a new review or threaded comment.
-* `PATCH /interactions/:interactionId/vote` - Upvote or downvote a specific interaction.  
+* `PATCH /interactions/:interactionId/vote` - Upvote or downvote a specific interaction.   
+
+**8. Coupon Module (`/coupons`)**
+* `GET /coupons/available` - *(Public)* Dynamically fetch active coupons based on `?cartValue=X`.
+* `POST /coupons` - *(Admin)* Generate a new promotional code.
+* `PATCH /coupons/:id` - *(Admin)* Update coupon limits or toggle kill-switch.
+* `GET /coupons` - *(Admin)* Paginated and filtered fetching of system promotions.
 
 --- 
 

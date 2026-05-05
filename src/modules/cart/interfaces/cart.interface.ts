@@ -38,6 +38,10 @@ export interface ICart extends Document {
   /** The collection of products currently held in the cart */
   items: ICartItem[];
 
+  appliedCoupon?: Types.ObjectId | null;
+  discountAmount: number;
+  totalAfterDiscount: number;
+
   /** Timestamp of cart creation (Auto-managed by Mongoose) */
   createdAt: Date;
 

@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*
 
 ### Added
+- **Coupon Module:** Implemented centralized `CouponService` for executing promotional business logic, including temporal, scarcity, margin, and acquisition firewalls.
+- **Public Discovery API:** Added `GET /api/v1/coupons/available` utilizing MongoDB `$expr` to dynamically display valid coupons based on active cart subtotal.
+- **Cart Promotional Hooks:** Added `POST /cart/coupon/apply` and `DELETE /cart/coupon/remove` to manage active cart promotions.
+- **Invoice Dynamic Rows:** `invoice.generator.ts` now dynamically detects and renders a green "Discount" row and recalculates the visual Grand Total.
+- **Documentation:** Added `coupon-module.md`, `coupon-runbook.md`, and updated all relevant architecture ADRs.
+
+### Changed
+- **Cart Recalculation Engine:** `CartService` now actively pings `recalculateCartTotals()` on every mutation (add, update, merge) to silently strip expired or invalid coupons mid-session.
+- **Order Financial Immutability:** `OrderSchema` now natively stores `appliedCoupon` and `discountAmount`. `OrderService.initializeCheckout` mathematically calculates the exact total minus the discount before pinging Razorpay.
+- **Mongoose 9 Type Safety:** Hardened `Cart.create()` arrays with intermediate assignments to satisfy strict `exactOptionalPropertyTypes` compilation.
+
+### Security
+- **TOCTOU Firewall:** Implemented a Time-Of-Check to Time-Of-Use failsafe in `OrderService` to abort checkout if a coupon expires while the user is idling on the cart page.
+- **Atomic Scarcity:** Moved coupon `$inc: { usedCount: 1 }` strictly to the Razorpay background Webhook (`processWebhook`) to prevent checkout abandonment from starving coupon inventory.
+- **CodeQL CWE-117 Mitigated:** Implemented `safeLog()` wrappers across Cart, Order, and Coupon services to physically strip `\r\n` characters and prevent Log Injection attacks.
+- **CodeQL CWE-943 Mitigated:** Enforced explicit `$eq` wrappers and primitive casting across all dynamic Mongoose queries to neutralize NoSQL Operator Injection.  
+
+
+### Added
 - **Interactions Module:** Implemented a high-throughput, concurrency-safe engine for product reviews and threaded comments utilizing the Adjacency List pattern.
 - **Async Aggregation Engine:** Added background `$cond` aggregation pipelines via `setImmediate()` to recalculate average ratings and 5-star distribution curves without blocking the main event loop.
 - **Cross-Module Trust Layer:** Implemented internal validation against the `Orders` collection to mathematically grant the "Verified Purchase" badge.

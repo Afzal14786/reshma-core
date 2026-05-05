@@ -38,7 +38,21 @@ This module bridges the gap between the Anonymous Frontend User and the Authenti
 ### 4. The Guest-to-User Merge Flow
 **Context:** Industry standards dictate that users should not be forced to log in simply to browse and add items to a cart[cite: 2].
 **Decision:** 1. The frontend manages anonymous carts in `localStorage`[cite: 2]. 2. All backend `/cart` routes are strictly protected by JWT auth[cite: 2]. 3. Upon login, the frontend fires a one-time sync to `POST /api/v1/cart/merge`[cite: 2].
-**Consequence:** The database is protected from millions of abandoned anonymous bot carts[cite: 2]. The backend gracefully merges local items into the official cart, capping quantities based on stock[cite: 2].
+**Consequence:** The database is protected from millions of abandoned anonymous bot carts[cite: 2]. The backend gracefully merges local items into the official cart, capping quantities based on stock[cite: 2].  
+
+### 5. Strict Type Satisfaction (Mongoose 9 / TypeScript 6)
+**Context:** When working within MongoDB sessions, Mongoose requires `.create()` to be passed as an array. This causes TypeScript's `exactOptionalPropertyTypes` to flag potential `undefined` array assignments, threatening compilation.
+**Decision:** We utilize strict intermediate assignments and exact type-casting:
+```typescript
+  const newCarts = await Cart.create([{ user: safeUserId, items: [] }], { session });
+  
+  const createdCart = newCarts[0];
+  
+  if (!createdCart) throw new AppError(HTTP_STATUS.INTERNAL_SERVER_ERROR, "Cart initialization failed.");
+  cart = createdCart
+```  
+
+**Consequence:** The compiler retains absolute certainty of the internal Mongoose Document properties (like `__v`), ensuring 100% type safety during highly volatile cart mutations.
 
 ## Security & Validation Firewalls
 

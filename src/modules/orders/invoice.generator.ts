@@ -154,20 +154,41 @@ export const generateInvoiceBuffer = (order: IOrder): Promise<Buffer> => {
         { width: 75, align: "right" },
       );
 
+      // ---> NEW LOGIC: Dynamic Discount Row Offset
+      let offset = 45;
+
+      if (order.pricing.discountAmount && order.pricing.discountAmount > 0) {
+        doc.font("Helvetica-Bold");
+        doc.text("Discount:", 380, totalsTop + offset, {
+          width: 70,
+          align: "right",
+        });
+        doc.fillColor("green"); // Visually distinguish the savings
+        doc.text(
+          `- Rs. ${order.pricing.discountAmount.toFixed(2)}`,
+          470,
+          totalsTop + offset,
+          { width: 75, align: "right" },
+        );
+        doc.fillColor("black"); // Reset color
+        doc.font("Helvetica"); // Reset font
+        offset += 15;
+      }
+
       doc
-        .moveTo(380, totalsTop + 50)
-        .lineTo(545, totalsTop + 50)
+        .moveTo(380, totalsTop + offset + 5)
+        .lineTo(545, totalsTop + offset + 5)
         .stroke();
 
       doc.font("Helvetica-Bold");
-      doc.text("GRAND TOTAL:", 350, totalsTop + 60, {
+      doc.text("GRAND TOTAL:", 350, totalsTop + offset + 15, {
         width: 100,
         align: "right",
       });
       doc.text(
         `Rs. ${order.pricing.totalAmount.toFixed(2)}`,
         470,
-        totalsTop + 60,
+        totalsTop + offset + 15,
         { width: 75, align: "right" },
       );
 
