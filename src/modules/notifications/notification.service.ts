@@ -11,6 +11,7 @@ import { passwordResetTemplate } from "./templates/password-reset";
 import { passwordUpdateTemplate } from "./templates/password-update";
 import { orderPlacedTemplate } from "./templates/order-placed";
 import { orderCancelledTemplate } from "./templates/order-cancel";
+import { orderDeliveredTemplate } from "./templates/order-delivered";
 
 import { returnRequestedTemplate } from "./templates/return-requested";
 import { returnApprovedTemplate } from "./templates/return-approved";
@@ -405,6 +406,41 @@ export class NotificationService {
     );
   }
 
+  /**
+   * Dispatches the "Order Delivered" transactional email via BullMQ
+   * Also creates an In-App database notification.
+   */
+  public static async sendOrderDeliveredNotification(
+    userId: Types.ObjectId,
+    email: string,
+    firstname: string,
+    orderNumber: string,
+  ): Promise<void> {
+    await dispatchEmailJob({
+      type: "ORDER_DELIVERED",
+      to: email,
+      data: { firstname, orderNumber },
+    });
+
+    // Fire-and-Forget In-App Notification
+    Notification.create({
+      recipientId: userId,
+      type: "ORDER",
+      title: `Order Delivered: ${orderNumber}`,
+      message: `Your package has been successfully delivered. Thank you for shopping with Reshma Bangles!`,
+      link: `/orders`,
+    }).catch((err) => {
+      logger.error(
+        `[Notification DB Error] Delivery alert failed for ${userId}`,
+        err,
+      );
+    });
+
+    logger.info(
+      `[Notification] Delivery alerts dispatched for Order: ${orderNumber}`,
+    );
+  }
+
   // QUEUE COMPILER (Used ONLY by email.worker.ts)
 
   /**
@@ -462,6 +498,14 @@ export class NotificationService {
             payload.data.firstname,
             payload.data.orderNumber,
             payload.data.reason,
+          ),
+        };
+      case "ORDER_DELIVERED":
+        return {
+          subject: `Your Reshma Bangles Order ${payload.data.orderNumber} has been delivered!`,
+          html: orderDeliveredTemplate(
+            payload.data.firstname,
+            payload.data.orderNumber,
           ),
         };
       case "ORDER_SHIPPED":
