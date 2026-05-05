@@ -45,11 +45,7 @@ router.use(restrictTo("ADMIN"));
  * @desc    Generate a new promotional code
  * @security Zod validation physically drops malformed payloads (CWE-20)
  */
-router.post(
-  "/",
-  validate(createCouponSchema),
-  CouponController.createCoupon,
-);
+router.post("/", validate(createCouponSchema), CouponController.createCoupon);
 
 /**
  * @route   PATCH /api/v1/coupons/:id
