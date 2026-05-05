@@ -61,6 +61,16 @@ const envSchema = z.object({
   RAZORPAY_WEBHOOK_SECRET: z
     .string()
     .min(1, "Webhook secret is required for security"),
+
+  SHIPROCKET_EMAIL: z.string().email("Shiprocket registered email is required"),
+  SHIPROCKET_PASSWORD: z.string().min(1, "Shiprocket password is required"),
+  SHIPROCKET_API_BASE_URL: z
+    .string()
+    .url()
+    .default("https://apiv2.shiprocket.in"),
+  SHIPROCKET_WEBHOOK_SECRET: z
+    .string()
+    .min(1, "Shiprocket Webhook Secret is required"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
