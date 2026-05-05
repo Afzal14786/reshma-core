@@ -101,13 +101,13 @@ export class OrderAdminController {
     const orderId = String(req.params.id);
 
     // SECURITY FIREWALL (CodeQL Mitigation)
-    // CodeQL flags `req.body.length` as a Type Confusion vulnerability because an attacker 
+    // CodeQL flags `req.body.length` as a Type Confusion vulnerability because an attacker
     // could pass a JSON Array where `.length` evaluates to an integer.
     // While our Zod middleware intercepts this, this explicit guard provides static proof to CodeQL.
     if (!req.body || Array.isArray(req.body) || typeof req.body !== "object") {
       throw new AppError(
         HTTP_STATUS.BAD_REQUEST,
-        "Invalid payload format. Expected a strict JSON object."
+        "Invalid payload format. Expected a strict JSON object.",
       );
     }
 
