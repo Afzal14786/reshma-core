@@ -179,6 +179,8 @@ The API strictly adheres to the following HTTP status codes mapping:
 **11. Search Module (`/search`)**
 * `GET /search` - *(Public)* Execute sub-50ms typo-tolerant searches against the Typesense RAM cluster. Supports faceted filtering (`?itemType=BANGLE&minPrice=500`) and strict pagination.  
 
+**12. Dashboard Module (`/dashboard`)**
+* `GET /dashboard/metrics` - *(Admin)* Fetch aggregated business financials, order fulfillment distribution, top-selling products, and low-stock alerts. Supports optional `?startDate=X&endDate=Y` queries.  
 
 --- 
 

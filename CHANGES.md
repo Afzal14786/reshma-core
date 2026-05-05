@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
 ### Features & Architecture
+* **Admin Dashboard Module (Read-Heavy Mathematical Engine):**
+  * Deployed a centralized metrics aggregation engine (`src/modules/dashboard`) to provide real-time business health monitoring.
+  * Implemented a single-pass MongoDB `$facet` aggregation pipeline to calculate Financials (Total Revenue, Average Order Value), Fulfillment Status distribution, and Top-Selling Products simultaneously without loading documents into the Node.js heap.
+  * Utilized database-level `$lookup` joins to prevent N+1 query latency when mapping Top Product ObjectIds to their respective SKUs and Names.
+  * Engineered a parallel execution strategy (`Promise.all`) to fetch order aggregations, inventory alerts, and user growth metrics concurrently, reducing overall API latency.
+
+### Security & Payload Validation
+* **Temporal Firewall (Zod):**
+  * Created `DateRangeQuerySchema` to safely coerce incoming URL query strings into native JavaScript `Date` objects.
+  * Implemented cross-field validation to mathematically guarantee `startDate` occurs before `endDate`, neutralizing NoSQL date-injection payloads and impossible database queries.
+* **Transport Layer Hardening:**
+  * Exposed `GET /api/v1/dashboard/metrics` strictly behind a three-tier security wall: `standardLimiter` (DoS prevention), `protect` (JWT Verification), and `restrictTo("ADMIN")` (Role-Based Access Control).
+
+### Technical Debt & CodeQL Compliance
+* **Strict TypeScript 6 / Mongoose 9 Alignment:**
+  * Eradicated the use of the `any` keyword throughout the Dashboard service.
+  * Mapped Mongoose `.lean()` executions to strict interfaces (`ILeanProduct`) to maintain compiler safety.
+  * Resolved `FilterQuery` type-widening errors by utilizing inline string literals (`{ role: "USER" }`), perfectly satisfying Mongoose 9's strict generic constraints without requiring complex type imports.
+
+### Documentation
+* Created `docs/modules/dashboard-module.md` to outline the read-heavy architecture and the specific scope of the MongoDB aggregations versus external Time-Series tools.
+* Authored `docs/api/thunder-tests/dashboard-runbook.md` to establish standard QA testing flows for temporal validations and RBAC edge cases.
+* Updated `docs/architecture/system-overview.md` to officially mark Phase 4 (Operations & Analytics) as completed.
+* Registered the new analytics endpoints in the master directory within `docs/api/api-standards.md`.
+
+### Features & Architecture
 * **Typesense RAM Search Integration (Dual-Database Architecture):**
   * Deployed a C++ based, sub-50ms in-memory search engine to bypass heavy MongoDB aggregations.
   * Created `TypesenseManager` singleton (`src/config/typesense.ts`) with strict RAM schema initialization.

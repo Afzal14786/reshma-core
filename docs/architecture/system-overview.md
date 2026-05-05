@@ -49,6 +49,7 @@ Deep dives into the specific business logic, DTOs, and services for each core fe
 * **[Wishlist Module](../modules/wishlist-module.md)** *(Lazy Initialization, Atomic Arrays, Move-to-Cart Pipeline)*
 * **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, Shiprocket 3PL Dispatch, Delivery Automation)*
 * **[Search Module](../modules/search-module.md)** *(Typesense RAM Cluster, Eventual Consistency, Faceted Discovery)*
+* **[Dashboard Module](../modules/dashboard-module.md)** *(MongoDB $facet aggregations, Financial Reporting, Inventory Alerts)*
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.
@@ -63,6 +64,7 @@ Rules for RESTful communication and Postman/Thunder Client testing protocols.
 * **[Wishlist Runbook](../api/thunder-tests/wishlist-runbook.md)** *(Lazy initialization and cart transfers)*
 * **[Order & Logistics Runbook](../api/thunder-tests/order-runbook.md)** *(Checkout, Shiprocket Dispatch, and Webhook Simulation)*
 * **[Search Runbook](../api/thunder-tests/search-runbook.md)** *(Typo-tolerance, pagination, and filter simulations)*
+* **[Dashboard Runbook](../api/thunder-tests/dashboard-runbook.md)** *(Admin metric fetching and date-range validation)*
 
 ### Setup & Deployment
 Runbooks for getting the server running locally or deploying to production.
@@ -95,10 +97,10 @@ The development of Reshma-Core is divided into four major epics.
 - [x] Razorpay Payment Gateway integration.
 - [x] Order generation & status Webhooks.
 
-### Phase 4: Operations & Analytics (In Progress)
+### Phase 4: Operations & Analytics (Completed)
 - [x] Return Arbitration Engine (Phase 8 Implementation).
 - [x] Interaction Engine (Phase 9 Implementation).
-- [ ] Admin Dashboard aggregations (Sales volume, top-selling categories).
+- [x] Admin Dashboard aggregations (Sales volume, top-selling categories).
 
 ---
 *Maintained by Md Afzal Ansari | Core System Architecture*
