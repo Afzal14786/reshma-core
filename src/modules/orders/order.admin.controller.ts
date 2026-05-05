@@ -6,6 +6,8 @@ import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { AppError } from "@shared/utils/app-error";
 import { UpdateOrderStatusInput } from "./dtos/order.dto";
 import { NotificationService } from "../notifications/notification.service";
+import { ShiprocketService } from "./shiprocket.service";
+import { DispatchOrderInput } from "./dtos/order.dto";
 import logger from "@config/logger";
 import mongoose from "mongoose";
 
@@ -87,6 +89,29 @@ export class OrderAdminController {
       HTTP_STATUS.OK,
       `Order status updated to ${order.orderStatus}`,
       { order },
+    ).send();
+  }
+
+  /**
+   * @route   POST /api/v1/orders/admin/:id/dispatch
+   * @desc    Physical Fulfillment Engine. Triggers Shiprocket to generate an AWB and schedule a courier.
+   * @access  Private (Admin Only)
+   */
+  public static async dispatchOrder(req: Request, res: Response) {
+    const orderId = String(req.params.id);
+    const dimensions = req.body as DispatchOrderInput;
+
+    // This service handles the 3-step Shiprocket handshake and atomic MongoDB updates
+    await ShiprocketService.dispatchOrder(orderId, dimensions);
+
+    // Fetch the freshly updated order to return to the frontend
+    const updatedOrder = await Order.findById(orderId).lean();
+
+    return new ApiResponse(
+      res,
+      HTTP_STATUS.OK,
+      `Order successfully dispatched via Shiprocket. AWB Generated.`,
+      { order: updatedOrder },
     ).send();
   }
 }

@@ -7,6 +7,8 @@ import { AppError } from "@shared/utils/app-error";
 import { CheckoutInput } from "./dtos/order.dto";
 import { generateInvoiceBuffer } from "./invoice.generator";
 import { IRazorpayWebhookBody, IOrder } from "./interfaces/order.interface";
+import { IShiprocketWebhookPayload } from "./interfaces/order.interface";
+import { ShiprocketService } from "./shiprocket.service";
 
 /**
  * PRODUCTION-GRADE WRAPPER
@@ -160,6 +162,37 @@ export class OrderPublicController {
 
       // Webhooks strictly require an immediate 200 OK response
       return res.status(HTTP_STATUS.OK).json({ status: "ok" });
+    },
+  );
+
+  /**
+   * @route   POST /api/v1/orders/shiprocket-webhook
+   * @desc    Shiprocket Server-to-Server logistics event handler.
+   * @access  Public (Protected via static API Key Header)
+   */
+  public static handleShiprocketWebhook = catchAsync(
+    async (req: Request, res: Response) => {
+      // Shiprocket allows you to define a custom header for authentication in their UI.
+      // We will configure it to send 'x-api-key'.
+      const providedSecret = req.headers["x-api-key"] as string;
+
+      if (!providedSecret) {
+        throw new AppError(
+          HTTP_STATUS.UNAUTHORIZED,
+          "Missing authentication header.",
+        );
+      }
+
+      // Strict cast to the interface we defined
+      const payload = req.body as IShiprocketWebhookPayload;
+
+      // Offload to the Domain Service
+      await ShiprocketService.processWebhook(payload, providedSecret);
+
+      // Webhooks strictly require an immediate 200 OK response with a generic JSON success payload
+      return res
+        .status(HTTP_STATUS.OK)
+        .json({ status: "success", received: true });
     },
   );
 }

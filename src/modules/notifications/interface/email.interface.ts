@@ -12,6 +12,7 @@ export type EmailJobType =
   | "PASSWORD_RESET"
   | "PROFILE_UPDATE"
   | "ORDER_CONFIRMATION"
+  | "ORDER_DELIVERED"
   | "ORDER_CANCELLED"
   | "ORDER_SHIPPED"
   | "RETURN_REQUESTED"
@@ -54,6 +55,11 @@ export interface IOrderCancelledJob extends BaseEmailJob {
   data: { firstname: string; orderNumber: string; reason: string };
 }
 
+export interface IOrderDeliveredJob extends BaseEmailJob {
+  type: "ORDER_DELIVERED";
+  data: { firstname: string; orderNumber: string };
+}
+
 export interface IOrderShippedJob extends BaseEmailJob {
   type: "ORDER_SHIPPED";
   data: {
@@ -91,6 +97,7 @@ export type EmailJobPayload =
   | IPasswordResetJob
   | IProfileUpdateJob
   | IOrderConfirmationJob
+  | IOrderDeliveredJob
   | IOrderCancelledJob
   | IOrderShippedJob
   | IReturnRequestedJob

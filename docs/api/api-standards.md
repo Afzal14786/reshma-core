@@ -136,14 +136,15 @@ The API strictly adheres to the following HTTP status codes mapping:
 * `POST /cart/coupon/apply` - **(New)** Apply a promotional code to the cart.
 * `DELETE /cart/coupon/remove` - **(New)** Strip the active promotional code.
 
-**5. Orders & Checkout (`/orders`)**  
+**5. Orders & Checkout (`/orders`)**
 * `POST /orders/checkout` - Initialize ACID transaction and Razorpay Order.
-* `POST /orders/verify-payment` - Verify webhook payment signature
+* `POST /orders/verify-payment` - Verify webhook payment signature.
 * `POST /orders/webhook` - Public HMAC-secured background handler for Razorpay pings.
-* `GET /orders/:id/invoice` - Stream on-the-fly PDF tax invoice
+* `GET /orders/:id/invoice` - Stream on-the-fly PDF tax invoice.
 * `GET /orders/me` - List current user's order history.
-* `GET /orders` - *(Admin)* View all incoming orders
-* `PATCH /orders/:id/status` - *(Admin)* Update order shipping status `PATCH /orders/:id/status` - *(Admin)* Update order shipping status
+* `GET /orders` - *(Admin)* View all incoming orders.
+* `POST /orders/admin/:id/dispatch` - **(New)** *(Admin)* Trigger Shiprocket physical dispatch, generate AWB, and schedule courier pickup.
+* `POST /orders/shiprocket-webhook` - **(New)** *(Public)* Shiprocket server-to-server ping listener for automated delivery tracking.
 
 **6. Returns Module (/returns)**
 * `POST /returns/:orderId/initiate` - Submit return request (Requires Cloudinary image proof for Fragile items).
