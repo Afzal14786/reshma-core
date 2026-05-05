@@ -12,7 +12,11 @@ import {
 } from "@shared/middlewares/rate-limit.middleware";
 
 // Validation Schemas
-import { CheckoutSchema, UpdateOrderStatusSchema } from "./dtos/order.dto";
+import {
+  CheckoutSchema,
+  UpdateOrderStatusSchema,
+  DispatchOrderSchema,
+} from "./dtos/order.dto";
 
 const router = Router();
 
@@ -24,6 +28,15 @@ const router = Router();
  * globally in app.ts, keeping this router perfectly clean.
  */
 router.post("/webhook", OrderPublicController.handleRazorpayWebhook);
+
+/**
+ * @route POST /shiprocket-webhook
+ * @description Ingests real-time physical delivery updates.
+ */
+router.post(
+  "/shiprocket-webhook",
+  OrderPublicController.handleShiprocketWebhook,
+);
 
 /**
  * PUBLIC ROUTES: CUSTOMER FINANCIAL BOUNDARY
@@ -49,6 +62,17 @@ router.post(
   checkoutLimiter,
   validate(CheckoutSchema),
   OrderPublicController.checkout,
+);
+
+/**
+ * @route   POST /admin/:id/dispatch
+ * @desc    Triggers physical fulfillment via Shiprocket
+ * @security Validates physical dimensions to prevent 3PL API rejection
+ */
+router.post(
+  "/admin/:id/dispatch",
+  validate(DispatchOrderSchema),
+  OrderAdminController.dispatchOrder,
 );
 
 /**
