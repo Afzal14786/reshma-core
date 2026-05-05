@@ -19,6 +19,7 @@ const router = Router();
  * Rate Limiting (CWE-770): Prevents brute-force API enumeration and DoS.
  * Authentication (CWE-285): Cryptographically verifies the user's JWT.
  */
+router.use(standardLimiter);
 router.use(protect);
 
 /**
@@ -28,7 +29,7 @@ router.use(protect);
  * ARCHITECTURE NOTE: This route MUST be declared before `restrictTo("ADMIN")`
  * to allow standard authenticated users to view active promotions.
  */
-router.get("/available", standardLimiter, CouponController.getAvailableCoupons);
+router.get("/available", CouponController.getAvailableCoupons);
 
 /**
  *
@@ -46,7 +47,6 @@ router.use(restrictTo("ADMIN"));
  */
 router.post(
   "/",
-  standardLimiter,
   validate(createCouponSchema),
   CouponController.createCoupon,
 );
@@ -57,7 +57,6 @@ router.post(
  */
 router.patch(
   "/:id",
-  standardLimiter,
   validate(updateCouponSchema),
   CouponController.updateCoupon,
 );
@@ -66,6 +65,6 @@ router.patch(
  * @route   GET /api/v1/coupons
  * @desc    Fetch all coupons with pagination and filtering
  */
-router.get("/", standardLimiter, CouponController.getCoupons);
+router.get("/", CouponController.getCoupons);
 
 export const CouponRoutes = router;
