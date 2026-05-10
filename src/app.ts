@@ -7,6 +7,7 @@ import env from "@config/env";
 // Middleware Imports
 import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 import { errorHandler } from "@shared/middlewares/error.middleware";
+import { httpLogger } from "@shared/middlewares/http-logger";
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 
@@ -16,7 +17,7 @@ import globalRouter from "./routes";
 const app: Application = express();
 
 /**
- * Security & HTTP Middlewares
+ * Security & Observability Middlewares
  */
 // Helmet sets secure HTTP headers (prevents XSS, Clickjacking, MIME sniffing)
 app.use(helmet());
@@ -29,6 +30,14 @@ app.use(
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   }),
 );
+
+/**
+ * Enterprise Observability: HTTP Interceptor
+ * * ARCHITECTURE NOTE:
+ * Placed exactly here (before parsers, limits, and routes) so it accurately
+ * measures the entire request lifecycle, including parsing time.
+ */
+app.use(httpLogger);
 
 // Apply standard rate limiting to all API routes to prevent basic DDoS attempts
 app.use("/api", standardLimiter);
