@@ -16,59 +16,69 @@
 
 ## 1. Overview
 
-The Order Module (`src/modules/orders/`) is the financial source of truth for the Reshma platform[cite: 2]. It orchestrates the transition of volatile cart data into immutable financial records[cite: 2]. It is engineered with a "Security-First" mindset, utilizing MongoDB sessions for atomic integrity and cryptographic HMAC handshakes to prevent financial fraud[cite: 2].
+The Order Module (`src/modules/orders/`) is the financial source of truth for the Reshma platform. It orchestrates the transition of volatile cart data into immutable financial records. It is engineered with a "Security-First" mindset, utilizing MongoDB sessions for atomic integrity and cryptographic HMAC handshakes to prevent financial fraud.
 
 ---
 
 ## 2. Core Architectural Pillars
 
 ### ACID-Compliant Transactions
-To guarantee financial integrity, the checkout process is wrapped in a **MongoDB Multi-Document Transaction** (`mongoose.startSession`)[cite: 2].
-*   **Atomic Boundary:** Stock deduction, Order document creation, and Cart clearing occur as a single unit of work[cite: 2].
-*   **Auto-Rollback:** If any step fails (e.g., an item goes out of stock at the last millisecond), the entire database state is mathematically rolled back[cite: 2].
+To guarantee financial integrity, the checkout process is wrapped in a **MongoDB Multi-Document Transaction** (`mongoose.startSession`).
+*   **Atomic Boundary:** Stock deduction, Order document creation, and Cart clearing occur as a single unit of work.
+*   **Auto-Rollback:** If any step fails (e.g., an item goes out of stock at the last millisecond), the entire database state is mathematically rolled back.
 
-### Historical Immutability (Snapshotting)
-Unlike other modules that rely on live references, this module utilizes **Deep-Copy Snapshotting**[cite: 2]. At the moment of purchase, the system captures:
-*   **Captured Data:** `priceAtPurchase`, `sku`, `name`, `selectedAttributes`, and `imageSnapshot`[cite: 2].
-*   **Audit Integrity:** If an Admin changes a product's price later, the user's historical receipt remains 100% accurate[cite: 2].
+### Historical Immutability & Tax Snapshotting
+Unlike other modules that rely on live references, this module utilizes **Deep-Copy Snapshotting** to guarantee legal compliance for Indian GST audits. At the exact millisecond of purchase, the system captures:
+* **Product Data:** `priceAtPurchase`, `sku`, `name`, `selectedAttributes`, and `imageSnapshot`.
+* **Immutable Tax Data:** `hsnCode`, `taxableValue`, `gstRate`, `cgst`, `sgst`, and `igst`.
+* **Audit Integrity:** Tax laws change and products get deleted. By freezing the exact Central, State, and Integrated tax amounts at the line-item level, the user's historical receipt and the company's financial ledgers remain 100% mathematically accurate forever.
 
 ### Atomic Stock Reservation
-We utilize a "Find-and-Update" firewall pattern using MongoDB `$inc` and `$gte` operators within the session[cite: 2].
-*   **Race-Condition Defense:** Stock is only deducted if `currentStock >= requestedQuantity`[cite: 2]. This prevents "Overselling" during high-traffic flash sales[cite: 2].
+We utilize a "Find-and-Update" firewall pattern using MongoDB `$inc` and `$gte` operators within the session.
+*   **Race-Condition Defense:** Stock is only deducted if `currentStock >= requestedQuantity`. This prevents "Overselling" during high-traffic flash sales.
 
 ---
 
-## 3. Financial Business Rules
+## 3. Financial & Tax Compliance Engine (GST)
 
-The engine enforces strict logic to ensure tax compliance and shipping profitability:
-*   **GST Implementation:** A flat **18% Tax Amount** is calculated on the subtotal for all orders[cite: 2].
-*   **Shipping Threshold:** A flat **₹50 shipping fee** is applied if the subtotal is under **₹2000**[cite: 2]. Orders above ₹2000 qualify for free shipping[cite: 2].
-*   **Currency Precision:** All amounts are converted to **Paise** (amount * 100) before being sent to Razorpay to avoid floating-point math errors[cite: 2].
+The engine has abandoned standard flat-tax calculations to strictly enforce Indian e-commerce tax law via a **Two-Pass Calculation**:
+
+* **Proportional Discounting:** If a coupon is applied, the discount is mathematically distributed across all line items based on their weight in the cart. GST is then calculated on this new, lower *Transaction Value*. This prevents margin loss during partial refunds.
+* **Dynamic GST Brackets:** Utilizing the `TaxEngine`, products dynamically resolve their tax brackets. For example, `STITCHED_APPAREL` calculates at 18% GST, but if a coupon drops its transaction value below ₹2,500, the engine automatically shifts the tax bracket to 5%.
+* **State Arbitration (CGST/SGST vs IGST):** The system hardcodes the business origin to **West Bengal**. During checkout, it evaluates the customer's shipping state:
+  * *Intra-State (West Bengal):* Tax is split 50/50 into `cgst` and `sgst`.
+  * *Inter-State (Outside WB):* 100% of the tax is allocated to `igst`.
+* **Logistics Service Tax:** Shipping is free over ₹2000; otherwise, a ₹100 fee applies. The engine legally isolates this by extracting the mandated 18% service tax from the final shipping cost (`shippingTaxableValue` and `shippingTax`).
 
 ---
 
 ## 4. Lifecycle & Operations
 
 ### Inventory Defragmentation (Cron Orchestration)
-To prevent "Inventory Leaks" caused by abandoned checkouts, the module relies on an automated background orchestrator (`node-cron`)[cite: 2].
-*   **The Problem:** When a user initiates checkout, stock is atomically decremented[cite: 2]. If they close their browser without paying, that stock remains locked indefinitely[cite: 2].
-*   **The Solution:** A worker sweeps the `Order` collection every 15 minutes. It isolates documents where `orderStatus` is `PENDING` and the `createdAt` timestamp is older than 30 minutes[cite: 2].
-*   **Atomic Restoration:** For each abandoned order, the worker opens a new transaction, marks the order as `CANCELLED`, and executes an `$inc` operation to return the quantity to the catalog[cite: 2].
+To prevent "Inventory Leaks" caused by abandoned checkouts, the module relies on an automated background orchestrator (`node-cron`).
+*   **The Problem:** When a user initiates checkout, stock is atomically decremented. If they close their browser without paying, that stock remains locked indefinitely.
+*   **The Solution:** A worker sweeps the `Order` collection every 15 minutes. It isolates documents where `orderStatus` is `PENDING` and the `createdAt` timestamp is older than 30 minutes.
+*   **Atomic Restoration:** For each abandoned order, the worker opens a new transaction, marks the order as `CANCELLED`, and executes an `$inc` operation to return the quantity to the catalog.
 
 ### Order State Machine
-The module tracks the progression of an order through strictly defined states[cite: 2]:
-*   **Standard Flow:** `PENDING`, `PROCESSING`, `SHIPPED`, `DELIVERED`[cite: 2].
-*   **Exception/RMA Flow:** `CANCELLED`, `RETURN_REQUESTED`, `RETURNED`[cite: 2].
+The module tracks the progression of an order through strictly defined states:
+*   **Standard Flow:** `PENDING`, `PROCESSING`, `SHIPPED`, `DELIVERED`.
+*   **Exception/RMA Flow:** `CANCELLED`, `RETURN_REQUESTED`, `RETURNED`.
 
 ---
 
 ## 5. Technical Implementations
 
 ### Webhook Cryptographic Verification
-To verify Razorpay server-to-server pings, the system implements a **Raw Body Interceptor**[cite: 2]:
-*   **The Challenge:** Standard JSON parsing alters the original payload string, causing HMAC signature mismatches[cite: 2].
-*   **The Fix:** A global `verify` hook in `app.ts` captures the `req.rawBody` as a UTF-8 string specifically for webhook routes[cite: 2].
-*   **Validation:** The `OrderService` uses `crypto.createHmac` to compare the `x-razorpay-signature` against the `rawBody`[cite: 2].
+To verify Razorpay server-to-server pings, the system implements a **Raw Body Interceptor**:
+*   **The Challenge:** Standard JSON parsing alters the original payload string, causing HMAC signature mismatches.
+*   **The Fix:** A global `verify` hook in `app.ts` captures the `req.rawBody` as a UTF-8 string specifically for webhook routes.
+*   **Validation:** The `OrderService` uses `crypto.createHmac` to compare the `x-razorpay-signature` against the `rawBody`.  
+
+### Legal PDF Tax Invoices (In-Memory)
+The platform bypasses standard text receipts to produce legally compliant PDF Tax Invoices using `PDFKit`.
+* **Zero Disk I/O:** The PDF is generated entirely as an in-memory `Buffer`. It strictly avoids `fs.writeFile` to prevent storage bloat and synchronous Event Loop blocking during high-traffic checkouts.
+* **Compliance:** Unpacks the Immutable Tax Snapshot to render a full Indian GST Table featuring columns for HSN, Taxable Value, CGST, SGST, and IGST, originating from the Kolkata address.
 
 ### Automated Communications Hook
 The module is integrated with the **Notification Engine Facade** for real-time customer updates[cite: 1, 2]:
@@ -80,9 +90,9 @@ The module is integrated with the **Notification Engine Facade** for real-time c
 
 ## 6. API & Security Firewalls
 
-*   **`checkoutLimiter`**: Extremely strict rate limiting to prevent card-testing bots[cite: 2].
-*   **Taint Chain Severing:** The service layer manually maps `shippingAddress` fields from `req.body` to prevent Object Injection or Mass Assignment[cite: 2].
-*   **`zod.strict()`**: Acts as a physical firewall, dropping NoSQL injection or Prototype Pollution attempts at the boundary[cite: 2].
+*   **`checkoutLimiter`**: Extremely strict rate limiting to prevent card-testing bots.
+*   **Taint Chain Severing:** The service layer manually maps `shippingAddress` fields from `req.body` to prevent Object Injection or Mass Assignment.
+*   **`zod.strict()`**: Acts as a physical firewall, dropping NoSQL injection or Prototype Pollution attempts at the boundary.
 
 ## 7. Logistics & Fulfillment Engine (Shiprocket)
 

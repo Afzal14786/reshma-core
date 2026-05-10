@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+# Added - May 10, 2026 Sunday
+
+### Features & Legal Architecture
+* **Dynamic GST Calculation Engine (`tax.utils.ts`):**
+  * Engineered a standalone utility to dynamically resolve Indian GST brackets based on HSN chapters and transaction value thresholds (e.g., dynamically shifting apparel from 18% to 5% if the post-discount price falls below ₹2,500).
+  * Implemented State Arbitration logic to split tax into CGST (50%) and SGST (50%) for intra-state (West Bengal) transactions, or 100% IGST for inter-state transactions.
+  * Isolated logistics service tax, calculating strict 18% inclusive GST on shipping fees.
+
+### Cart & Checkout Upgrades
+* **Two-Pass Financial Calculation (`cart.service.ts`):**
+  * Replaced flat cart-level tax calculations with line-item level taxation.
+  * Solved the "Refund Exploit" by implementing **Proportional Discounting**: distributing cart-level coupons mathematically across individual line items based on their weight in the cart before calculating GST.
+* **Checkout State Arbitration (`order.service.ts`):**
+  * Intercepts the user's `shippingAddress.state` during atomic checkout and processes the cart totals through the `TaxEngine` to finalize the CGST/SGST/IGST breakdown.
+
+### Database Integrity & Immutability
+* **Strict Product Tax Inheritance:**
+  * Upgraded `BaseProduct` Mongoose schema and Zod DTOs to make `hsnCode` and `taxProfile` mandatory for all polymorphic products (Bangles, Apparel, Fabric, etc.).
+* **Immutable Tax Snapshotting (`order.model.ts`):**
+  * Destroyed the flat `taxAmount` property.
+  * Orders now immutably snapshot `taxableValue`, `hsnCode`, `gstRate`, `cgst`, `sgst`, and `igst` at the line-item level. If tax laws change in the future, past financial ledgers remain 100% accurate for GST audits.
+
+### PDF Invoicing & Documentation
+* **Legal Tax Invoices (`invoice.generator.ts`):**
+  * Redesigned the in-memory PDF Kit generator to draw a fully compliant Indian Tax Invoice, featuring granular HSN, Taxable Value, and Central/State GST breakdown tables.
+* **Architecture Documentation:**
+  * Added `docs/architecture/legal-tax-compliance.md` as the master blueprint for the financial engine.
+  * Updated Cart, Order, and Product module documentation to reflect the Two-Pass calculation and Schema evolution.
+
 ### Features & Architecture
 * **Admin Dashboard Module (Read-Heavy Mathematical Engine):**
   * Deployed a centralized metrics aggregation engine (`src/modules/dashboard`) to provide real-time business health monitoring.

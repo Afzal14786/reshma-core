@@ -44,6 +44,7 @@ Because the API accepts multiple types of products at the same `POST /` endpoint
 1. Zod inspects the `itemType` string in the incoming `req.body`.
 2. If `itemType === 'BANGLE'`, Zod dynamically switches to the Bangle validation rules and guarantees the payload contains `bangleSizes`.
 3. If an attacker tries to send `cupSizes` while `itemType === 'BANGLE'`, Zod instantly strips the invalid data and throws a `400 Bad Request`.
+4. **Tax Inheritance:** Regardless of the `itemType`, the `BaseProductSchema` strictly forces the Admin to include a legally valid Indian `hsnCode` and `taxProfile`. If an Admin tries to create a Saree without defining its GST bracket, Zod drops the payload.
 
 ---
 
@@ -56,6 +57,23 @@ The Service layer isolates the database operations from the HTTP controllers and
   2. Saves the polymorphic document to MongoDB.
   3. **Cloudinary Rollback:** If MongoDB fails (e.g., Duplicate SKU constraint), the service automatically catches the error and deletes the newly uploaded images from Cloudinary to prevent orphaned asset storage bloat.
 * **`reserveStock`:** Utilizes MongoDB's atomic `$inc` combined with a `$gte` query firewall. This prevents Race Conditions if multiple users attempt to purchase the final inventory item at the exact same millisecond.  
+
+## 5. Legal Tax Compliance Engine (Indian GST)
+
+To survive Indian tax audits, the Product Catalog cannot rely on simple "Flat 18%" mathematical multipliers at checkout. Instead, the Catalog natively integrates with the platform's GST Engine.
+
+**The Base Schema Upgrades:**
+Every product, regardless of its polymorphic type, is legally required to hold two tax attributes at the MongoDB layer:
+* **`hsnCode`**: A 4-8 digit string mapping the product to its Harmonized System of Nomenclature chapter.
+* **`taxProfile`**: A strict Enum mapping the product to dynamic checkout math. 
+
+**Supported Tax Profiles:**
+* `IMITATION_JEWELLERY` (3%)
+* `LAC_JEWELLERY` (0%)
+* `UNSTITCHED_FABRIC` (5%)
+* `FOOTWEAR` (12%)
+* `GENERAL_ACCESSORY` (18%)
+* `STITCHED_APPAREL` (Dynamic: 5% or 18% based on the final post-coupon checkout price).
 
 ---  
 

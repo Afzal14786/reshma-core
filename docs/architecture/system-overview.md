@@ -33,7 +33,8 @@ High-level system design, security protocols, and database schemas.
 * **[Database Design Strategy](./database-design.md)** *(Polymorphic Schema Mapping & ADRs)*
 * **[Product Catalog Schema](./product-catalog.md)** *(Google Sheet Data to Database Mapping)*
 * **[Security Hardening Guide](./security-hardening.md)** *(Helmet, Rate Limiting, Zod Payload Firewalls)*
-* **[Payment Integration Architecture](./payment-integration.md)** *(HMAC-SHA256 Cryptographic Handshakes, ACID Transaction Integrity, and Idempotency Guards)*
+* **[Payment Integration Architecture](./payment-integration.md)** *(HMAC-SHA256 Cryptographic Handshakes, ACID Transaction Integrity, and Idempotency Guards)* 
+* **[Legal & Tax Compliance](./legal-tax-compliance.md)** *(Dynamic Indian GST Engine, State Arbitration, Proportional Discounting)*
 
 ### Domain Modules
 Deep dives into the specific business logic, DTOs, and services for each core feature.
@@ -42,14 +43,13 @@ Deep dives into the specific business logic, DTOs, and services for each core fe
 * **[Notification Engine](../modules/notification-module.md)** *(BullMQ Background Workers, SMTP, In-App Alerts)*
 * **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*
 * **[Cart Module](../modules/cart-module.md)** *(Dynamic Pricing, Attribute Hashing, Guest Merging)*
-* **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, State Machine)*
 * **[Return Module](../modules/return-module.md)** *(RMA State Machine, Razorpay Refunds, Atomic Restocks)*  
 * **[Interaction Module](../modules/interaction-module.md)** *(Threaded Comments, Async Aggregation, Verified Purchases)*
 * **[Coupon Module](../modules/coupon-module.md)** *(Temporal Firewalls, Cart Auto-Recalculation, TOCTOU Defense)*
 * **[Wishlist Module](../modules/wishlist-module.md)** *(Lazy Initialization, Atomic Arrays, Move-to-Cart Pipeline)*
 * **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, Shiprocket 3PL Dispatch, Delivery Automation)*
 * **[Search Module](../modules/search-module.md)** *(Typesense RAM Cluster, Eventual Consistency, Faceted Discovery)*
-* **[Dashboard Module](../modules/dashboard-module.md)** *(MongoDB $facet aggregations, Financial Reporting, Inventory Alerts)*
+* **[Dashboard Module](../modules/dashboard-module.md)** *(MongoDB $facet aggregations, Financial Reporting, Inventory Alerts)* 
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.
@@ -100,7 +100,12 @@ The development of Reshma-Core is divided into four major epics.
 ### Phase 4: Operations & Analytics (Completed)
 - [x] Return Arbitration Engine (Phase 8 Implementation).
 - [x] Interaction Engine (Phase 9 Implementation).
-- [x] Admin Dashboard aggregations (Sales volume, top-selling categories).
+- [x] Admin Dashboard aggregations (Sales volume, top-selling categories).  
+
+### Phase 5: Production Hardening & Scalability (In Progress)
+- [x] Epic 1: Legal & Financial Compliance (Dynamic Line-Item GST, Immutable Snapshots).
+- [ ] Epic 2: The Edge Cache & Workers (Redis Caching, BullMQ PDF Generation).
+- [ ] Epic 3: DevOps & Infrastructure (Graceful Shutdowns, Distributed Rate Limiting, Health Checks).
 
 ---
 *Maintained by Md Afzal Ansari | Core System Architecture*
