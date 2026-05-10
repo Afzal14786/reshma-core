@@ -1,3 +1,7 @@
+<!-- Full‑width banner -->
+<img src="../../src/assets/banner.png" alt="Reshma Bangles & Boutique - API Core" style="width: 100%; display: block; margin: 0;" />
+<br/>
+
 <div align="center">
 
   # System Overview & Architecture Index
