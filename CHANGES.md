@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Epic 2: DPDP/GDPR Privacy Compliance (Sprint 3: Data Portability)
+* **Asynchronous Export Engine:** Engineered a "Google Takeout" style data export pipeline to prevent Node.js thread blocking during massive data queries.
+* **The Background Worker:** Created `export.queue.ts` and `export.worker.ts` using BullMQ to concurrently fetch multi-domain data (Orders, Carts, Interactions) via `Promise.all()`.
+* **Dynamic File Attachments:** Upgraded `email.interface.ts` and `email.worker.ts` to accept stringified JSON payloads and convert them into secure `.json` file attachments via Nodemailer.
+* **The Controller Trigger:** Added `POST /users/profile/export` to execute the queue push and immediately return a non-blocking `202 Accepted` response.
+
 ### Epic 2: DPDP/GDPR Privacy Compliance (Sprint 2: The Anonymization Engine)
 * **The Master Orchestrator:** Engineered an ACID-compliant MongoDB Transaction in `UserService.deleteAccount` to handle the "Right to be Forgotten" cascading cleanup without leaving ghost data.
 * **Financial Data Scrambler:** Built `OrderService.anonymizeUserOrders` to irreversibly scramble shipping PII (`fullName`, `phone`, `streetAddress`) for deleted users while preserving `totalAmount` for tax compliance.

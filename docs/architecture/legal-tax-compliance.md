@@ -62,3 +62,13 @@ Reshma-Core solves this using a **Transactional Anonymization Engine**:
 2. **Ephemeral State Wiping:** The system permanently drops capacity-heavy but non-financial records, specifically the user's `Cart` and `Wishlist`.
 3. **Financial Math Preservation (`OrderService.anonymizeUserOrders`):** Past orders are **not** deleted. Instead, the system irreversibly scrambles the shipping PII (Personally Identifiable Information). For example, `fullName` becomes "Deleted User" and the specific address is redacted. The `totalAmount` and product data remain perfectly intact for tax audits.
 4. **Client-Side Revocation:** The API automatically sends a `clearCookie` command to the client's browser, physically destroying the `refresh_token` and guaranteeing immediate session termination.  
+
+### Pillar 3: Data Portability (The Right to Access)
+Under DPDP/GDPR, users have the legal right to request a machine-readable copy of all personal data held by the platform. 
+
+In an e-commerce ecosystem, synchronously compiling years of user history (orders, wishlists, reviews) would block the Node.js main thread and result in HTTP 504 Gateway Timeouts. Reshma-Core solves this using an asynchronous **"Google Takeout" Architecture**:
+
+1. **The Fire-and-Forget Trigger (`POST /api/v1/users/profile/export`):** The Express API instantly accepts the request, drops the `userId` into a Redis queue, and returns a `202 Accepted` within 10 milliseconds.
+2. **The Background Compiler (`export.worker.ts`):** A BullMQ worker picks up the job on a separate thread. It runs a `Promise.all()` to concurrently fetch the user's Profile, Orders, Carts, Wishlists, and Interactions directly from MongoDB.
+3. **Memory Transformation:** The worker sanitizes the data (stripping internal fields like password hashes) and compiles it into a structured JSON string.
+4. **Secure Delivery:** The system passes the stringified payload to the Notification Engine, which uses Nodemailer to dynamically attach it as a `data-export.json` file and emails it securely to the user.

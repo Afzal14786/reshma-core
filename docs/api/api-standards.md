@@ -109,20 +109,22 @@ The API strictly adheres to the following HTTP status codes mapping:
 
 **I. Auth Module (`/auth`)** * `POST /auth/register` - Register a new customer via Local Auth.
 * `POST /auth/login` - Login and receive JWT pair.
-* `POST /auth/google` - **(New)** Stateless Google OAuth 2.0 verification and Upsert.
+* `POST /auth/google` - Stateless Google OAuth 2.0 verification and Upsert.
 * `POST /auth/verify-otp` - Verify email via asynchronous OTP.
 * `POST /auth/refresh` - Issue new access token via HttpOnly Cookie.
 * `GET /auth/logout` - Clear session and destroy HttpOnly cookies.
 
 **II. Users Module (`/users`)** * `GET /users/profile` - Get current logged-in user profile & logistics data.
 * `PATCH /users/profile` - Update demographic profile details (Guarded against Mass Assignment).
-* `DELETE /users/profile` - **(New)** DPDP/GDPR Right to be Forgotten. Triggers the ACID Anonymization Engine.
-* `POST /users/profile/avatar` - **(New)** Upload `multipart/form-data` avatar directly to Cloudinary.
-* `POST /users/profile/addresses` - **(New)** Add a new shipping/billing address to the logistics array.
-* `PATCH /users/profile/addresses/:addressId` - **(New)** Update an address or toggle default delivery status.
-* `DELETE /users/profile/addresses/:addressId` - **(New)** Remove an address (autonomously reassigns defaults).
-* `POST /users/profile/security/password/otp` - **(New)** Request an OTP for Step-Up security verification.
-* `PATCH /users/profile/security/password` - **(New)** Execute cryptographic password update.
+* `DELETE /users/profile` - DPDP/GDPR Right to be Forgotten. Triggers the ACID Anonymization Engine.
+* `POST /users/profile/avatar` - Upload `multipart/form-data` avatar directly to Cloudinary.
+* `POST /users/profile/addresses` - Add a new shipping/billing address to the logistics array.
+* `PATCH /users/profile/addresses/:addressId` - Update an address or toggle default delivery status.
+* `DELETE /users/profile/addresses/:addressId` - Remove an address (autonomously reassigns defaults).
+* `POST /users/profile/security/password/otp` - Request an OTP for Step-Up security verification.
+* `PATCH /users/profile/security/password` - Execute cryptographic password update.
+* `POST /users/profile/export` - **(New)** DPDP/GDPR Data Portability. Asynchronously compiles user data via BullMQ and emails it as a JSON attachment. 
+
 
 **III. Products Module (`/products`) - Polymorphic Catalog** * `GET /products` - *(Public)* List catalog. Supports pagination and text search (`?page=1&limit=15&q=red&itemType=BANGLE`).
 * `GET /products/:id` - *(Public)* Get single product details.
