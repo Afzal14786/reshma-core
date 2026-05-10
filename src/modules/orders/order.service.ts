@@ -579,4 +579,43 @@ export class OrderService {
       }
     }
   }
+
+  /**
+   * DPDP / GDPR Legal Engine: The Order Scrambler
+   * * ARCHITECTURE NOTE:
+   * When a user requests account deletion, we CANNOT delete their past orders because
+   * it would permanently corrupt the company's financial accounting and tax reporting.
+   * Instead, we perform an irreversible cryptographic scramble of their PII
+   * (Personally Identifiable Information) on all past orders, preserving only the math.
+   */
+  public static async anonymizeUserOrders(
+    userId: string,
+    session: mongoose.ClientSession,
+  ) {
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+
+    const result = await Order.updateMany(
+      { user: { $eq: safeUserId } },
+      {
+        $set: {
+          "shippingAddress.fullName": "Deleted User",
+          "shippingAddress.phone": "0000000000",
+          "shippingAddress.streetAddress": "Redacted for Privacy (DPDP/GDPR)",
+          "shippingAddress.city": "Anonymized",
+          "shippingAddress.state": "Anonymized",
+          "shippingAddress.postalCode": "000000",
+          "shippingAddress.country": "Anonymized",
+        },
+      },
+      { session },
+    );
+
+    logger.info(
+      this.safeLog(
+        `[Privacy Engine] Anonymized ${result.modifiedCount} orders for deleted user ${safeUserId}`,
+      ),
+    );
+
+    return result;
+  }
 }

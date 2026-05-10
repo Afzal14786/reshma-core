@@ -26,6 +26,7 @@ export interface IAddress {
 export interface IUserPreferences {
   newsletter: boolean;
   smsAlerts: boolean;
+  privacyPolicyAcceptedAt?: Date;
 }
 
 /**

@@ -41,4 +41,24 @@ The platform origin is hardcoded to **West Bengal (WB)**. During checkout, the e
 Logistics is classified as a service in India. The platform extracts an 18% inclusive GST from the shipping charge (e.g., if shipping is ₹100, Base is ₹84.74 and Tax is ₹15.26).
 
 ## 4. Immutable Tax Snapshotting
-Tax laws change. To survive future government audits, the platform utilizes **Historical Immutability**. The exact `hsnCode`, `gstRate`, `cgst`, `sgst`, and `igst` numbers calculated at the millisecond of checkout are permanently frozen into the `Order` document's `items` array. If an admin deletes a product or the GST council changes a rate years later, past invoices remain mathematically intact.
+Tax laws change. To survive future government audits, the platform utilizes **Historical Immutability**. The exact `hsnCode`, `gstRate`, `cgst`, `sgst`, and `igst` numbers calculated at the millisecond of checkout are permanently frozen into the `Order` document's `items` array. If an admin deletes a product or the GST council changes a rate years later, past invoices remain mathematically intact.  
+
+## 5. DPDP & GDPR Privacy Compliance Architecture
+
+To comply with global data protection laws (including India's DPDP Act and Europe's GDPR), Reshma-Core implements "Legal Engineering" directly into the database and validation layers.
+
+### Pillar 1: Immutable Consent Tracking
+It is legally insufficient to simply display a "Privacy Policy" link on the frontend. The backend must independently verify and record user consent.
+
+1. **The Legal Gatekeeper (`register.dto.ts`):** All registration requests must pass a Zod validation layer enforcing `acceptPrivacyPolicy: true`. If a bot or malicious actor attempts to bypass the frontend UI and hit the API directly without this boolean, the request is instantly rejected (400 Bad Request).
+2. **The Immutable Ledger (`user.model.ts`):**
+   Upon successful registration (both Local and Google OAuth), the `AuthService` stamps the exact server timestamp (`new Date()`) into `user.preferences.privacyPolicyAcceptedAt`. This serves as undeniable cryptographic proof of *when* a specific user consented to data collection, protecting the platform during legal audits.
+
+### Pillar 2: The Right to be Forgotten (Anonymization Engine)
+Under DPDP/GDPR, users have the legal right to request complete account deletion. However, this creates a direct conflict with corporate tax law: if an e-commerce platform deletes past orders, its financial reporting becomes fraudulent.
+
+Reshma-Core solves this using a **Transactional Anonymization Engine**:
+1. **The Master Saga (`UserService.deleteAccount`):** The entire deletion process is wrapped in a MongoDB ACID Transaction (`ClientSession`). If any step fails, the entire deletion rolls back, preventing corrupted ghost states.
+2. **Ephemeral State Wiping:** The system permanently drops capacity-heavy but non-financial records, specifically the user's `Cart` and `Wishlist`.
+3. **Financial Math Preservation (`OrderService.anonymizeUserOrders`):** Past orders are **not** deleted. Instead, the system irreversibly scrambles the shipping PII (Personally Identifiable Information). For example, `fullName` becomes "Deleted User" and the specific address is redacted. The `totalAmount` and product data remain perfectly intact for tax audits.
+4. **Client-Side Revocation:** The API automatically sends a `clearCookie` command to the client's browser, physically destroying the `refresh_token` and guaranteeing immediate session termination.  

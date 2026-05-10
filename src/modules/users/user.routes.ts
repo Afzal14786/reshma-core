@@ -43,6 +43,13 @@ router.patch(
 );
 
 /**
+ * @route   DELETE /api/v1/users/profile
+ * @desc    DPDP / GDPR Right to be Forgotten. Permanently deletes the account and anonymizes data.
+ * @access  Private
+ */
+router.delete("/profile", protect, UserController.deleteAccount);
+
+/**
  * @route   POST /api/v1/users/me/avatar
  * @desc    Uploads a new avatar image to Cloudinary
  * @access  Private

@@ -55,12 +55,19 @@ export class AuthService {
       targetUser.password = data.password;
       if (data.phone) targetUser.phone = data.phone;
 
+      // LEGAL & COMPLIANCE: Stamp the exact timestamp of Privacy Policy Consent
+      targetUser.preferences = {
+        newsletter: targetUser.preferences?.newsletter ?? true,
+        smsAlerts: targetUser.preferences?.smsAlerts ?? true,
+        privacyPolicyAcceptedAt: new Date(),
+      };
+
       await targetUser.save();
       logger.info(`Updated existing unverified user during registration`, {
         userId: targetUser._id,
       });
     } else {
-      // New account initialization (Utilizing conditional spreads for strict exactOptionalPropertyTypes)
+      // New account initialization
       const userData = {
         firstname: data.firstname,
         lastname: data.lastname,
@@ -68,6 +75,12 @@ export class AuthService {
         password: data.password,
         authProvider: "LOCAL" as const,
         isEmailVerified: false,
+        // LEGAL & COMPLIANCE: Initial Consent Stamping
+        preferences: {
+          newsletter: true,
+          smsAlerts: true,
+          privacyPolicyAcceptedAt: new Date(),
+        },
         ...(data.phone && { phone: data.phone }),
       };
       targetUser = await User.create(userData);
@@ -97,8 +110,6 @@ export class AuthService {
   /**
    * Phase 2 of Registration: Verifies the OTP and activates the account.
    * * * SECURITY NOTE: Replay Attack Mitigation
-   * The instant an OTP is successfully validated, it is permanently deleted
-   * from Redis to prevent attackers from reusing intercepted OTPs.
    */
   public static async verifyEmailOtp(
     email: string,
@@ -221,9 +232,6 @@ export class AuthService {
    * Stateless Google OAuth Verification & Upsert
    * * * ARCHITECTURE NOTE:
    * We utilize the "Client-Side Token Flow" to maintain our stateless JWT architecture.
-   * The frontend handles the Google popup and sends us the `idToken`. We mathematically
-   * verify Google's signature here. This prevents the need for clunky server-side
-   * redirects (like Passport.js) and session memory bloat.
    */
   public static async loginWithGoogle(idToken: string) {
     try {
@@ -269,6 +277,12 @@ export class AuthService {
         email: sanitizedEmail,
         authProvider: "GOOGLE",
         isEmailVerified: true, // Implicitly true: Google already verified their identity
+        // LEGAL & COMPLIANCE: Implicit consent tracking for OAuth onboarding
+        preferences: {
+          newsletter: true,
+          smsAlerts: true,
+          privacyPolicyAcceptedAt: new Date(),
+        },
       });
 
       // Trigger the asynchronous onboarding Welcome Sequence
@@ -290,10 +304,6 @@ export class AuthService {
 
   /**
    * Terminates a session by blacklisting the Refresh Token in Redis.
-   * * * ARCHITECTURE NOTE:
-   * Because JWTs are stateless, they cannot be 'deleted' from the server.
-   * We push the token signature to a Redis blacklist with a TTL matching
-   * its natural expiration time. The auth middleware will check this list.
    */
   public static async logoutUser(refreshToken: string): Promise<void> {
     try {

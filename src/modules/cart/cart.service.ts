@@ -682,4 +682,31 @@ export class CartService {
     }
     return cart;
   }
+
+  /**
+   * DPDP / GDPR Legal Engine: The State Wiper
+   * * ARCHITECTURE NOTE:
+   * Permanently deletes the user's cart from the database during account deletion.
+   * Wrapped in the Orchestrator's ACID session to guarantee atomicity.
+   */
+  public static async deleteUserCart(
+    userId: string,
+    session: mongoose.ClientSession,
+  ) {
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+
+    // Physically erase the document. Soft deletes are not legally sufficient here.
+    const result = await Cart.deleteOne(
+      { user: { $eq: safeUserId } },
+      { session },
+    );
+
+    logger.info(
+      this.safeLog(
+        `[Privacy Engine] Erased cart for deleted user ${safeUserId}`,
+      ),
+    );
+
+    return result;
+  }
 }
