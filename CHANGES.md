@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Epic 2: DPDP/GDPR Privacy Compliance (Sprint 1: Consent Tracking)
+* **Immutable Consent Ledger:** Added `privacyPolicyAcceptedAt` timestamp to the `User` schema (`IUserPreferences`) to legally prove when a user agreed to data collection.
+* **The Legal Gatekeeper:** Updated `register.dto.ts` with a strict Zod boolean check (`acceptPrivacyPolicy`) that physically blocks account creation if the frontend checkbox is bypassed.
+* **Service Level Stamping:** Re-engineered `AuthService.registerLocal` and `AuthService.loginWithGoogle` to safely build user preferences and inject the exact server timestamp upon successful onboarding.
+
 ### Added ~ Industry-Level Observability
 
 ### Epic 1: Industry-Level Observability Completed
