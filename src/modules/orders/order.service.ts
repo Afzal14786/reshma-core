@@ -10,6 +10,7 @@ import { CheckoutInput } from "./dtos/order.dto";
 import razorpay from "@config/razorpay";
 import logger from "@config/logger";
 import { CouponModel } from "@modules/coupons/coupon.model";
+import { TaxEngine, TaxProfile } from "./tax.utils";
 import {
   IOrderItem,
   IOrder,
@@ -43,7 +44,6 @@ export class OrderService {
     const safeUserId = String(userId).replace(/[\r\n]/g, "");
 
     try {
-      // SECURITY: Strict CodeQL $eq wrapping to prevent query injection
       const cart = await Cart.findOne({
         user: { $eq: safeUserId },
       }).session(session);
@@ -53,12 +53,13 @@ export class OrderService {
       }
 
       let subTotal = 0;
-      const historicalItems: IOrderItem[] = [];
+      const deductedItems = [];
 
-      // Atomic Stock Reservation Loop
+      // PASS 1: Atomic Stock Reservation & Subtotal
       for (const item of cart.items) {
-        // FIREWALL: Find and decrement stock in the exact same atomic query.
-        const product = await Product.findOneAndUpdate(
+        // Find and decrement stock in the exact same atomic query
+        // Returning lean() gives us the hsnCode and taxProfile needed for Pass 2
+        const product: any = await Product.findOneAndUpdate(
           {
             _id: { $eq: String(item.product) },
             currentStock: { $gte: Number(item.quantity) },
@@ -73,34 +74,24 @@ export class OrderService {
         if (!product) {
           throw new AppError(
             HTTP_STATUS.CONFLICT,
-            `Item out of stock or insufficient quantity.`,
+            `Item out of stock or insufficient quantity. Checkout halted.`,
           );
         }
 
         const activePrice =
           product.basePrice - product.basePrice * (product.discount / 100);
-        subTotal += activePrice * item.quantity;
+        const preCouponTotal = activePrice * item.quantity;
+        subTotal += preCouponTotal;
 
-        const historyItem: IOrderItem = {
-          product: item.product as mongoose.Types.ObjectId,
-          name: product.name,
-          sku: product.sku,
-          quantity: item.quantity,
-          priceAtPurchase: activePrice,
-          imageSnapshot: product.images[0] || "",
-        };
-
-        if (item.selectedAttributes && item.selectedAttributes instanceof Map) {
-          const formattedAttributes: Record<string, string> = {};
-          for (const [key, value] of item.selectedAttributes.entries()) {
-            formattedAttributes[key] = String(value);
-          }
-          historyItem.selectedAttributes = formattedAttributes;
-        }
-
-        historicalItems.push(historyItem);
+        deductedItems.push({
+          item,
+          product,
+          activePrice,
+          preCouponTotal,
+        });
       }
 
+      // COUPON VALIDATION
       if (cart.appliedCoupon) {
         const couponCheck = await CouponModel.findById(cart.appliedCoupon)
           .session(session)
@@ -114,7 +105,7 @@ export class OrderService {
         ) {
           throw new AppError(
             HTTP_STATUS.CONFLICT,
-            "The promotional code applied to your cart has expired or reached its usage limit just now. Please refresh your cart.",
+            "The promotional code applied has expired or reached its limit. Please refresh your cart.",
           );
         }
       }
@@ -122,13 +113,87 @@ export class OrderService {
       const discountAmount = cart.discountAmount || 0;
       const appliedCoupon = cart.appliedCoupon || null;
 
-      const shippingCost = subTotal > 2000 ? 0 : 50;
-      const taxAmount = subTotal * 0.18;
+      // PASS 2: Proportional Discounting & Legal Tax Split
+      const historicalItems: IOrderItem[] = [];
+      let totalTax = 0,
+        totalCgst = 0,
+        totalSgst = 0,
+        totalIgst = 0;
 
-      // Calculate final total including the discount
-      const totalAmount = subTotal + shippingCost + taxAmount - discountAmount;
+      for (const d of deductedItems) {
+        // Proportional Discount Math
+        const itemWeightInCart = subTotal > 0 ? d.preCouponTotal / subTotal : 0;
+        const itemDiscount = discountAmount * itemWeightInCart;
+        const postCouponTotal = d.preCouponTotal - itemDiscount;
+        const discountedPricePerUnit = postCouponTotal / d.item.quantity;
 
-      // Failsafe: Prevent negative totals
+        // Line-Item Tax Bracket Resolution
+        const taxResult = TaxEngine.calculateLineItemTax(
+          d.product.taxProfile as TaxProfile,
+          discountedPricePerUnit,
+          d.item.quantity,
+        );
+
+        // State Arbitration (CGST/SGST vs IGST)
+        const taxSplit = TaxEngine.splitTaxByState(
+          taxResult.totalTax,
+          payload.shippingAddress.state,
+        );
+
+        totalTax += taxResult.totalTax;
+        totalCgst += taxSplit.cgst;
+        totalSgst += taxSplit.sgst;
+        totalIgst += taxSplit.igst;
+
+        // Construct Immutable Tax Snapshot
+        const historyItem: IOrderItem = {
+          product: d.item.product as mongoose.Types.ObjectId,
+          name: d.product.name,
+          sku: d.product.sku,
+          quantity: d.item.quantity,
+          priceAtPurchase: d.activePrice,
+          imageSnapshot: d.product.images[0] || "",
+
+          hsnCode: d.product.hsnCode,
+          taxableValue: taxResult.taxableValue,
+          gstRate: taxResult.gstRate,
+          cgst: taxSplit.cgst,
+          sgst: taxSplit.sgst,
+          igst: taxSplit.igst,
+        };
+
+        if (
+          d.item.selectedAttributes &&
+          d.item.selectedAttributes instanceof Map
+        ) {
+          const formattedAttributes: Record<string, string> = {};
+          for (const [key, value] of d.item.selectedAttributes.entries()) {
+            formattedAttributes[key] = String(value);
+          }
+          historyItem.selectedAttributes = formattedAttributes;
+        }
+
+        historicalItems.push(historyItem);
+      }
+
+      // PASS 3: Shipping Tax & Final Assembly
+      const totalAfterDiscount = subTotal - discountAmount;
+      const shippingCost = totalAfterDiscount > 2000 ? 0 : 100; // Aligned with CartService free shipping rule
+
+      // 18% Logistics Tax Isolation
+      const shipTaxResult = TaxEngine.calculateShippingTax(shippingCost);
+      const shipTaxSplit = TaxEngine.splitTaxByState(
+        shipTaxResult.totalTax,
+        payload.shippingAddress.state,
+      );
+
+      totalTax += shipTaxResult.totalTax;
+      totalCgst += shipTaxSplit.cgst;
+      totalSgst += shipTaxSplit.sgst;
+      totalIgst += shipTaxSplit.igst;
+
+      const totalAmount = totalAfterDiscount + totalTax + shippingCost;
+
       if (totalAmount < 0) {
         throw new AppError(
           HTTP_STATUS.BAD_REQUEST,
@@ -136,7 +201,6 @@ export class OrderService {
         );
       }
 
-      // SECURITY FIX: Explicit Object Mapping to sever Taint Analysis chain.
       const safeShippingAddress = {
         fullName: String(payload.shippingAddress.fullName),
         phone: String(payload.shippingAddress.phone),
@@ -152,12 +216,16 @@ export class OrderService {
         items: historicalItems,
         shippingAddress: safeShippingAddress,
         pricing: {
-          subTotal,
-          shippingCost,
-          taxAmount,
-          discountAmount,
+          subTotal: Number(subTotal.toFixed(2)),
+          discountAmount: Number(discountAmount.toFixed(2)),
           appliedCoupon,
-          totalAmount,
+          totalTax: Number(totalTax.toFixed(2)),
+          totalCgst: Number(totalCgst.toFixed(2)),
+          totalSgst: Number(totalSgst.toFixed(2)),
+          totalIgst: Number(totalIgst.toFixed(2)),
+          shippingCost: Number(shippingCost.toFixed(2)),
+          shippingTax: Number(shipTaxResult.totalTax.toFixed(2)),
+          totalAmount: Number(totalAmount.toFixed(2)),
         },
         paymentMethod: payload.paymentMethod === "COD" ? "COD" : "RAZORPAY",
         paymentStatus: "PENDING",
@@ -167,12 +235,11 @@ export class OrderService {
       const orderDocuments = await Order.create([orderPayload], { session });
       savedOrder = orderDocuments[0] as IOrder;
 
-      if (!savedOrder) {
+      if (!savedOrder)
         throw new AppError(
           HTTP_STATUS.INTERNAL_SERVER_ERROR,
           "Order creation failed.",
         );
-      }
 
       if (orderPayload.paymentMethod === "RAZORPAY") {
         const rzpOrder = await razorpay.orders.create({
@@ -185,11 +252,9 @@ export class OrderService {
         savedOrder.gatewayOrderId = rzpOrder.id;
         await savedOrder.save({ session });
       } else {
-        // COD Orders proceed directly to processing
         savedOrder.orderStatus = "PROCESSING";
         await savedOrder.save({ session });
 
-        // ---> ATOMIC SCARCITY: Increment usage immediately for COD orders
         if (appliedCoupon) {
           await CouponModel.findOneAndUpdate(
             { _id: { $eq: appliedCoupon } },
@@ -199,7 +264,6 @@ export class OrderService {
         }
       }
 
-      // Empty the cart and reset promotional properties completely
       await Cart.findOneAndUpdate(
         { user: { $eq: safeUserId } },
         {
@@ -213,7 +277,6 @@ export class OrderService {
         { session },
       );
 
-      // COMMIT: Database changes locked in
       await session.commitTransaction();
       logger.info(
         this.safeLog(

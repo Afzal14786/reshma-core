@@ -5,6 +5,7 @@ import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { CouponService } from "@modules/coupons/coupon.service";
 import { CouponModel } from "@modules/coupons/coupon.model";
+import { TaxEngine, TaxProfile } from "@modules/orders/tax.utils";
 import logger from "@config/logger";
 import {
   AddItemToCartInput,
@@ -22,6 +23,11 @@ interface ICartTotals {
   totalWeightGrams: number;
   hasFragileItems: boolean;
   totalItems: number;
+  // Legal Tax & Financial Fields
+  totalTax: number;
+  estimatedShipping: number;
+  shippingTax: number;
+  grandTotal: number;
 }
 
 /**
@@ -41,6 +47,9 @@ interface IPopulatedProduct {
   isActive: boolean;
   images: { url: string; altText?: string }[];
   itemType: string;
+  // Legal Tax Fields
+  hsnCode: string;
+  taxProfile: TaxProfile;
 }
 
 /**
@@ -104,13 +113,18 @@ export class CartService {
    * @method getCart
    * @description Self-Healing retrieval logic. Purges inactive products.
    */
+  /**
+   * @method getCart
+   * @description Self-Healing retrieval logic executing a two-pass tax calculation.
+   */
   public static async getCart(userId: string) {
     const safeUserId = String(userId).replace(/[\r\n]/g, "");
 
     let cart = await Cart.findOne({ user: { $eq: safeUserId } }).populate({
       path: "items.product",
+      // Enforced population of taxProfile to run the mathematical engine
       select:
-        "name sku basePrice discount currentStock weightGrams isFragile isActive images itemType",
+        "name sku basePrice discount currentStock weightGrams isFragile isActive images itemType hsnCode taxProfile",
     });
 
     if (!cart) {
@@ -122,6 +136,10 @@ export class CartService {
           totalWeightGrams: 0,
           hasFragileItems: false,
           totalItems: 0,
+          totalTax: 0,
+          estimatedShipping: 0,
+          shippingTax: 0,
+          grandTotal: 0,
         },
       };
     }
@@ -132,9 +150,17 @@ export class CartService {
       totalWeightGrams: 0,
       hasFragileItems: false,
       totalItems: 0,
+      totalTax: 0,
+      estimatedShipping: 0,
+      shippingTax: 0,
+      grandTotal: 0,
     };
+
     let needsHeal = false;
 
+    // ==========================================
+    // PASS 1: Aggregate Raw Totals
+    // ==========================================
     for (const item of cart.items) {
       const product = item.product as unknown as IPopulatedProduct | null;
 
@@ -158,12 +184,74 @@ export class CartService {
       await cart.save();
     }
 
+    // PASS 2: Proportional Discounting & Taxation
+
+    const globalDiscount = cart.discountAmount || 0;
+    const itemsWithTaxBreakdown = [];
+
+    for (const item of validItems) {
+      const product = item.product as unknown as IPopulatedProduct;
+      const activePrice =
+        product.basePrice - product.basePrice * (product.discount / 100);
+      const itemPreCouponTotal = activePrice * item.quantity;
+
+      // Mathematically determine this item's weight in the total cart value
+      const itemWeightInCart =
+        totals.subTotal > 0 ? itemPreCouponTotal / totals.subTotal : 0;
+
+      // Proportionally apply the coupon discount to this specific line item
+      const itemCouponDiscount = globalDiscount * itemWeightInCart;
+      const itemPostCouponTotal = itemPreCouponTotal - itemCouponDiscount;
+      const discountedPricePerUnit = itemPostCouponTotal / item.quantity;
+
+      // Process through the Legal Tax Engine
+      const taxResult = TaxEngine.calculateLineItemTax(
+        product.taxProfile,
+        discountedPricePerUnit,
+        item.quantity,
+      );
+
+      totals.totalTax += taxResult.totalTax;
+
+      // Attach tax calculations to the outgoing response for UI transparency
+      itemsWithTaxBreakdown.push({
+        ...item,
+        financials: {
+          preCouponTotal: itemPreCouponTotal,
+          postCouponTotal: itemPostCouponTotal,
+          taxableValue: taxResult.taxableValue,
+          gstRate: taxResult.gstRate,
+          totalTax: taxResult.totalTax,
+        },
+      });
+    }
+
+    // Fix Float Imprecision from summing
+    totals.totalTax = Number(totals.totalTax.toFixed(2));
+
+    // PASS 3: Shipping & Final Assembly
+    // Rule: Free shipping over ₹2000
+    const totalAfterDiscount = cart.totalAfterDiscount || totals.subTotal;
+    totals.estimatedShipping = totalAfterDiscount > 2000 ? 0 : 100;
+
+    // Extract the 18% service tax from the shipping charge
+    const shippingTaxResult = TaxEngine.calculateShippingTax(
+      totals.estimatedShipping,
+    );
+    totals.shippingTax = shippingTaxResult.totalTax;
+
+    totals.grandTotal = Number(
+      (totalAfterDiscount + totals.totalTax + totals.estimatedShipping).toFixed(
+        2,
+      ),
+    );
+
     return {
-      items: validItems,
+      items: itemsWithTaxBreakdown,
       totals,
       appliedCoupon: cart.appliedCoupon,
       discountAmount: cart.discountAmount,
-      totalAfterDiscount: cart.totalAfterDiscount,
+      totalAfterDiscount: totalAfterDiscount,
     };
   }
 

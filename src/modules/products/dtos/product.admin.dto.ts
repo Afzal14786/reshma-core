@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TaxProfile } from "@modules/orders/tax.utils";
 
 /**
  * Admin Product DTOs (Data Transfer Objects)
@@ -49,6 +50,19 @@ const BaseProductRules = {
     .optional(),
   tags: z.array(z.string()).default([]),
   isActive: z.boolean().default(true),
+  // NEW: Legal Tax Requirements
+  hsnCode: z
+    .string()
+    .regex(/^[0-9]{4,8}$/, "HSN code must be 4 to 8 numeric digits"),
+
+  // Zod Version Compatibility Fix:
+  // Using a single 'message' property bypasses the strict 'RawCreateParams' type error.
+  // Zod will automatically use this string if the admin either forgets to send the
+  // taxProfile (undefined) or sends an invalid string that isn't in the enum.
+  taxProfile: z.nativeEnum(TaxProfile, {
+    message:
+      "Invalid or missing tax profile. Please select a legally valid Indian GST profile.",
+  }),
 };
 
 const BaseProductSchema = z.object(BaseProductRules);

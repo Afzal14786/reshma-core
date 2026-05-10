@@ -1,4 +1,5 @@
 import { Document } from "mongoose";
+import { TaxProfile } from "@modules/orders/tax.utils";
 
 /**
  * Global Types
@@ -73,6 +74,10 @@ export interface IBaseProduct extends Document {
    */
   ratingsMetadata: IRatingsMetadata;
   isActive: boolean;
+
+  // Legal Tax Requirements
+  hsnCode: string;
+  taxProfile: TaxProfile;
   createdAt: Date;
   updatedAt: Date;
 }

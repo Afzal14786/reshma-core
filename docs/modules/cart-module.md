@@ -54,6 +54,17 @@ This module bridges the gap between the Anonymous Frontend User and the Authenti
 
 **Consequence:** The compiler retains absolute certainty of the internal Mongoose Document properties (like `__v`), ensuring 100% type safety during highly volatile cart mutations.
 
+
+
+## The Two-Pass Financial Engine (Dynamic GST Compliance)
+The `CartService` is responsible for generating dynamic, ephemeral tax calculations before checkout. To comply with Indian GST laws (which dictate that tax is calculated on the *Transaction Value* rather than the MRP), the cart abandons flat subtotals and executes a strict multi-pass algorithm:
+
+* **Pass 1 (Aggregation):** Computes the raw subtotal, total weight, and identifies fragile items.
+* **Pass 2 (Proportional Taxation & Discounting):** 1. Distributes the active `discountAmount` (from coupons) mathematically across all line items based on their weight in the cart. This prevents the "refund exploit" if a user returns a partially discounted item.
+    2. Passes the newly discounted unit price into the `TaxEngine` to legally determine the GST bracket (e.g., resolving the Indian tax rule where stitched apparel dropping below ₹2,500 physically shifts from 18% to 5% GST).
+    3. Injects a granular `financials` object inside every item array for complete frontend UI transparency.
+* **Pass 3 (Logistics):** Evaluates free-shipping thresholds and extracts the mandated 18% logistics service tax from the final shipping cost.
+
 ## Security & Validation Firewalls
 
 All inbound payloads are intercepted by strict Zod Data Transfer Objects (`cart.dto.ts`)[cite: 2]:

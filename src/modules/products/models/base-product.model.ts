@@ -1,6 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 import { IBaseProduct } from "../interfaces";
 import { deleteFromCloudinary } from "@config/cloudinary";
+import { TaxProfile } from "@modules/orders/tax.utils";
 import logger from "@config/logger";
 
 /**
@@ -65,6 +66,21 @@ const BaseProductSchema = new Schema<IBaseProduct>(
         validator: (arr: string[]) => arr.length > 0,
         message: "Minimum one image required",
       },
+    },
+
+    // Legal Tax Requirements
+    hsnCode: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: [4, "HSN Code must be at least 4 digits"],
+      maxlength: [8, "HSN Code cannot exceed 8 digits"],
+    },
+
+    taxProfile: {
+      type: String,
+      enum: Object.values(TaxProfile),
+      required: true,
     },
 
     // rating & review meta data
