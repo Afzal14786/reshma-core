@@ -18,7 +18,8 @@ export type EmailJobType =
   | "RETURN_REQUESTED"
   | "RETURN_APPROVED"
   | "RETURN_REJECTED"
-  | "RETURN_REFUNDED";
+  | "RETURN_REFUNDED"
+  | "DATA_EXPORT";
 
 interface BaseEmailJob {
   type: EmailJobType;
@@ -90,6 +91,15 @@ export interface IReturnRefundedJob extends BaseEmailJob {
   data: { firstname: string; orderNumber: string; refundAmount: number };
 }
 
+// DPDP / GDPR Takeout Payload
+export interface IDataExportJob extends BaseEmailJob {
+  type: "DATA_EXPORT";
+  data: {
+    firstname: string;
+    exportPayloadString: string; // Passed as string to survive Redis serialization safely
+  };
+}
+
 // The exported union ensures our worker's exhaustive switch statement is flawless
 export type EmailJobPayload =
   | IOtpVerificationJob
@@ -103,4 +113,5 @@ export type EmailJobPayload =
   | IReturnRequestedJob
   | IReturnApprovedJob
   | IReturnRejectedJob
-  | IReturnRefundedJob;
+  | IReturnRefundedJob
+  | IDataExportJob;

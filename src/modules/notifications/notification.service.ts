@@ -12,6 +12,7 @@ import { passwordUpdateTemplate } from "./templates/password-update";
 import { orderPlacedTemplate } from "./templates/order-placed";
 import { orderCancelledTemplate } from "./templates/order-cancel";
 import { orderDeliveredTemplate } from "./templates/order-delivered";
+import { dataExportTemplate } from "./templates/data-export";
 
 import { returnRequestedTemplate } from "./templates/return-requested";
 import { returnApprovedTemplate } from "./templates/return-approved";
@@ -441,6 +442,32 @@ export class NotificationService {
     );
   }
 
+  /**
+   * DPDP / GDPR LEGAL ENGINE: Send Data Export
+   * * ARCHITECTURE NOTE:
+   * We accept the raw Buffer from the export worker, convert it to a string,
+   * and pass it into the BullMQ Email queue. Passing it as a string prevents
+   * Redis from corrupting the Buffer during JSON serialization.
+   */
+  public static async sendDataExportEmail(
+    to: string,
+    firstname: string,
+    fileBuffer: Buffer,
+  ): Promise<void> {
+    await dispatchEmailJob({
+      type: "DATA_EXPORT",
+      to,
+      data: {
+        firstname,
+        exportPayloadString: fileBuffer.toString("utf-8"),
+      },
+    });
+
+    logger.info(
+      `[Notification] Data Portability Export email job queued for ${to}`,
+    );
+  }
+
   // QUEUE COMPILER (Used ONLY by email.worker.ts)
 
   /**
@@ -550,6 +577,12 @@ export class NotificationService {
             payload.data.orderNumber,
             payload.data.refundAmount,
           ),
+        };
+
+      case "DATA_EXPORT":
+        return {
+          subject: "Your Data Export - Reshma Bangles Privacy",
+          html: dataExportTemplate(payload.data.firstname),
         };
       default:
         // We stringify the raw payload to capture the bug in server logs.
