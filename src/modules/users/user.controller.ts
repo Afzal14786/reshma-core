@@ -5,6 +5,7 @@ import { AppError } from "../../shared/utils/app-error";
 import { HTTP_STATUS } from "../../shared/constant/http-codes";
 import { ApiResponse } from "../../shared/utils/api-response";
 import { uploadBufferToCloudinary } from "../../config/cloudinary";
+import { ExportQueueManager } from "@shared/queues/export.queue";
 
 import { UpdateProfileInput } from "./dtos/update-profile.dto";
 import { AddAddressInput, UpdateAddressInput } from "./dtos/address.dto";
@@ -333,6 +334,44 @@ export class UserController {
         res,
         HTTP_STATUS.OK,
         "Account successfully deleted and personal data anonymized.",
+        null,
+      ).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @route   POST /api/v1/users/profile/export
+   * @desc    DPDP/GDPR Data Portability. Drops the user into the background compilation queue.
+   * @access  Private (Requires JWT)
+   */
+  public static async exportData(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      // 1. Authentication Check
+      const userId = req.user?._id as unknown as string;
+      if (!userId || !req.user) {
+        throw new AppError(HTTP_STATUS.UNAUTHORIZED, "Authentication required");
+      }
+
+      // 2. Fire and Forget to BullMQ
+      // We do not await the actual data compilation, only the Redis insertion.
+      await ExportQueueManager.enqueueDataExport(
+        userId,
+        req.user.email,
+        req.user.firstname,
+      );
+
+      // 3. Instant Client Response
+      // 202 Accepted tells the client: "We got the request, but processing isn't finished yet."
+      new ApiResponse(
+        res,
+        HTTP_STATUS.ACCEPTED, // 202
+        "Your data export has been queued. We will email you the file shortly.",
         null,
       ).send();
     } catch (error) {

@@ -4,7 +4,6 @@ import { protect } from "@shared/middlewares/auth.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
 import { upload } from "@shared/middlewares/upload.middleware";
 import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
-
 import { UpdateProfileSchema } from "./dtos/update-profile.dto";
 import { AddAddressSchema, UpdateAddressSchema } from "./dtos/address.dto";
 import { UpdatePasswordSchema } from "./dtos/security.dto";
@@ -48,6 +47,13 @@ router.patch(
  * @access  Private
  */
 router.delete("/profile", protect, UserController.deleteAccount);
+
+/**
+ * @route   POST /api/v1/users/profile/export
+ * @desc    DPDP / GDPR Data Portability. Asynchronously compiles user data and emails it.
+ * @access  Private
+ */
+router.post("/profile/export", protect, UserController.exportData);
 
 /**
  * @route   POST /api/v1/users/me/avatar
