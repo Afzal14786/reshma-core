@@ -35,15 +35,31 @@ export interface IOrderItem {
   priceAtPurchase: number;
   selectedAttributes?: Record<string, string>;
   imageSnapshot: string;
+
+  // mmutable Tax Snapshot (Line-Item Level Compliance)
+  hsnCode: string;
+  taxableValue: number; // The exact value the tax was calculated on (after proportional coupon discounts)
+  gstRate: number; // e.g., 0, 3, 5, 12, 18
+  cgst: number; // Central GST Amount
+  sgst: number; // State GST Amount
+  igst: number; // Integrated GST Amount
 }
 
 export interface IOrderPricing {
   subTotal: number;
-  shippingCost: number;
-  taxAmount: number;
   discountAmount: number;
   appliedCoupon: Types.ObjectId | null;
-  totalAmount: number;
+
+  // Granular Tax Totals
+  totalTax: number; // The grand total of all tax combined
+  totalCgst: number; // Sum of all CGST from items
+  totalSgst: number; // Sum of all SGST from items
+  totalIgst: number; // Sum of all IGST from items
+
+  shippingCost: number; // The raw shipping service charge
+  shippingTax: number; // The 18% GST extracted specifically from the shipping service
+
+  totalAmount: number; // Final amount payable by the customer
 }
 
 export interface IOrder extends Document {

@@ -25,6 +25,14 @@ const OrderItemSchema = new Schema(
 
     // Snapshots the main display image in case the product is deleted later
     imageSnapshot: { type: String, required: true },
+
+    // Immutable Tax Snapshot (Line-Item Level)
+    hsnCode: { type: String, required: true },
+    taxableValue: { type: Number, required: true, min: 0 },
+    gstRate: { type: Number, required: true, min: 0 },
+    cgst: { type: Number, required: true, default: 0, min: 0 },
+    sgst: { type: Number, required: true, default: 0, min: 0 },
+    igst: { type: Number, required: true, default: 0, min: 0 },
   },
   { _id: false }, // PERFORMANCE: Disabling _id for subdocuments saves significant BSON storage space
 );
@@ -58,14 +66,22 @@ const OrderSchema = new Schema<IOrder>(
 
     pricing: {
       subTotal: { type: Number, required: true },
-      shippingCost: { type: Number, required: true, default: 0 },
-      taxAmount: { type: Number, required: true, default: 0 },
       discountAmount: { type: Number, required: true, default: 0 },
       appliedCoupon: {
         type: Schema.Types.ObjectId,
         ref: "Coupon",
         default: null,
       },
+
+      // Granular Tax Totals
+      totalTax: { type: Number, required: true, default: 0 },
+      totalCgst: { type: Number, required: true, default: 0 },
+      totalSgst: { type: Number, required: true, default: 0 },
+      totalIgst: { type: Number, required: true, default: 0 },
+
+      shippingCost: { type: Number, required: true, default: 0 },
+      shippingTax: { type: Number, required: true, default: 0 }, // 18% Logistics Tax
+
       totalAmount: { type: Number, required: true },
     },
 
