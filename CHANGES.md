@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Fixed ~ Security & Infrastructure
+
+* **Express 5.x Compatibility Fix:** Resolved `TypeError: Cannot set property query of #<IncomingMessage>` by migrating away from legacy middlewares that attempt to reassign read-only Express 5 getters.
+* **Custom NoSQL Sanitizer:** Engineered a recursive `Sanitizer.ts` utility that deep-cleans incoming objects by stripping MongoDB operators (`$`) and dot-notation keys (`.`). 
+* **Hardened Validation Pipeline:** Re-engineered `validate.middleware.ts` to utilize `Object.defineProperty`. This allows the application to inject sanitized and Zod-validated data into `req.query` and `req.params` while satisfying Express 5's architectural constraints.
+* **Taint-Chain Isolation:** Implemented shallow-cloning for all incoming request objects before sanitization, ensuring raw malicious input is never processed by the business logic.
+
+### DevOps & Reliability
+* **Health Check Stability:** Restored functionality to the `/api/v1/health` endpoint by removing the global sanitizer crash-loop.
+
 ### Added ~ DevOps & Infrastructure  
 
 ### Cluster-Ready Upgrades & Infrastructure
