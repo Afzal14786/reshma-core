@@ -1,15 +1,14 @@
 import { Queue } from "bullmq";
-import { redisClient } from "@config/redis";
+import Redis from "ioredis";
+import env from "@config/env";
 import logger from "@config/logger";
 
-/**
- * ARCHITECTURE NOTE:
- * BullMQ requires an underlying Redis connection. We cast it to 'any' here
- * to seamlessly bypass strict type-checking differences between 'ioredis'
- * and the standard Node Redis client, while maintaining identical functionality.
- */
+// Create a dedicated ioredis connection specifically for BullMQ
+// maxRetriesPerRequest: null is required by BullMQ to prevent queue stalling
+const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+
 export const dataExportQueue = new Queue("data-export-queue", {
-  connection: redisClient as any,
+  connection,
 });
 
 /**

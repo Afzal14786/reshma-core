@@ -1,5 +1,6 @@
 import { Worker, Job } from "bullmq";
-import { redisClient } from "@config/redis";
+import Redis from "ioredis";
+import env from "@config/env";
 import logger from "@config/logger";
 
 // Mongoose Models for direct DB access
@@ -18,6 +19,9 @@ import { NotificationService } from "../../modules/notifications/notification.se
 const safeLog = (message: string): string => {
   return message.replace(/[\r\n]/g, "");
 };
+
+// Create a dedicated ioredis connection specifically for the BullMQ Worker
+const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 
 /**
  * DPDP / GDPR Legal Engine: The Takeout Worker
@@ -63,7 +67,7 @@ export const dataExportWorker = new Worker(
 
       // SECURITY FIX: Strip internal system fields that the user shouldn't see
       const sanitizedProfile = { ...profile };
-      delete sanitizedProfile.password;
+      delete (sanitizedProfile as any).password;
       delete (sanitizedProfile as any).__v;
 
       // 2. Data Assembly: Construct the formal JSON payload
@@ -92,7 +96,6 @@ export const dataExportWorker = new Worker(
       const fileBuffer = Buffer.from(jsonString, "utf-8");
 
       // 4. Delivery: Hand the buffer to the Notification infrastructure
-      // NOTE: We will build this exact method in Step 2!
       await NotificationService.sendDataExportEmail(
         safeEmail,
         firstname,
@@ -115,7 +118,7 @@ export const dataExportWorker = new Worker(
     }
   },
   {
-    connection: redisClient as any,
+    connection,
     concurrency: 5, // Process up to 5 exports simultaneously to prevent memory bloat
   },
 );
