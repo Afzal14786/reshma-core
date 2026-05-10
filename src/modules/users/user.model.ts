@@ -63,6 +63,8 @@ const UserSchema = new Schema<IUser>(
     preferences: {
       newsletter: { type: Boolean, default: true }, // Default opt-in for aggressive marketing growth
       smsAlerts: { type: Boolean, default: true },
+      // ARCHITECTURE NOTE: This timestamp proves exactly when the user consented to data collection.
+      privacyPolicyAcceptedAt: { type: Date },
     },
     isEmailVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
