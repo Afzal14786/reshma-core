@@ -10,7 +10,8 @@ import env from "@config/env";
 export const baseEmailLayout = (title: string, content: string): string => {
   const currentYear = new Date().getFullYear();
   // Using a secure HTTPS Cloudinary link for the logo ensures it renders in Gmail
-  const logoUrl = "https://res.cloudinary.com/dl9bfojiu/image/upload/email-logo_z1eqed.svg";
+  const logoUrl =
+    "https://res.cloudinary.com/dl9bfojiu/image/upload/email-logo_z1eqed.svg";
 
   return `
   <!DOCTYPE html>
