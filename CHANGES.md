@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Added ~ Industry-Level Observability
+
+### Epic 1: Industry-Level Observability Completed
+* **Enterprise HTTP Logging:** Integrated `morgan` to intercept all HTTP traffic, accurately calculating exact millisecond response latencies and payload sizes.
+* **Winston Stream Bridge:** Piped Morgan's output directly into Winston to ensure all HTTP access logs benefit from daily log rotation and archival.
+* **Environment-Aware Formatting:** Re-engineered `logger.ts` to output beautiful, colorized text in development, while strictly enforcing structured JSON output in production for seamless AWS CloudWatch / Datadog integration.
+* **PII Scrubbing:** Configured the HTTP logger to intentionally ignore `req.body` to prevent accidental logging of sensitive customer data (passwords, Razorpay HMAC signatures).
+
 ### Fixed ~ Security & Infrastructure
 
 * **Express 5.x Compatibility Fix:** Resolved `TypeError: Cannot set property query of #<IncomingMessage>` by migrating away from legacy middlewares that attempt to reassign read-only Express 5 getters.

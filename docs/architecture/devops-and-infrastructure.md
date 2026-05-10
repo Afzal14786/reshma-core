@@ -40,4 +40,27 @@ When deploying a new version of the code, AWS or Docker sends a `SIGTERM` signal
 2. Commands the Express Server to stop accepting *new* HTTP requests.
 3. Keeps the event loop alive to finish processing active user requests.
 4. Safely drains and disconnects the Mongoose and Redis connection pools.
-5. Exits cleanly with code `0`.
+5. Exits cleanly with code `0`.  
+
+## 5. Observability & Enterprise Logging 
+
+To ensure high observability, rapid debugging, and seamless integration with cloud log aggregators (e.g., AWS CloudWatch, Datadog), Reshma-Core implements a robust, environment-aware logging pipeline.
+
+### The Stack
+* **Morgan:** Acts as the HTTP Request Interceptor (The Stopwatch).
+* **Winston:** Acts as the Logger and Formatter.
+* **Winston-Daily-Rotate-File:** Manages file retention and disk space.
+
+### Architectural Separation of Concerns
+1. **HTTP Interception (`http-logger.ts`):** Morgan intercepts every incoming request at the top of the Express pipeline. It calculates the exact millisecond latency (`:response-time ms`), payload size (`:res[content-length]`), status code, and IP address. Morgan does *not* log `req.body` to act as a natural PII-scrubber (protecting passwords and payment signatures).
+2. **The Bridge:**
+   Morgan is configured to bypass the standard `console.log` and pipe its data-rich string directly into Winston's `info` stream.
+3. **Environment-Aware Formatting (`logger.ts`):**
+   * **Development:** Winston formats the output as human-readable, colorized text with timestamps to keep the developer console clean.
+   * **Production:** Winston strictly formats all output as **JSON objects**. This is mandatory for cloud infrastructure to parse, index, and alert on log metrics.
+
+### Retention Strategy
+To prevent log files from exhausting server disk space, the system uses daily rotation:
+* `error-%DATE%.log`: Captures only severe system crashes and 500-level HTTP responses.
+* `combined-%DATE%.log`: Captures all HTTP traffic and system events.
+* **Limits:** Logs are auto-zipped after 24 hours and automatically hard-deleted after 14 days or if they exceed 20MB in size.
