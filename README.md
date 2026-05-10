@@ -1,6 +1,9 @@
-<div align="center">
+<!-- Full‑width banner -->
+<img src="src/assets/banner.png" alt="Reshma Bangles & Boutique - API Core" style="width: 100%; display: block; margin: 0;" />
 
-  <img src="src/assets/reshma_bangles.jpg" alt="Reshma Bangles & Boutique Logo" width="180" />
+<br />
+
+<div align="center">
 
   # 🛍️ Reshma Bangles & Boutique (API Core)
   
