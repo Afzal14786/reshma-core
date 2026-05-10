@@ -1,7 +1,6 @@
 import express, { Application, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import mongoSanitize from "express-mongo-sanitize"; // NEW: Enterprise NoSQL Firewall
 import cookieParser from "cookie-parser";
 import env from "@config/env";
 
@@ -58,15 +57,6 @@ app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
 // Parse cookies attached to the client request
 app.use(cookieParser(env.JWT_ACCESS_SECRET));
-
-/**
- * Global Security Firewall: NoSQL Injection Defense
- * * ARCHITECTURE NOTE:
- * Placed exactly here (after parsers, before routes). It recursively scans req.body,
- * req.query, and req.params, stripping out any keys starting with '$' or '.'
- * This is a global safety net in case a specific route lacks Zod validation.
- */
-app.use(mongoSanitize());
 
 /**
  * Mount Global Router
