@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import { ProductService } from "../product.service";
-import { ApiResponse } from "../../../shared/utils/api-response";
-import { HTTP_STATUS } from "../../../shared/constant/http-codes";
+import { ApiResponse } from "@shared/utils/api-response";
+import { HTTP_STATUS } from "@shared/constant/http-codes";
+import { CacheManager } from "@shared/utils/cache.utils";
+import logger from "@config/logger";
 
 /**
  * Admin Product Controller
@@ -24,6 +26,14 @@ export class AdminProductController {
 
     const product = await ProductService.createProduct(payload, files);
 
+    // FIRE AND FORGET: Wipe all cached product pages so the new item appears instantly
+    // We attach a .catch() to prevent unhandled promise rejections from crashing the server
+    CacheManager.invalidateCachePattern("/api/v1/products").catch((err) =>
+      logger.error(
+        `[AdminProductController] Background cache invalidation failed: ${err.message}`,
+      ),
+    );
+
     // Utilize the .send() method of the ApiResponse class directly
     return new ApiResponse(
       res,
@@ -43,6 +53,13 @@ export class AdminProductController {
 
     const product = await ProductService.updateProduct(id, payload);
 
+    // FIRE AND FORGET: Instantly clear the cache to reflect the updated price/stock/details
+    CacheManager.invalidateCachePattern("/api/v1/products").catch((err) =>
+      logger.error(
+        `[AdminProductController] Background cache invalidation failed: ${err.message}`,
+      ),
+    );
+
     return new ApiResponse(
       res,
       HTTP_STATUS.OK,
@@ -59,6 +76,13 @@ export class AdminProductController {
     const id = req.params.id as string;
 
     await ProductService.softDeleteProduct(id);
+
+    // FIRE AND FORGET: Wipe the cache so users do not see ghost/deleted items
+    CacheManager.invalidateCachePattern("/api/v1/products").catch((err) =>
+      logger.error(
+        `[AdminProductController] Background cache invalidation failed: ${err.message}`,
+      ),
+    );
 
     return new ApiResponse(
       res,
