@@ -107,80 +107,86 @@ The API strictly adheres to the following HTTP status codes mapping:
 
 ## 6. Master Endpoint Directory  
 
-**1. Auth Module (`/auth`)** `POST /auth/register` - Register a new customer  
+**I. Auth Module (`/auth`)** * `POST /auth/register` - Register a new customer via Local Auth.
+* `POST /auth/login` - Login and receive JWT pair.
+* `POST /auth/google` - **(New)** Stateless Google OAuth 2.0 verification and Upsert.
+* `POST /auth/verify-otp` - Verify email via asynchronous OTP.
+* `POST /auth/refresh` - Issue new access token via HttpOnly Cookie.
+* `GET /auth/logout` - Clear session and destroy HttpOnly cookies.
 
-* `POST /auth/login` - Login and receive JWT pair
-* `POST /auth/verify-otp` - Verify email via asynchronous OTP
-* `POST /auth/refresh` - Issue new access token via HttpOnly Cookie
-* `GET /auth/logout` - Clear session and destroy HttpOnly cookies  
+**II. Users Module (`/users`)** * `GET /users/profile` - Get current logged-in user profile & logistics data.
+* `PATCH /users/profile` - Update demographic profile details (Guarded against Mass Assignment).
+* `DELETE /users/profile` - **(New)** DPDP/GDPR Right to be Forgotten. Triggers the ACID Anonymization Engine.
+* `POST /users/profile/avatar` - **(New)** Upload `multipart/form-data` avatar directly to Cloudinary.
+* `POST /users/profile/addresses` - **(New)** Add a new shipping/billing address to the logistics array.
+* `PATCH /users/profile/addresses/:addressId` - **(New)** Update an address or toggle default delivery status.
+* `DELETE /users/profile/addresses/:addressId` - **(New)** Remove an address (autonomously reassigns defaults).
+* `POST /users/profile/security/password/otp` - **(New)** Request an OTP for Step-Up security verification.
+* `PATCH /users/profile/security/password` - **(New)** Execute cryptographic password update.
 
-**2. Users Module (`/users`)**  `GET /users/profiles` - Get current logged-in user profile  
-* `PATCH /users/profiles` - Update profile details
-* `GET /users` - *(Admin)* List all registered customers  
-
-**3. Products Module (`/products`) - Polymorphic Catalog**  
-
-* `GET /products` - *(Public)* List catalog. Supports pagination and text search (`?page=1&limit=15&q=red&itemType=BANGLE`)
-* `GET /products/:id` - *(Public)* Get single product details 
+**III. Products Module (`/products`) - Polymorphic Catalog** * `GET /products` - *(Public)* List catalog. Supports pagination and text search (`?page=1&limit=15&q=red&itemType=BANGLE`).
+* `GET /products/:id` - *(Public)* Get single product details.
 * `POST /products` - *(Admin)* Create a new product. **Requires** `multipart/form-data` for Cloudinary image uploads. 
-* `PATCH /products/:id` - *(Admin)* Update product details or stock counts.
+* `PATCH /products/:id` - *(Admin)* Update product text details or stock counts.
+* `PATCH /products/:id/images` - **(New)** *(Admin)* Append new Cloudinary images to an existing product.
 * `DELETE /products/:id` - *(Admin)* Soft-delete a product to preserve historical receipts. 
 
-**4. Cart Module (`/cart`)**
-* `GET /cart` - Retrieve the active user's cart
-* `POST /cart/merge` - Merge guest carts
-* `POST /cart/add` - Add/increment items
-* `PATCH /cart/update` - Override specific quantity
-* `DELETE /cart/item/:productId` - Drop product
-* `DELETE /cart/clear` - Empty cart
-* `POST /cart/coupon/apply` - **(New)** Apply a promotional code to the cart.
-* `DELETE /cart/coupon/remove` - **(New)** Strip the active promotional code.
+**IV. Cart Module (`/cart`)**
+* `GET /cart` - Retrieve the active user's cart (Dynamically applies active tax profiles).
+* `POST /cart/merge` - Merge guest carts upon login.
+* `POST /cart/add` - Add/increment items.
+* `PATCH /cart/update` - Override specific quantity.
+* `DELETE /cart/item/:productId` - Drop product.
+* `DELETE /cart/clear` - Empty cart.
+* `POST /cart/coupon/apply` - Apply a promotional code to the cart.
+* `DELETE /cart/coupon/remove` - Strip the active promotional code.
 
-**5. Orders & Checkout (`/orders`)**
-* `POST /orders/checkout` - Initialize ACID transaction and Razorpay Order.
-* `POST /orders/verify-payment` - Verify webhook payment signature.
+**V. Orders & Checkout (`/orders`)**
+* `POST /orders/checkout` - Initialize ACID transaction and Razorpay Order (Stock deduction).
+* `POST /orders/verify-payment` - Verify webhook payment signature (Frontend Handshake).
 * `POST /orders/webhook` - Public HMAC-secured background handler for Razorpay pings.
 * `GET /orders/:id/invoice` - Stream on-the-fly PDF tax invoice.
 * `GET /orders/me` - List current user's order history.
 * `GET /orders` - *(Admin)* View all incoming orders.
-* `POST /orders/admin/:id/dispatch` - **(New)** *(Admin)* Trigger Shiprocket physical dispatch, generate AWB, and schedule courier pickup.
-* `POST /orders/shiprocket-webhook` - **(New)** *(Public)* Shiprocket server-to-server ping listener for automated delivery tracking.
+* `POST /orders/admin/:id/dispatch` - *(Admin)* Trigger Shiprocket physical dispatch, generate AWB, and schedule courier pickup.
+* `POST /orders/shiprocket-webhook` - *(Public)* Shiprocket server-to-server ping listener for automated delivery tracking.
 
-**6. Returns Module (/returns)**
+**VI. Returns Module (`/returns`)**
 * `POST /returns/:orderId/initiate` - Submit return request (Requires Cloudinary image proof for Fragile items).
 * `GET /returns/me` - Fetch the authenticated user's return history.
 * `GET /returns/admin` - *(Admin)* View the global returns arbitration queue.
 * `PATCH /returns/admin/:returnId/arbitrate` - *(Admin)* Approve or Reject a return request.
 * `POST /returns/admin/:returnId/process` - *(Admin)* Execute Razorpay refund and atomically restock inventory.  
 
-**7. Interactions Module (/interactions)**  
-
-* `GET /interactions/product/:productId` - (*Public*) Fetch paginated top-level reviews for a product.
+**VII. Interactions Module (`/interactions`)** * `GET /interactions/product/:productId` - (*Public*) Fetch paginated top-level reviews for a product.
 * `POST /interactions` - Create a new review or threaded comment.
 * `PATCH /interactions/:interactionId/vote` - Upvote or downvote a specific interaction.   
 
-**8. Coupon Module (`/coupons`)**
+**VIII. Coupon Module (`/coupons`)**
 * `GET /coupons/available` - *(Public)* Dynamically fetch active coupons based on `?cartValue=X`.
 * `POST /coupons` - *(Admin)* Generate a new promotional code.
 * `PATCH /coupons/:id` - *(Admin)* Update coupon limits or toggle kill-switch.
 * `GET /coupons` - *(Admin)* Paginated and filtered fetching of system promotions. 
 
-**9. Wishlist Module (`/wishlists`)**
+**IX. Wishlist Module (`/wishlists`)**
 * `GET /wishlists` - Fetch the user's populated wishlist (Includes self-healing ghost item removal).
-* `POST /wishlists/add` - Add a product to the wishlist (Enforces 100-item limit).
+* `POST /wishlists/add` - Add a product to the wishlist (Enforces 100-item capacity limit).
 * `POST /wishlists/move-to-cart/:productId` - Cross-module transfer into the active cart ACID transaction.
 * `DELETE /wishlists/item/:productId` - Remove a specific product.
 * `DELETE /wishlists/clear` - Empty the entire wishlist array.
 
-**10. Notifications Module (`/notifications`)**
+**X. Notifications Module (`/notifications`)**
 * `GET /notifications` - Fetch paginated, unread In-App alerts for the user's dashboard.
 * `PATCH /notifications/:notificationId/read` - Mark a specific alert as read (Protected by IDOR ownership checks).
 
-**11. Search Module (`/search`)**
+**XI. Search Module (`/search`)**
 * `GET /search` - *(Public)* Execute sub-50ms typo-tolerant searches against the Typesense RAM cluster. Supports faceted filtering (`?itemType=BANGLE&minPrice=500`) and strict pagination.  
 
-**12. Dashboard Module (`/dashboard`)**
+**XII. Dashboard Module (`/dashboard`)**
 * `GET /dashboard/metrics` - *(Admin)* Fetch aggregated business financials, order fulfillment distribution, top-selling products, and low-stock alerts. Supports optional `?startDate=X&endDate=Y` queries.  
+
+**XIII. DevOps & Health Module (`/health`)**
+* `GET /health` - **(New)** *(Public)* Load Balancer Liveness Probe. Verifies active connections to MongoDB, Redis, and Typesense clusters.
 
 --- 
 

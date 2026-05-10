@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Epic 2: DPDP/GDPR Privacy Compliance (Sprint 2: The Anonymization Engine)
+* **The Master Orchestrator:** Engineered an ACID-compliant MongoDB Transaction in `UserService.deleteAccount` to handle the "Right to be Forgotten" cascading cleanup without leaving ghost data.
+* **Financial Data Scrambler:** Built `OrderService.anonymizeUserOrders` to irreversibly scramble shipping PII (`fullName`, `phone`, `streetAddress`) for deleted users while preserving `totalAmount` for tax compliance.
+* **Ephemeral State Wipers:** Implemented deletion logic in `CartService` and `WishlistService` to permanently drop capacity-heavy arrays when an account is terminated.
+* **Client-Side Session Kill:** Updated `UserController` to broadcast a `clearCookie` command upon deletion to guarantee immediate browser logout.
+
 ### Epic 2: DPDP/GDPR Privacy Compliance (Sprint 1: Consent Tracking)
 * **Immutable Consent Ledger:** Added `privacyPolicyAcceptedAt` timestamp to the `User` schema (`IUserPreferences`) to legally prove when a user agreed to data collection.
 * **The Legal Gatekeeper:** Updated `register.dto.ts` with a strict Zod boolean check (`acceptPrivacyPolicy`) that physically blocks account creation if the frontend checkbox is bypassed.
