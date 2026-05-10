@@ -8,6 +8,7 @@ import { restrictTo } from "@shared/middlewares/role.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
 import { uploadProductImage } from "@shared/middlewares/upload.middleware";
 import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
+import { cacheMiddleware } from "@shared/middlewares/cache.middleware";
 
 // DTO Imports
 import {
@@ -30,6 +31,7 @@ const router = Router();
 router.get(
   "/",
   standardLimiter,
+  cacheMiddleware(300),
   validate(GetProductsQuerySchema),
   PublicProductController.getProducts,
 );
@@ -37,6 +39,7 @@ router.get(
 router.get(
   "/:id",
   standardLimiter,
+  cacheMiddleware(300),
   validate(GetProductByIdSchema),
   PublicProductController.getProductById,
 );
