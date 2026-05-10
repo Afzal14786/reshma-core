@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Added ~ DevOps & Infrastructure  
+
+### Cluster-Ready Upgrades & Infrastructure
+* **Distributed Rate Limiting:** Migrated `express-rate-limit` from local RAM to `rate-limit-redis`. All server instances behind the load balancer now logically share a centralized strike-counter. This instantly neutralizes Server-Hopping DDoS and automated card-testing attacks.
+* **Deep Liveness Probes (`/api/v1/health`):** Built a dedicated DevOps endpoint tailored for AWS ELB and Kubernetes. It executes deep pings against MongoDB, Redis, and Typesense. It emits `503 Service Unavailable` on microservice failure, allowing the Load Balancer to intelligently sever traffic and achieve zero-downtime routing.
+
+### Global Security Hardening
+* **NoSQL Injection Defense:** Injected `express-mongo-sanitize` into the global Express pipeline as a universal fail-safe firewall against NoSQL operator injection attacks.
+* **HTTP Header Masking:** Deployed `helmet` to strip `X-Powered-By` fingerprints and enforce strict XSS/Clickjacking protections.
+
+### Architecture Documentation
+* **New Blueprint:** Added `docs/architecture/devops-and-infrastructure.md` outlining the zero-downtime cluster strategy.
+* **Security Updates:** Updated `security-hardening.md` to document the dual-layer NoSQL defense.
+
 ### Added ~ The Edge Cache & Background Workers 
 
 ### Asynchronous Invoice Generation (BullMQ)

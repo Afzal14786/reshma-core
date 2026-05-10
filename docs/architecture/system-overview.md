@@ -36,6 +36,7 @@ High-level system design, security protocols, and database schemas.
 * **[Payment Integration Architecture](./payment-integration.md)** *(HMAC-SHA256 Cryptographic Handshakes, ACID Transaction Integrity, and Idempotency Guards)* 
 * **[Legal & Tax Compliance](./legal-tax-compliance.md)** *(Dynamic Indian GST Engine, State Arbitration, Proportional Discounting)*
 * **[Edge Cache & Async Workers](./edge-cache-and-workers.md)** *(Thundering Herd Defense, Proxy Caching, BullMQ Background Processing)*
+* **[DevOps & Cloud Infrastructure](./devops-and-infrastructure.md)** *(Horizontal Scaling, Redis Rate Limiting, Deep Liveness Probes)*
 
 ### Domain Modules
 Deep dives into the specific business logic, DTOs, and services for each core feature.
@@ -103,10 +104,10 @@ The development of Reshma-Core is divided into four major epics.
 - [x] Interaction Engine (Phase 9 Implementation).
 - [x] Admin Dashboard aggregations (Sales volume, top-selling categories).  
 
-### Phase 5: Production Hardening & Scalability (In Progress)
+### Phase 5: Production Hardening & Scalability (Completed)
 - [x] Epic 1: Legal & Financial Compliance (Dynamic Line-Item GST, Immutable Snapshots).
 - [x] Epic 2: The Edge Cache & Workers (Redis Proxy Shield, BullMQ PDF Generation).
-- [ ] Epic 3: DevOps & Infrastructure (Graceful Shutdowns, Distributed Rate Limiting, Health Checks).
+- [x] Epic 3: DevOps & Infrastructure (Distributed Rate Limiting, Deep Health Checks, Global NoSQL Defense).
 
 ---
 *Maintained by Md Afzal Ansari | Core System Architecture*
