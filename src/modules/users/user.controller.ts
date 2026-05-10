@@ -297,4 +297,46 @@ export class UserController {
       next(error);
     }
   }
+
+  /**
+   * DPDP / GDPR LEGAL ENGINE
+   */
+
+  /**
+   * @route   DELETE /api/v1/users/profile
+   * @desc    Right to be Forgotten. Triggers the ACID Saga to delete ephemeral state,
+   * anonymize financial records, and permanently erase the identity.
+   * @access  Private (Requires JWT)
+   */
+  public static async deleteAccount(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      const userId = req.user?._id as unknown as string;
+      if (!userId) {
+        throw new AppError(HTTP_STATUS.UNAUTHORIZED, "Authentication required");
+      }
+
+      // Execute the Master Deletion Transaction
+      await UserService.deleteAccount(userId);
+
+      // Security: Instruct the browser to destroy the HttpOnly session cookie
+      res.clearCookie("refresh_token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+      });
+
+      new ApiResponse(
+        res,
+        HTTP_STATUS.OK,
+        "Account successfully deleted and personal data anonymized.",
+        null,
+      ).send();
+    } catch (error) {
+      next(error);
+    }
+  }
 }

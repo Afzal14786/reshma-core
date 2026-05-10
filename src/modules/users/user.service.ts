@@ -5,6 +5,12 @@ import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { redisClient } from "@config/redis";
 import { NotificationService } from "../notifications/notification.service";
+import logger from "@config/logger";
+
+// Cross-Module Imports for Saga Cleanup
+import { OrderService } from "../orders/order.service";
+import { CartService } from "../cart/cart.service";
+import { WishlistService } from "../wishlists/wishlist.service";
 
 import { UpdateProfileInput } from "./dtos/update-profile.dto";
 import { AddAddressInput, UpdateAddressInput } from "./dtos/address.dto";
@@ -294,5 +300,60 @@ export class UserService {
       user.email,
       user.firstname,
     );
+  }
+
+  /**
+   * DPDP / GDPR Legal Engine: The Master Orchestrator (Right to be Forgotten)
+   * * ARCHITECTURE NOTE:
+   * Uses a Saga Pattern wrapped in a MongoDB Transaction.
+   * 1. Wipes ephemeral states (Cart/Wishlist).
+   * 2. Scrambles PII in immutable financial records (Orders).
+   * 3. Irreversibly deletes the User Document.
+   */
+  public static async deleteAccount(
+    userId: string | Types.ObjectId,
+  ): Promise<void> {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+
+    try {
+      // 1. Wipe Ephemeral State (Free up DB storage)
+      await CartService.deleteUserCart(safeUserId, session);
+      await WishlistService.deleteUserWishlist(safeUserId, session);
+
+      // 2. Anonymize Immutable Financial Records (Preserve tax math, destroy PII)
+      await OrderService.anonymizeUserOrders(safeUserId, session);
+
+      // 3. Destroy the Identity
+      const deletedUser = await User.findOneAndDelete({
+        _id: { $eq: safeUserId },
+      }).session(session);
+
+      if (!deletedUser) {
+        throw new AppError(
+          HTTP_STATUS.NOT_FOUND,
+          "User profile not found or already deleted.",
+        );
+      }
+
+      await session.commitTransaction();
+      logger.info(
+        `[Privacy Engine] Legal account deletion completed successfully for user ${safeUserId}`,
+      );
+
+      // FIRE AND FORGET:
+      // Any active Access Tokens (JWT) will naturally expire within 15 minutes.
+      // Refresh Tokens will naturally fail upon their next use because User.findOne() will return null.
+    } catch (error) {
+      await session.abortTransaction();
+      logger.error(
+        `[Privacy Engine] Critical Failure during account deletion for user ${safeUserId}. Rollback executed.`,
+      );
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
 }

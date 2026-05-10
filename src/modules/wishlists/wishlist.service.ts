@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { Wishlist } from "./wishlist.model";
 import { Product } from "../products/models/base-product.model";
 import { CartService } from "../cart/cart.service";
@@ -255,5 +255,31 @@ export class WishlistService {
     );
 
     return this.getWishlist(safeUserId);
+  }
+
+  /**
+   * DPDP / GDPR Legal Engine: The State Wiper
+   * * ARCHITECTURE NOTE:
+   * Permanently deletes the user's wishlist from the database during account deletion.
+   * This ensures we do not hold "ghost data" that bloats our indexes.
+   */
+  public static async deleteUserWishlist(
+    userId: string,
+    session: mongoose.ClientSession,
+  ) {
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+
+    const result = await Wishlist.deleteOne(
+      { user: { $eq: safeUserId } },
+      { session },
+    );
+
+    logger.info(
+      this.safeLog(
+        `[Privacy Engine] Erased wishlist for deleted user ${safeUserId}`,
+      ),
+    );
+
+    return result;
   }
 }
