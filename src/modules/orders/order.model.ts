@@ -123,6 +123,8 @@ const OrderSchema = new Schema<IOrder>(
     gatewayOrderId: { type: String, sparse: true },
     gatewayPaymentId: { type: String, sparse: true },
     gatewaySignature: { type: String },
+
+    invoiceUrl: { type: String }, // Cloudinary PDF Link
   },
   { timestamps: true },
 );

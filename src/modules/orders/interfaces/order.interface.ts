@@ -88,6 +88,8 @@ export interface IOrder extends Document {
   gatewayPaymentId?: string; // e.g., Razorpay payment_id
   gatewaySignature?: string; // Cryptographic proof of payment
 
+  invoiceUrl?: string; // Cloudinary PDF Link
+
   createdAt: Date;
   updatedAt: Date;
 }

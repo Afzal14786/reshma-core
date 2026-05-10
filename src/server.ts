@@ -8,8 +8,9 @@ import { Server } from "http";
 import { startCronJobs } from "./shared/cron/order-recovery.cron";
 
 // Initialize Background Workers
-// By importing this here, the worker starts listening to Redis the moment the server boots.
+// By importing this here, the workers start listening to Redis the moment the server boots.
 import "@shared/queues/email.worker";
+import "@shared/queues/invoice.worker";
 
 /**
  * Failsafe : Uncaught Exceptions

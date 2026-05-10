@@ -11,6 +11,7 @@ import razorpay from "@config/razorpay";
 import logger from "@config/logger";
 import { CouponModel } from "@modules/coupons/coupon.model";
 import { TaxEngine, TaxProfile } from "./tax.utils";
+import { InvoiceQueueManager } from "@shared/queues/invoice.queue";
 import {
   IOrderItem,
   IOrder,
@@ -295,8 +296,13 @@ export class OrderService {
       await session.endSession();
     }
 
-    // --- ASYNC NOTIFICATION ENGINE TRIGGER ---
+    // --- ASYNC NOTIFICATION & INVOICE ENGINE TRIGGER ---
     if (savedOrder.paymentMethod === "COD") {
+      // FIRE AND FORGET: Drop invoice job into BullMQ (Non-blocking)
+      await InvoiceQueueManager.enqueueInvoiceGeneration(
+        savedOrder._id.toString(),
+      );
+
       try {
         const userDoc = await User.findOne({ _id: { $eq: safeUserId } })
           .select("firstname email")
@@ -370,7 +376,11 @@ export class OrderService {
       this.safeLog(`Order Paid via Frontend Handshake: ${order.orderNumber}`),
     );
 
-    // --- ASYNC NOTIFICATION ENGINE TRIGGER ---
+    // --- ASYNC NOTIFICATION & INVOICE ENGINE TRIGGER ---
+
+    // FIRE AND FORGET: Drop invoice job into BullMQ (Non-blocking)
+    await InvoiceQueueManager.enqueueInvoiceGeneration(order._id.toString());
+
     try {
       const userDoc = await User.findOne({ _id: { $eq: safeUserId } })
         .select("firstname email")
@@ -465,7 +475,11 @@ export class OrderService {
         ),
       );
 
-      // --- ASYNC NOTIFICATION ENGINE TRIGGER ---
+      // --- ASYNC NOTIFICATION & INVOICE ENGINE TRIGGER ---
+
+      // FIRE AND FORGET: Drop invoice job into BullMQ (Non-blocking)
+      await InvoiceQueueManager.enqueueInvoiceGeneration(order._id.toString());
+
       try {
         const userDoc = await User.findOne({ _id: { $eq: String(order.user) } })
           .select("firstname email")
