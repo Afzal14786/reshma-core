@@ -1,60 +1,70 @@
 import { Request, Response, NextFunction } from "express";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { AppError } from "@shared/utils/app-error";
-import { ZodSchema, ZodError, ZodIssue } from "zod";
+import { ZodError, ZodIssue, ZodObject } from "zod";
+import { Sanitizer } from "@shared/utils/sanitizer";
 
 /**
- * Validation Interceptor
+ * Validation Interceptor (Express 5.x Compatible)
  * * ARCHITECTURE NOTE:
- * This acts as an absolute firewall before our controllers. By passing a Zod schema,
- * we guarantee that the request body, query parameters, and URL parameters strictly
- * match our domain interfaces. It automatically strips out malicious payload injections.
+ * This acts as an absolute firewall before our controllers. It enforces two layers
+ * of defense-in-depth:
+ * 1. NoSQL Injection Sanitization: Strips keys starting with '$' or '.' via the Sanitizer utility.
+ * 2. Zod Schema Validation: Enforces strict domain types and strips undocumented fields.
+ * * * Express 5.x Compatibility:
+ * In Express 5, 'req.query' and 'req.params' are read-only getters. We utilize
+ * 'Object.defineProperty' to bypass the setter restriction and inject the sanitized/validated data.
+ * * @param schema - The Zod schema representing the body, query, and params.
  */
-export const validate = (schema: ZodSchema) => {
+export const validate = (schema: ZodObject<any>) => {
   return async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const validatedData = (await schema.parseAsync({
-        body: req.body,
-        query: req.query,
-        params: req.params,
-      })) as {
-        body: Request["body"];
-        query: Request["query"];
-        params: Request["params"];
-      };
+      // 1. INPUT SANITIZATION (NoSQL Injection Defense)
+      // We spread the original objects to create shallow clones.
+      // The Sanitizer deep-cleans these clones to bypass Express 5's read-only getters.
+      const cleanQuery = Sanitizer.sanitize({ ...req.query });
+      const cleanBody = Sanitizer.sanitize({ ...req.body });
+      const cleanParams = Sanitizer.sanitize({ ...req.params });
 
-      // 1. Body can still be reassigned directly via body-parser
-      if (validatedData.body) {
-        req.body = validatedData.body;
-      }
+      // 2. SCHEMA VALIDATION
+      // parseAsync validates the data against our Zod schema.
+      // It will throw a ZodError if any data violates the defined constraints.
+      const validatedData = await schema.parseAsync({
+        body: cleanBody,
+        query: cleanQuery,
+        params: cleanParams,
+      });
 
-      // 2. Express 5.x Fix: Bypass the getter using Object.defineProperty
-      if (validatedData.query) {
-        Object.defineProperty(req, "query", {
-          value: validatedData.query,
-          enumerable: true,
-        });
-      }
+      // 3. DATA REASSIGNMENT
+      // Update req.body directly (it remains writable).
+      req.body = validatedData.body;
 
-      if (validatedData.params) {
-        Object.defineProperty(req, "params", {
-          value: validatedData.params,
-          enumerable: true,
-        });
-      }
+      // Update req.query and req.params using Object.defineProperty to bypass Express 5 getters.
+      Object.defineProperty(req, "query", {
+        value: validatedData.query,
+        enumerable: true,
+        configurable: true,
+      });
+
+      Object.defineProperty(req, "params", {
+        value: validatedData.params,
+        enumerable: true,
+        configurable: true,
+      });
 
       next();
     } catch (error: unknown) {
+      // 4. ERROR ARBITRATION
+      // If the error came from Zod, we format the issues into a readable, flat string.
       if (error instanceof ZodError) {
         const errorMessages = error.issues
           .map((issue: ZodIssue) => {
-            // Get the last part of the path (e.g., "body.firstname" -> "firstname")
+            // Extract the specific field name from the end of the validation path
             const rawField = issue.path[issue.path.length - 1];
-
             const fieldName =
               rawField !== undefined ? String(rawField) : "Field";
             return `${fieldName}: ${issue.message}`;
@@ -68,6 +78,7 @@ export const validate = (schema: ZodSchema) => {
           ),
         );
       } else {
+        // Pass system or unexpected errors down to the Global Error Handler
         next(error);
       }
     }
