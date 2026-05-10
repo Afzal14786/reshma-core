@@ -75,10 +75,11 @@ To verify Razorpay server-to-server pings, the system implements a **Raw Body In
 *   **The Fix:** A global `verify` hook in `app.ts` captures the `req.rawBody` as a UTF-8 string specifically for webhook routes.
 *   **Validation:** The `OrderService` uses `crypto.createHmac` to compare the `x-razorpay-signature` against the `rawBody`.  
 
-### Legal PDF Tax Invoices (In-Memory)
-The platform bypasses standard text receipts to produce legally compliant PDF Tax Invoices using `PDFKit`.
-* **Zero Disk I/O:** The PDF is generated entirely as an in-memory `Buffer`. It strictly avoids `fs.writeFile` to prevent storage bloat and synchronous Event Loop blocking during high-traffic checkouts.
-* **Compliance:** Unpacks the Immutable Tax Snapshot to render a full Indian GST Table featuring columns for HSN, Taxable Value, CGST, SGST, and IGST, originating from the Kolkata address.
+### Asynchronous PDF Invoice Generation (BullMQ)
+The platform bypasses standard text receipts to produce legally compliant PDF Tax Invoices. However, to protect the single-threaded Node.js event loop from CPU exhaustion during mass checkouts, this process is strictly asynchronous.
+* **Fire-and-Forget Queue:** The `OrderService` instantly completes the checkout and pushes the `orderId` to a Redis Queue.
+* **Background Worker:** The `invoiceWorker` processes the payload in the background, utilizing `PDFKit` to draw a compliant Indian GST Table.
+* **Diskless Streaming:** The worker pipes the raw PDF buffer directly into `cloudinary.uploader.upload_stream`, bypassing the local server disk entirely to prevent storage bloat. The final `invoiceUrl` is then saved back to the Order document.
 
 ### Automated Communications Hook
 The module is integrated with the **Notification Engine Facade** for real-time customer updates[cite: 1, 2]:

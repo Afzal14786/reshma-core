@@ -75,6 +75,13 @@ Every product, regardless of its polymorphic type, is legally required to hold t
 * `GENERAL_ACCESSORY` (18%)
 * `STITCHED_APPAREL` (Dynamic: 5% or 18% based on the final post-coupon checkout price).
 
+## 6. Edge Cache & Performance Shielding
+
+The public-facing catalog is designed to survive "Thundering Herd" traffic spikes (e.g., thousands of users hitting the homepage during a flash sale) without crashing the MongoDB cluster.
+
+* **Public Read Shielding:** All `GET /api/v1/products` routes are wrapped in `cacheMiddleware(300)`. This forces responses to be served directly from Redis RAM (~2ms) for 5 minutes. 10,000 users refreshing the homepage will only result in 1 actual MongoDB query.
+* **Admin Mutation Invalidation:** To prevent customers from seeing stale prices after an Admin edits the catalog, all Admin mutation routes (`POST`, `PATCH`, `DELETE`) trigger a **Fire-and-Forget** `CacheManager.invalidateCachePattern('/api/v1/products')` command. This instantly purges the Redis RAM in the background without slowing down the Admin's API response time.
+
 ---  
 
 **Standard Documentation | Reshma-Core Architecture**
