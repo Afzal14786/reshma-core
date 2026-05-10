@@ -10,8 +10,7 @@ import env from "@config/env";
 export const baseEmailLayout = (title: string, content: string): string => {
   const currentYear = new Date().getFullYear();
   // Using a secure HTTPS Cloudinary link for the logo ensures it renders in Gmail
-  const logoUrl =
-    "https://res.cloudinary.com/demo/image/upload/v1/reshma_bangles_logo.png"; // Update with your actual uploaded logo URL
+  const logoUrl = "https://res.cloudinary.com/dl9bfojiu/image/upload/email-logo_z1eqed.svg";
 
   return `
   <!DOCTYPE html>
@@ -29,7 +28,7 @@ export const baseEmailLayout = (title: string, content: string): string => {
                       
                       <tr>
                           <td align="center" style="padding: 30px 0; border-bottom: 1px solid #f3f4f6;">
-                              <img src="${logoUrl}" alt="Reshma Bangles" width="150" style="display: block; max-width: 150px; height: auto;" />
+                              <img src="${logoUrl}" alt="Reshma Bangles &amp; Boutique" width="220" style="display: block; max-width: 220px; height: auto;" />
                           </td>
                       </tr>
 
