@@ -8,10 +8,14 @@
  */
 export class Sanitizer {
   // Hardened list of prohibited keys to prevent Prototype Pollution
-  private static readonly PROHIBITED_KEYS = ["__proto__", "constructor", "prototype"];
+  private static readonly PROHIBITED_KEYS = [
+    "__proto__",
+    "constructor",
+    "prototype",
+  ];
 
   /**
-   * Recursively strips MongoDB operator keys ($), dot-notation keys (.), 
+   * Recursively strips MongoDB operator keys ($), dot-notation keys (.),
    * and sensitive JavaScript internal properties.
    * * @param target - The object or array to sanitize.
    * @returns The sanitized object.
@@ -36,7 +40,6 @@ export class Sanitizer {
     for (const key in obj) {
       // Security Best Practice: Only operate on own properties
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        
         /**
          * SECURITY LAYER 1: Prototype Pollution Defense
          * If the key is a sensitive JS internal, delete it immediately.
@@ -61,7 +64,7 @@ export class Sanitizer {
         }
       }
     }
-    
+
     return target;
   }
 }
