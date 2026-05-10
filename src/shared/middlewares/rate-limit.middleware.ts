@@ -70,3 +70,23 @@ export const checkoutLimiter = rateLimit({
       "Checkout limit exceeded. Please contact support if you need to place a bulk order.",
   },
 });
+
+/**
+ * DEVOPS HEALTH LIMITER
+ * * ARCHITECTURE NOTE:
+ * We explicitly DO NOT use the RedisStore here. We use the default Memory Store.
+ * If Redis goes down, we need the health route to bypass the limiter and successfully
+ * return a 503 state to the Load Balancer.
+ * High capacity (3000) easily accommodates AWS ELB pings but blocks Layer 7 DoS attacks.
+ */
+export const healthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3000, // ~3.3 requests per second
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    statusCode: HTTP_STATUS.TOO_MANY_REQUESTS,
+    message: "Health check rate limit exceeded.",
+  },
+});
