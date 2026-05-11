@@ -136,15 +136,34 @@ export class InteractionController {
       };
 
       // Concurrent I/O execution. `lean()` strips Mongoose overhead.
-      const [reviews, totalDocuments] = await Promise.all([
+      const [rawReviews, totalDocuments] = await Promise.all([
         Interaction.find(query)
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
-          .populate("userId", "firstName lastName avatar")
+          .populate("userId", "firstname lastname avatar")
           .lean(),
         Interaction.countDocuments(query),
       ]);
+
+      // DPDP / GDPR Privacy Engine: The Interaction Scrub
+      // If a user exercises their "Right to be Forgotten", their identity is deleted.
+      // Mongoose populate will return `null` for `userId`. We safely render them as Anonymous.
+      const reviews = rawReviews.map((review) => {
+        if (!review.userId) {
+          return {
+            ...review,
+            userId: {
+              _id: "anonymous_user",
+              firstname: "Anonymous",
+              lastname: "User",
+              avatar:
+                "https://res.cloudinary.com/demo/image/upload/v1/default_avatar.png",
+            },
+          };
+        }
+        return review;
+      });
 
       res.status(HTTP_STATUS.OK).json({
         status: "success",

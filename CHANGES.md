@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Hotfix: DPDP/GDPR Cross-Module Privacy Scrub
+* **Interaction Masking (Anti-Crash):** Patched `interaction.controller.ts` to intercept `null` user populations caused by account deletions. Safely substitutes an "Anonymous User" profile to prevent frontend `TypeError` crashes on product pages.
+* **Return Records Scrubbing:** Engineered `anonymizeUserReturns` in `return.service.ts` to permanently delete photographic proof of damage, wipe customer text notes, and scrub pickup addresses while preserving the financial `refundAmountEstimate` for tax accounting.
+* **Saga Orchestrator Update:** Wired the new Returns scrub into the Master `deleteAccount` transaction in `user.service.ts` to guarantee atomic execution of the Right to be Forgotten.
+* **Mailer Interface Strict Typing:** Upgraded `mailer.ts` with strict `attachments` typings and a CodeQL-compliant CWE-117 log injection neutralizer.
+
 ### Epic 2: DPDP/GDPR Privacy Compliance (Sprint 3: Data Portability)
 * **Asynchronous Export Engine:** Engineered a "Google Takeout" style data export pipeline to prevent Node.js thread blocking during massive data queries.
 * **The Background Worker:** Created `export.queue.ts` and `export.worker.ts` using BullMQ to concurrently fetch multi-domain data (Orders, Carts, Interactions) via `Promise.all()`.

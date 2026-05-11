@@ -1,11 +1,21 @@
 import nodemailer from "nodemailer";
 import env from "@config/env";
+import logger from "@config/logger";
 
+/**
+ * Strict typing for outbound email parameters.
+ * Extended to support DPDP/GDPR Data Portability attachments.
+ */
 export interface MailOptions {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  attachments?: Array<{
+    filename: string;
+    content: string | Buffer;
+    contentType?: string;
+  }>;
 }
 
 /**
@@ -32,6 +42,24 @@ class Mailer {
         pass: env.SMTP_PASS,
       },
     });
+
+    // Verify connection configuration on startup
+    this.transporter
+      .verify()
+      .then(() => logger.info("[Mailer Infrastructure] SMTP Connection Ready"))
+      .catch((err) =>
+        logger.error(
+          `[Mailer Infrastructure] Connection failed: ${err.message}`,
+        ),
+      );
+  }
+
+  /**
+   * SECURITY UTILITY: CodeQL CWE-117 Neutralizer
+   * Cleans strings of control characters to prevent Log Injection attacks.
+   */
+  private safeLog(message: string): string {
+    return message.replace(/[\r\n]/g, "");
   }
 
   /**
@@ -41,6 +69,8 @@ class Mailer {
    * so the user isn't left waiting for the SMTP handshake to finish.
    */
   public async sendEmail(options: MailOptions): Promise<void> {
+    const safeTo = this.safeLog(options.to);
+
     try {
       await this.transporter.sendMail({
         from: env.EMAIL_FROM,
@@ -48,12 +78,17 @@ class Mailer {
         subject: options.subject,
         html: options.html,
         text: options.text,
+        attachments: options.attachments,
       });
+
+      logger.info(
+        `[Mailer Infrastructure] Successfully dispatched email to ${safeTo}`,
+      );
     } catch (error) {
       // We intercept the error here to log it securely. If we let this bubble up
       // unhandled, Express might accidentally leak our SMTP credentials to the client.
-      console.error(
-        `[Mailer Infrastructure] Handshake failed for recipient ${options.to}:`,
+      logger.error(
+        `[Mailer Infrastructure] Handshake failed for recipient ${safeTo}`,
         error,
       );
       throw error;
