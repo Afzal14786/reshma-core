@@ -458,4 +458,35 @@ export class ReturnService {
     const total = await ReturnModel.countDocuments(query);
     return { returns, meta: { total, limit, skip } };
   }
+
+  /**
+   * DPDP / GDPR LEGAL ENGINE: Scrub Return PII
+   * @description Anonymizes return records when a user triggers the Right to be Forgotten.
+   * Scrambles PII and deletes photographic proof, but preserves the financial math
+   * (`refundAmountEstimate`) for tax and accounting purposes.
+   */
+  public static async anonymizeUserReturns(
+    userId: string,
+    session: mongoose.ClientSession,
+  ) {
+    const safeUserId = String(userId).replace(/[\r\n]/g, "");
+
+    await ReturnModel.updateMany(
+      { user: { $eq: safeUserId } },
+      {
+        $set: {
+          proofOfDamageImages: [], // Delete photographic PII
+          "items.$[].customerNote": "Redacted (DPDP/GDPR)", // Scrub text PII
+        },
+        // If there are pickup addresses implemented in the future,
+        // they are safely unset here.
+        $unset: {
+          pickupAddress: "",
+        },
+      },
+      { session },
+    );
+
+    logger.info(`[Privacy Engine] Anonymized Returns for User: ${safeUserId}`);
+  }
 }
