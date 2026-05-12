@@ -27,10 +27,12 @@ Every product in the catalog strictly inherits a `taxProfile` and `hsnCode`. The
 ## 3. Core Financial Algorithms
 
 ### A. Proportional Discounting (The Refund Exploit Fix)
-If a user applies a flat ₹500 discount coupon to a multi-item cart, the engine does not subtract ₹500 at the end. Instead, it performs a **Two-Pass Calculation**:
-1. It calculates the mathematical weight of each item relative to the cart's subtotal.
-2. It proportionally distributes the ₹500 discount across all items.
-3. *Why?* This ensures that if a user returns one item, the refund accurately reflects the discounted price of that specific item, preventing margin loss, and ensuring GST is calculated on the legally correct Transaction Value.
+If a user applies a flat ₹500 discount coupon to a multi-item cart, the engine does not subtract ₹500 at the end. Instead, it performs a **Two-Pass Calculation** and enforces a **Proportional Discount Ratio:**
+
+1. **Discount Ratio Calculation:** The `ReturnService.initiateReturn` method mathematically calculates a `discountRatio` defined as `Amount Paid / Raw Subtotal`. 
+2. **Line-Item Distribution:** This ratio is applied to the `priceAtPurchase` of each item. For example, if a user paid ₹2,000 for a ₹2,500 cart, the ratio is 0.8. A returned ₹1,000 item results in a legally accurate ₹800 refund.  
+3. **Audit Integrity:** This ensures that if a user returns one item, the refund accurately reflects the exact 'Consideration' paid for that specific item, preventing margin loss and ensuring GST is calculated on the legally correct Transaction Value. 
+
 
 ### B. State Arbitration (CGST/SGST vs IGST)
 The platform origin is hardcoded to **West Bengal (WB)**. During checkout, the engine compares WB to the customer's shipping address state.

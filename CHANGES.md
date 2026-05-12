@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Added ~ Infrastructure Hardening & Resilience Epic
+
+### Security & Financial Integrity
+* **Proportional Refund Logic:** Re-engineered the `ReturnService.initiateReturn` mathematical engine to utilize a `discountRatio` algorithm. This ensures that refunds for items purchased with coupons are calculated based on the actual "consideration paid" rather than the catalog price, preventing revenue leaks and maintaining constitutional consumer rights.
+* **Raw Body HMAC Validation:** Patched a critical cryptographic mismatch in `src/app.ts` by implementing raw Buffer interception. This captures the unmutated request body as `req.rawBody` for Razorpay and Shiprocket webhooks, ensuring 100% signature accuracy for financial handshakes.
+* **Distributed Cron Locking:** Implemented a Redis-based idempotency firewall using `SET NX` in `order-recovery.cron.ts`. This prevents "The Multiplier Bug," guaranteeing that only one container instance executes inventory recovery tasks in a horizontally scaled Docker environment.
+
+### Search & System Resilience
+* **Search Sync Dead Letter Queue (DLQ):** Integrated a BullMQ-powered resilience layer into `ProductService`. Failed synchronization attempts with Typesense are now automatically pushed to a `search-sync-queue` with a 10-attempt exponential backoff strategy, eliminating "Ghost Products" during network outages.
+* **Enterprise Graceful Shutdown:** Updated `src/server.ts` to trap `SIGTERM` and `SIGINT` signals. The server now halts new HTTP traffic and drains active requests before safely closing MongoDB and Redis connections, preventing data corruption during deployments or scaling events.
+
+### Developer Experience & Type Safety
+* **Strict TypeScript Compliance:** Eradicated `any` keyword usage in the `export.worker.ts` profile sanitization logic. Replaced unsafe casting with mathematically type-safe ES6 object destructuring and double-casting to satisfy strict compiler rules.
+* **Express Namespace Merging:** Officially extended the global `Express.Request` namespace in `express.d.ts` to include `rawBody`, enabling type-safe access to raw request buffers across all middleware.
+
+### Documentation Updates
+* **Legal & Tax Compliance:** Updated to document the Proportional Discounting math and Indian GST arbitration logic.
+* **Product Domain:** Added technical specifications for the Typesense DLQ and eventual consistency protocols.
+* **Notification Module:** Documented the new `search-sync-queue` infrastructure.
+* **API Standards:** Appended new DevOps and Health modules, including Load Balancer liveness probes.
+
+### 🛠️ Key Files Altered
+* `~ src/modules/returns/return.service.ts` (Financial math & Type-safety)
+* `~ src/modules/products/product.service.ts` (Typesense DLQ integration)
+* `~ src/app.ts` (Raw body interception)
+* `~ src/server.ts` (Graceful shutdown logic)
+* `~ src/shared/cron/order-recovery.cron.ts` (Redis distributed lock)
+* `~ src/shared/queues/export.worker.ts` (Type-safety hardening)
+* `~ src/shared/types/express.d.ts` (Request interface expansion)
+
 ### Added ~ May 12, 2026
 * **Polymorphic Ticketing System:** Deployed a new centralized Support Module (`/api/v1/support`) that allows customers to link complaints directly to specific polymorphic entities (Orders, Returns, Products).
 * **Threaded Conversations:** Implemented an `O(1)` read-optimized embedded document architecture for ticket messages, replacing expensive SQL-style joins.

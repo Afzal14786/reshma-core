@@ -86,6 +86,14 @@ Floating-point math in JavaScript can lead to rounding errors (e.g., `0.1 + 0.2`
 * Formula: `Math.round(totalAmount * 100)`.
 * An order of ₹500.50 is strictly processed as `50050` paise.  
 
+### D. Raw Body Integrity (HMAC Precision)
+Standard JSON parsers mutate incoming strings (e.g., removing whitespace), which irreversibly corrupts HMAC signature verification.
+
+* **The Protocol:** In `app.ts`, the system utilizes the `verify` hook within `express.json()` to capture the byte-for-byte original string from the request buffer.  
+
+* **Implementation:** This original string is attached to `req.rawBody` before any middleware can mutate the payload. All webhook verification logic now references `req.rawBody` to guarantee 100% mathematical alignment with Razorpay's hashing algorithm.
+
+
 ---  
 
 ## 3. Atomic State Management  
@@ -125,6 +133,9 @@ To guarantee financial consistency during client-side network failures, the syst
 
 ### The Webhook Flow
 1. **Trigger:** Razorpay fires an `order.paid` event directly to `/api/v1/orders/webhook`.
-2. **Verification:** The backend intercepts the `x-razorpay-signature` header and mathematically compares it against a payload hashed with the `RAZORPAY_WEBHOOK_SECRET`.
+2. **Verification:** The backend intercepts the `x-razorpay-signature` header and mathematically compares it against the `req.rawBody` hashed with the `RAZORPAY_WEBHOOK_SECRET`. This ensures that even if the JSON body is parsed, the cryptographic handshake remains valid based on the original data stream.
 3. **Idempotency Execution:** The system queries the database. If the `orderStatus` is already `PAID` (meaning the frontend successfully completed the handshake earlier), the webhook safely terminates. If it is `PENDING`, the system applies the financial state change and proceeds to fulfillment.  
----
+
+---  
+
+**Standard Documentation | Reshma-Core Architecture**

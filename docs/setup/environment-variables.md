@@ -15,6 +15,8 @@ These variables define the basic runtime environment and connectivity for the Ex
 | `CLIENT_URL` | The origin URL of the React/Next.js frontend. | `http://localhost:3000` |
 | `ADMIN_URL` | The origin URL of the Admin Dashboard. | `http://localhost:3001` |
 
+
+* **Server Lifecycle Management:** The application now traps `SIGTERM` and `SIGINT` signals. Upon receiving a termination signal, the server halts new HTTP traffic, drains active requests, and safely disconnects from MongoDB and Redis to prevent database corruption during deployments or scaling events.
 ---
 
 ## 2. Database & Infrastructure
@@ -23,6 +25,8 @@ Reshma-Core relies on MongoDB for persistent data and Redis for ephemeral cachin
 - **MONGO_URI**: The full connection string for MongoDB. For local development, this is typically `mongodb://localhost:27017/db_name`. For production, use the srv string provided by MongoDB Atlas.
 - **REDIS_URL**: The connection endpoint for the Redis instance. Format: `redis://<host>:<port>`. This is critical for BullMQ workers.
 - **REDIS_PASSWORD**: Required for password-protected Redis instances (common in production/managed clouds).
+- **Redis Infrastructure(`REDIS_URL`)**: In addition to caching and standard BullMQ workers, Redis now hosts the `search-sync-queue`. This queue is critical for the `Eventual Consistency Protocol`, ensuring that any failed Typesense synchronizations are retried with exponential backoff rather than resulting in "Ghost Products".  
+- **Distributed Locking**: The Redis instance now manages distributed locks (using `SET NX`) for maintenance cron jobs. This prevents multiple server instances in a Docker/Cloud environment from executing duplicate inventory recovery tasks simultaneously.
 
 ---
 
@@ -82,6 +86,7 @@ Powers the sub-50ms product discovery, faceted filtering, and typo tolerance. Ca
 - **TYPESENSE_PORT**: Usually `8108` for local, or `443` for Cloud.
 - **TYPESENSE_PROTOCOL**: `http` for local, `https` for Cloud.
 - **TYPESENSE_API_KEY**: The **ADMIN** API Key required to build schemas and synchronize data. Do NOT use the Search-Only key here.
+- **Sync Resilience**: he system no longer fails silently on search engine network timeouts. Failed operations are automatically offloaded to the `search-sync-queue` for background retry, ensuring the search cluster remains a perfect reflection of the MongoDB master record.
 
 ---
 

@@ -27,12 +27,16 @@ When an administrator requests a date range, the module executes a highly optimi
 
 1.  **Temporal Firewall (Zod):** The `DateRangeQuerySchema` coerces URL query strings into native JavaScript `Date` objects. It mathematically guarantees that `startDate` occurs before `endDate`, neutralizing NoSQL date-injection payloads before they reach the database.
 2.  **Parallel Execution:** The service utilizes `Promise.all()` to query the Orders, Products, and Users collections concurrently, drastically reducing API latency.
-3.  **The `$facet` Operator:** For the heavy Order metrics, the engine uses MongoDB's `$facet` operator. This allows the database to run three isolated pipelines (Financial Totals, Fulfillment Counts, Top Products) in a *single database read*, bypassing the need to pull thousands of documents into the Node.js memory heap.
+3.  **The `$facet` Operator:** For the heavy Order metrics, the engine uses MongoDB's `$facet` operator. This allows the database to run three isolated pipelines (Financial Totals, Fulfillment Counts, Top Products) in a *single database read*, bypassing the need to pull thousands of documents into the Node.js memory heap.  
+
+4. **Distributed Cron Locking:** To support horizontal scaling (Docker/AWS), all maintenance cron jobs that impact dashboard metrics (such as abandoned order recovery) utilize a Redis-based `SET NX` lock. This ensures that even if multiple server instances are running, the recovery logic only executes once, preventing the duplication of inventory and financial data.
 
 ## 3. Mathematical Constraints & Failsafes
-*   **Zero-Division Protection:** When calculating Average Order Value (AOV), if `totalOrders` equals 0 in the given date range, the system mathematically defaults to `0` rather than returning `NaN`, preventing frontend UI crashes.
-*   **The `$lookup` Join:** The Top Products pipeline uses `$lookup` to join the active `orders` collection directly with the `products` collection at the C++ storage layer. This eliminates the "N+1 Query Problem" that occurs when looping through IDs in JavaScript.
-*   **Strict Compiler Satisfaction:** Queries against the User model use inline literals (`{ role: "USER" }`) to satisfy Mongoose 9's strict `FilterQuery` types without causing TypeScript 6 type-widening errors.
+1.   **Zero-Division Protection:** When calculating Average Order Value (AOV), if `totalOrders` equals 0 in the given date range, the system mathematically defaults to `0` rather than returning `NaN`, preventing frontend UI crashes.
+2.   **The `$lookup` Join:** The Top Products pipeline uses `$lookup` to join the active `orders` collection directly with the `products` collection at the C++ storage layer. This eliminates the "N+1 Query Problem" that occurs when looping through IDs in JavaScript.
+3.   **Strict Compiler Satisfaction:** Queries against the User model use inline literals (`{ role: "USER" }`) to satisfy Mongoose 9's strict `FilterQuery` types without causing TypeScript 6 type-widening errors.
+
+4. **Cron Idempotency Firewall:** Background tasks utilize a Redis lock with a 60-second expiration. This prevents "The Multiplier Bug," where identical cron jobs firing simultaneously across different containers would otherwise result in redundant database mutations and corrupted financial reporting.
 
 ## 4. Security Boundaries
 Financial data is the most sensitive information in the system. The dashboard router strictly enforces the following middleware stack:
