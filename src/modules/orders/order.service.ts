@@ -10,6 +10,7 @@ import { CheckoutInput } from "./dtos/order.dto";
 import razorpay from "@config/razorpay";
 import logger from "@config/logger";
 import { CouponModel } from "@modules/coupons/coupon.model";
+import { CouponService } from "@modules/coupons/coupon.service";
 import { TaxEngine, TaxProfile } from "./tax.utils";
 import { InvoiceQueueManager } from "@shared/queues/invoice.queue";
 import {
@@ -92,9 +93,12 @@ export class OrderService {
         });
       }
 
-      // COUPON VALIDATION
-      if (cart.appliedCoupon) {
-        const couponCheck = await CouponModel.findById(cart.appliedCoupon)
+      // COUPON VALIDATION & DYNAMIC RE-CALCULATION
+      let discountAmount = 0;
+      const appliedCoupon = cart.appliedCoupon || null;
+
+      if (appliedCoupon) {
+        const couponCheck = await CouponModel.findById(appliedCoupon)
           .session(session)
           .lean();
 
@@ -109,10 +113,29 @@ export class OrderService {
             "The promotional code applied has expired or reached its limit. Please refresh your cart.",
           );
         }
-      }
 
-      const discountAmount = cart.discountAmount || 0;
-      const appliedCoupon = cart.appliedCoupon || null;
+        // CRITICAL TOCTOU FIX: We MUST recalculate the discount against the LIVE subTotal
+        // to prevent users from keeping discounts if an admin changed the product price.
+        try {
+          const recalculation =
+            await CouponService.validateAndCalculateDiscount(
+              couponCheck.code,
+              subTotal,
+              safeUserId,
+              payload.paymentMethod, // Passed to enforce COD/Prepaid restrictions during checkout
+            );
+          discountAmount = recalculation.discountAmount;
+        } catch (err: unknown) {
+          const errMsg =
+            err instanceof AppError
+              ? err.message
+              : "Cart no longer meets coupon requirements.";
+          throw new AppError(
+            HTTP_STATUS.CONFLICT,
+            `Coupon Invalidated: ${errMsg} Please refresh your cart.`,
+          );
+        }
+      }
 
       // PASS 2: Proportional Discounting & Legal Tax Split
       const historicalItems: IOrderItem[] = [];
