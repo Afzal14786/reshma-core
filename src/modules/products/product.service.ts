@@ -14,6 +14,23 @@ import { GetProductsQueryInput } from "./dtos/product.public.dto";
 import { IBaseProduct } from "./interfaces/base-product.interface";
 import logger from "@config/logger";
 
+// --- RESILIENCE INFRASTRUCTURE IMPORTS ---
+import { Queue } from "bullmq";
+import Redis from "ioredis";
+import env from "@config/env";
+
+/**
+ * Enterprise Resilience: Search Sync Dead Letter Queue (DLQ)
+ * If Typesense goes down, failed product syncs are pushed here.
+ * A background worker will retry them with exponential backoff.
+ */
+const searchSyncConnection = new Redis(env.REDIS_URL, {
+  maxRetriesPerRequest: null,
+});
+export const searchSyncQueue = new Queue("search-sync-queue", {
+  connection: searchSyncConnection,
+});
+
 /**
  * Strict typing for outbound Typesense synchronization payloads.
  * This guarantees we never send Mongoose-specific metadata (like __v or timestamps)
@@ -288,13 +305,13 @@ export class ProductService {
    * @method syncToSearchEngine
    * @description Asynchronous Fire-and-Forget synchronization.
    * Wraps Typesense operations to prevent search outages from crashing primary DB transactions.
-   * Eventual Consistency Protocol: Logs network failures for manual retry but returns silently.
+   * Eventual Consistency Protocol: Pushes failed syncs to a Dead Letter Queue for exponential retry.
    */
   private static async syncToSearchEngine(
     product: IBaseProduct,
   ): Promise<void> {
+    const payload = this.mapToTypesense(product);
     try {
-      const payload = this.mapToTypesense(product);
       // Upsert: If the document exists, it updates it. If not, it creates it.
       await typesenseClient.collections("products").documents().upsert(payload);
       logger.info(
@@ -307,12 +324,22 @@ export class ProductService {
         error instanceof Error
           ? error.message
           : "Unknown synchronization error";
-      // We log the error for infrastructure alerts, but we DO NOT throw.
-      // The MongoDB transaction has already succeeded; throwing here would cause a false-negative HTTP 500.
+
       logger.error(
         this.safeLog(
-          `[Typesense Sync] CRITICAL: Failed to index product ${product.sku}. Reason: ${errMsg}`,
+          `[Typesense Sync] CRITICAL: Failed to index product ${product.sku}. Pushing to DLQ. Reason: ${errMsg}`,
         ),
+      );
+
+      // RESILIENCE PATTERN: Push to DLQ with exponential backoff (5s, 10s, 20s...)
+      await searchSyncQueue.add(
+        "sync-product",
+        { action: "UPSERT", payload },
+        {
+          attempts: 10,
+          backoff: { type: "exponential", delay: 5000 },
+          removeOnComplete: true,
+        },
       );
     }
   }
@@ -341,8 +368,19 @@ export class ProductService {
         const errMsg = tsError.message || "Unknown deletion error";
         logger.error(
           this.safeLog(
-            `[Typesense Sync] Failed to remove product ${productId} from index. Reason: ${errMsg}`,
+            `[Typesense Sync] Failed to remove product ${productId} from index. Pushing to DLQ. Reason: ${errMsg}`,
           ),
+        );
+
+        // RESILIENCE PATTERN: Push to DLQ with exponential backoff
+        await searchSyncQueue.add(
+          "sync-product",
+          { action: "DELETE", productId },
+          {
+            attempts: 10,
+            backoff: { type: "exponential", delay: 5000 },
+            removeOnComplete: true,
+          },
         );
       }
     }
