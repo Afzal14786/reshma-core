@@ -19,7 +19,9 @@ export type EmailJobType =
   | "RETURN_APPROVED"
   | "RETURN_REJECTED"
   | "RETURN_REFUNDED"
-  | "DATA_EXPORT";
+  | "DATA_EXPORT"
+  | "TICKET_CREATED"
+  | "TICKET_REPLIED";
 
 interface BaseEmailJob {
   type: EmailJobType;
@@ -100,6 +102,25 @@ export interface IDataExportJob extends BaseEmailJob {
   };
 }
 
+// --- SUPPORT TICKETING ENGINE PAYLOADS ---
+export interface ITicketCreatedJob extends BaseEmailJob {
+  type: "TICKET_CREATED";
+  data: {
+    firstname: string;
+    ticketId: string;
+    ticketSubject: string;
+  };
+}
+
+export interface ITicketRepliedJob extends BaseEmailJob {
+  type: "TICKET_REPLIED";
+  data: {
+    firstname: string;
+    ticketId: string;
+    replyPreview: string; // A short snippet of the admin's reply
+  };
+}
+
 // The exported union ensures our worker's exhaustive switch statement is flawless
 export type EmailJobPayload =
   | IOtpVerificationJob
@@ -114,4 +135,6 @@ export type EmailJobPayload =
   | IReturnApprovedJob
   | IReturnRejectedJob
   | IReturnRefundedJob
-  | IDataExportJob;
+  | IDataExportJob
+  | ITicketCreatedJob
+  | ITicketRepliedJob;
