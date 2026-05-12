@@ -24,7 +24,7 @@ import { IOrderItem } from "@modules/orders/interfaces/order.interface";
  * strict 4-stage state machine (Initiation -> Arbitration -> Restock -> Refund).
  *
  * SECURITY BOUNDARY (CodeQL Compliant):
- * - Financial calculations are derived strictly from historical order snapshots.
+ * - Financial calculations use Proportional Discounting to prevent coupon exploits.
  * - All logged variables are sanitized against CRLF injection (CWE-117).
  * - Multi-document ACID transactions guarantee data consistency.
  * - Population results are verified via runtime Type Guards.
@@ -33,11 +33,7 @@ export class ReturnService {
   /**
    * STAGE 1: Initiate Return Request (Customer)
    * @description Validates eligibility (7-day window, hygiene), computes the
-   * refund estimate via historical data, and creates the RMA record.
-   *
-   * SECURITY (CodeQL):
-   * - Sanitizes log inputs to prevent CRLF injection (CWE-117).
-   * - Neutralizes NoSQL injection via strict $eq mapping (CWE-943).
+   * prorated refund estimate, and creates the RMA record.
    */
   public static async initiateReturn(
     userId: string,
@@ -90,6 +86,17 @@ export class ReturnService {
         );
       }
 
+      // FINANCIAL SECURITY: Proportional Discount Math
+      // Prevents users from abusing flat-rate coupons during partial returns.
+      const rawSubtotal = order.items.reduce(
+        (sum, item) => sum + item.priceAtPurchase * item.quantity,
+        0,
+      );
+
+      // The ratio of what they actually paid vs the raw value of the items
+      const discountRatio =
+        rawSubtotal > 0 ? order.pricing.totalAmount / rawSubtotal : 1;
+
       let estimatedRefund = 0;
       let requiresPhotographicProof = false;
 
@@ -135,8 +142,13 @@ export class ReturnService {
 
         if (liveProduct.isFragile) requiresPhotographicProof = true;
 
-        estimatedRefund += purchasedItem.priceAtPurchase * reqItem.quantity;
+        // Apply the proportional discount ratio to the item's base price
+        const rawItemTotal = purchasedItem.priceAtPurchase * reqItem.quantity;
+        estimatedRefund += rawItemTotal * discountRatio;
       }
+
+      // Round to 2 decimal places to prevent floating point anomalies (e.g. 333.3333333)
+      estimatedRefund = Math.round(estimatedRefund * 100) / 100;
 
       if (
         requiresPhotographicProof &&
@@ -195,7 +207,7 @@ export class ReturnService {
 
       // Property access is now safe because we used returnDocs[0]
       logger.info(
-        `[ReturnService] Return ${createdReturn._id} generated for Order ${safeOrderId}`,
+        `[ReturnService] Return ${createdReturn._id} generated for Order ${safeOrderId}. Prorated Refund: ₹${estimatedRefund}`,
       );
 
       setImmediate(() => {
@@ -270,8 +282,11 @@ export class ReturnService {
           "Linked order record missing.",
         );
 
-      // Type Guard for populated user
-      const userDoc = returnRequest.user as any;
+      const userDoc = returnRequest.user as unknown as {
+        _id: Types.ObjectId;
+        email: string;
+        firstname: string;
+      };
       if (!userDoc || !userDoc._id)
         throw new AppError(
           HTTP_STATUS.INTERNAL_SERVER_ERROR,
@@ -405,8 +420,11 @@ export class ReturnService {
       await order.save({ session });
       await session.commitTransaction();
 
-      // Final Notification
-      const userDoc = returnRequest.user as any;
+      const userDoc = returnRequest.user as unknown as {
+        _id: Types.ObjectId;
+        email: string;
+        firstname: string;
+      };
       setImmediate(() => {
         NotificationService.sendReturnRefundedNotification(
           userDoc._id,

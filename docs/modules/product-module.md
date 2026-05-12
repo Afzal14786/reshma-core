@@ -53,10 +53,14 @@ Because the API accepts multiple types of products at the same `POST /` endpoint
 The Service layer isolates the database operations from the HTTP controllers and handles distributed transactions.
 
 **Key Service Methods & Failsafes:**
-* **`createProduct`:** 1. Uploads memory buffers to Cloudinary concurrently via `Promise.all`.
+* **`createProduct`:** 
+  1. Uploads memory buffers to Cloudinary concurrently via `Promise.all`.
   2. Saves the polymorphic document to MongoDB.
   3. **Cloudinary Rollback:** If MongoDB fails (e.g., Duplicate SKU constraint), the service automatically catches the error and deletes the newly uploaded images from Cloudinary to prevent orphaned asset storage bloat.
+
 * **`reserveStock`:** Utilizes MongoDB's atomic `$inc` combined with a `$gte` query firewall. This prevents Race Conditions if multiple users attempt to purchase the final inventory item at the exact same millisecond.  
+
+* **`syncToSearchEngine`:** Executes an asynchronous upsert to the Typesense RAM cluster immediately following a successful MongoDB commit. It utilizes a **Resilience Pattern** where any network or service failure triggers an automatic push to a background retry queue rather than failing the primary transaction. 
 
 ## 5. Legal Tax Compliance Engine (Indian GST)
 
@@ -82,6 +86,11 @@ The public-facing catalog is designed to survive "Thundering Herd" traffic spike
 * **Public Read Shielding:** All `GET /api/v1/products` routes are wrapped in `cacheMiddleware(300)`. This forces responses to be served directly from Redis RAM (~2ms) for 5 minutes. 10,000 users refreshing the homepage will only result in 1 actual MongoDB query.
 * **Admin Mutation Invalidation:** To prevent customers from seeing stale prices after an Admin edits the catalog, all Admin mutation routes (`POST`, `PATCH`, `DELETE`) trigger a **Fire-and-Forget** `CacheManager.invalidateCachePattern('/api/v1/products')` command. This instantly purges the Redis RAM in the background without slowing down the Admin's API response time.
 
+* **Search Synchronization Resilience (Typesense DLQ)** The system implements an Eventual Consistency protocol to ensure the search engine never desyncs from the primary database, even during network outages.  
+
+  * **Resilience Mechanism:** All outbound synchronization requests (Upsert/Delete) are wrapped in a failsafe block.
+  * **The Dead Letter Queue (DLQ):** If a connection to Typesense fails, the product payload is pushed to the `search-sync-queue` via BullMQ.
+  * **Exponential Backoff:** The queue is configured for **10 attempts** with an **exponential backoff strategy** (starting at 5 seconds). This guarantees that "Ghost Products" are eliminated once the search cluster recovers.
 ---  
 
 **Standard Documentation | Reshma-Core Architecture**

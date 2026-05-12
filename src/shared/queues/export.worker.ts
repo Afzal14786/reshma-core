@@ -55,7 +55,6 @@ export const dataExportWorker = new Worker(
           Wishlist.findOne({ user: { $eq: safeUserId } }).lean(),
           Interaction.find({ user: { $eq: safeUserId } }).lean(),
           Ticket.find({ user: { $eq: safeUserId } }).lean(),
-          Ticket.find({ user: { $eq: safeUserId } }).lean(),
         ]);
 
       if (!profile) {
@@ -68,9 +67,8 @@ export const dataExportWorker = new Worker(
       }
 
       // SECURITY FIX: Strip internal system fields that the user shouldn't see
-      const sanitizedProfile = { ...profile };
-      delete (sanitizedProfile as any).password;
-      delete (sanitizedProfile as any).__v;
+      const { password, __v, ...sanitizedProfile } =
+        profile as unknown as Record<string, unknown>;
 
       // 2. Data Assembly: Construct the formal JSON payload
       const exportPayload = {

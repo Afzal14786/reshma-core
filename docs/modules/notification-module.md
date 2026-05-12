@@ -93,31 +93,36 @@ Endpoints exposed to the React frontend to manage the user's bell-icon dashboard
 
 --- 
 
-## Background Queue Architecture (BullMQ)
+## Background Queue Architecture (BullMQ) 
+The system utilizes multiple specialized queues to ensure asynchronous resilience and prevent blocking the main Node.js event loop.
 
-### 1. The Producer (`email.queue.ts`)
+### 1. The Producer
 
-Pushes an `EmailJobPayload` to Redis. The payload contains only primitive data (strings, numbers) necessary to build the email, keeping the Redis memory footprint small.
+Pushes strictly-typed payloads to Redis. These payloads contain only primitive data (strings, numbers) necessary for the job, keeping the Redis memory footprint small.  
 
-### 2. The Consumer (`email.worker.ts`)
+  * **Email Queue (`email.queue.ts`)**: Produces `EmailJobPayload` for all transactional communications.
+  * **Search Sync Queue (product.service.ts)**: Manages failed search engine indexing. If Typesense is unreachable, the system pushes an `UPSERT` or `DELETE` action here with a 10-attempt exponential backoff strategy to prevent "Ghost Products."
 
-A background process initialized in `server.ts` that constantly listens to the Redis queue.
+### 2. The Consumer (Workers)
 
-- Extracts the payload and passes it to `NotificationService.compileEmailTemplate()`.
-- Injects output into `nodemailer` and communicates with the SMTP server [cite: 1].
-- **Retry Logic:** Includes automatic exponential backoff in case the SMTP server temporarily drops the connection [cite: 1].  
+Background processes initialized in `server.ts` that constantly listen to their respective Redis queues.
 
+  * **Email Worker (`email.worker.ts`)**: * Extracts payload and passes it to `NotificationService.compileEmailTemplate()`.
+  * Injects output into `nodemailer` for SMTP delivery.
+  * **Retry Logic:** Implements automatic exponential backoff for temporary SMTP connection drops.
+
+* **Search Worker:** *(Strategic Implementation)* Consumes synchronization jobs to maintain eventual consistency between MongoDB and the Typesense RAM cluster.
 ---  
 
 ## Security & Reliability Dependencies
 
-- **IDOR Protection:** The `markAsRead` query explicitly requires both the notification `_id` AND the `recipientId: req.user._id` [cite: 1].
+- **IDOR Protection:** The `markAsRead` query explicitly requires both the notification `_id` AND the `recipientId: req.user._id` .
 
-- **Winston Telemetry:** Every job queued and alert triggered is logged via Winston to maintain an audit trail for delayed email investigations [cite: 1].
+- **Winston Telemetry:** Every job queued and alert triggered is logged via Winston to maintain an audit trail for delayed email investigations .
 
-- **Express Rate Limiting:** Applied globally to prevent spamming the notification fetch endpoint [cite: 1].
+- **Express Rate Limiting:** Applied globally to prevent spamming the notification fetch endpoint .
 
-- **Template Integrity:** Corrected naming conventions (e.g., `order-cancel.ts`) ensure the compiler never hits file-not-found errors [cite: 1].
+- **Template Integrity:** Corrected naming conventions (e.g., `order-cancel.ts`) ensure the compiler never hits file-not-found errors .
 
 ---  
 
