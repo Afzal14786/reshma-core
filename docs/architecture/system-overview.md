@@ -56,6 +56,7 @@ Deep dives into the specific business logic, DTOs, and services for each core fe
 * **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, Shiprocket 3PL Dispatch, Delivery Automation)*
 * **[Search Module](../modules/search-module.md)** *(Typesense RAM Cluster, Eventual Consistency, Faceted Discovery)*
 * **[Dashboard Module](../modules/dashboard-module.md)** *(MongoDB $facet aggregations, Financial Reporting, Inventory Alerts)* 
+* **[Support Module](../modules/support-module.md)** *(Polymorphic ticketing, Threaded Conversations, Privacy Anonymization)*
 
 ### API Standards & Testing
 Rules for RESTful communication and Postman/Thunder Client testing protocols.
@@ -71,6 +72,7 @@ Rules for RESTful communication and Postman/Thunder Client testing protocols.
 * **[Order & Logistics Runbook](../api/thunder-tests/order-runbook.md)** *(Checkout, Shiprocket Dispatch, and Webhook Simulation)*
 * **[Search Runbook](../api/thunder-tests/search-runbook.md)** *(Typo-tolerance, pagination, and filter simulations)*
 * **[Dashboard Runbook](../api/thunder-tests/dashboard-runbook.md)** *(Admin metric fetching and date-range validation)*
+* **[Support Runbook](../api/thunder-tests/support-runbook.md)** *(Ticket state machines and Cloudinary attachments)*
 
 ### Setup & Deployment
 Runbooks for getting the server running locally or deploying to production.

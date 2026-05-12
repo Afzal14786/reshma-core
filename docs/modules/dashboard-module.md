@@ -15,6 +15,7 @@ The Dashboard Module (`src/modules/dashboard/`) serves as the command center for
 *   Order fulfillment distribution (Pending, Shipped, Returned).
 *   Top-selling products ranked by volume and generated revenue.
 *   Low stock inventory alerts (`currentStock < 10`).
+* Active Arbitration Queue (Count of Support Tickets currently OPEN or WAITING_ON_CUSTOMER).
 
 **Out of Scope (Delegated to External Tools):**
 *   Anonymous pageviews, bounce rates, and session durations. These metrics cause severe MongoDB heap bloat and are strictly delegated to Time-Series tools like Google Analytics (GA4) or Mixpanel.

@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Added ~ May 12, 2026
+* **Polymorphic Ticketing System:** Deployed a new centralized Support Module (`/api/v1/support`) that allows customers to link complaints directly to specific polymorphic entities (Orders, Returns, Products).
+* **Threaded Conversations:** Implemented an `O(1)` read-optimized embedded document architecture for ticket messages, replacing expensive SQL-style joins.
+* **SLA State Machine:** Engineered an autonomous arbitration workflow (`OPEN` -> `IN_PROGRESS` -> `WAITING_ON_CUSTOMER` -> `RESOLVED` -> `CLOSED`). The engine natively locks closed tickets to prevent zombie thread revivals.
+* **Multimedia Support:** Integrated Multer and Cloudinary buffer-streams into the support routes to safely handle user-uploaded photographic evidence (up to 3 images per reply).
+
+### Security & DPDP/GDPR Compliance
+* **The Right to be Forgotten:** Hooked `SupportService.anonymizeUserTickets` into the `user.service.ts` ACID deletion transaction. Customer identity and photographic PII are now irreversibly scrubbed upon account deletion, while preserving anonymous text logs for administrative QA.
+* **Data Portability (Takeout):** Updated the BullMQ `export.worker.ts` so that users requesting their JSON data footprint automatically receive their entire support ticket history.
+* **IDOR Protection:** The Ticketing Engine dynamically cross-references the `Orders` and `Returns` collections to mathematically guarantee a user actually owns the entity they are complaining about before ticket initialization.
+* **Anti-Spoofing:** Hardcoded the `MessageSenderRole.USER` override in the Public Controller to prevent malicious payload interception and admin-spoofing.
+
+### Cross-Module Integrations
+* **Notification Engine (BullMQ):** Added `TICKET_CREATED` and `TICKET_REPLIED` to the discriminated union payloads. The background worker now dispatches strictly-typed HTML emails and persistent In-App "Bell Icon" alerts without blocking the Node.js event loop.
+* **Admin Dashboard KPIs:** Injected a fast `countDocuments` query into the `dashboard.service.ts` `$facet` pipeline. Staff can now instantly see `pendingSupportTickets` (tickets in `OPEN` or `WAITING_ON_CUSTOMER` states) on the main `/api/v1/dashboard/metrics` route.
+
+### Documentation Updates
+* Created `docs/modules/support-module.md` (Architecture & ADRs).
+* Created `docs/api/thunder-tests/support-runbook.md` (Postman/Thunder Client testing guide).
+* Appended Support Module definitions to `system-overview.md`, `legal-tax-compliance.md`, and `api-standards.md`.
+
+### Key Files Altered/Created
+* `+ src/modules/support/*` (Model, DTOs, Interfaces, Service, Controllers, Routes)
+* `~ src/routes/index.ts` (Mounted `/support` routes)
+* `~ src/modules/notifications/interface/email.interface.ts` (Added Ticket Unions)
+* `~ src/modules/notifications/notification.service.ts` (Added Trigger Methods)
+* `+ src/modules/notifications/templates/ticket-created.ts`
+* `+ src/modules/notifications/templates/ticket-replied.ts`
+* `~ src/modules/users/user.service.ts` (Injected Anonymization Saga)
+* `~ src/shared/queues/export.worker.ts` (Injected Ticket Fetcher)
+* `~ src/modules/dashboard/dashboard.service.ts` (Injected Support KPIs)
+* `~ src/modules/dashboard/interfaces/dashboard.interface.ts` (Added Metric Types)
+
 ### Hotfix: DPDP/GDPR Cross-Module Privacy Scrub
 * **Interaction Masking (Anti-Crash):** Patched `interaction.controller.ts` to intercept `null` user populations caused by account deletions. Safely substitutes an "Anonymous User" profile to prevent frontend `TypeError` crashes on product pages.
 * **Return Records Scrubbing:** Engineered `anonymizeUserReturns` in `return.service.ts` to permanently delete photographic proof of damage, wipe customer text notes, and scrub pickup addresses while preserving the financial `refundAmountEstimate` for tax accounting.
