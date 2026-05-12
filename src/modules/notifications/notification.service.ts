@@ -19,6 +19,9 @@ import { returnApprovedTemplate } from "./templates/return-approved";
 import { returnRejectedTemplate } from "./templates/return-rejected";
 import { returnRefundedTemplate } from "./templates/return-refunded";
 
+import { ticketCreatedTemplate } from "./templates/ticket-created";
+import { ticketRepliedTemplate } from "./templates/ticket-replied";
+
 /**
  * UNIFIED NOTIFICATION SERVICE
  * * ARCHITECTURE NOTE:
@@ -468,6 +471,77 @@ export class NotificationService {
     );
   }
 
+  /**
+   * CUSTOMER SUPPORT TICKETING ENGINE ALERTS
+   */
+  public static async sendTicketCreatedNotification(
+    userId: Types.ObjectId,
+    email: string,
+    firstname: string,
+    ticketId: string,
+    ticketSubject: string,
+  ): Promise<void> {
+    await dispatchEmailJob({
+      type: "TICKET_CREATED",
+      to: email,
+      data: { firstname, ticketId, ticketSubject },
+    });
+
+    Notification.create({
+      recipientId: userId,
+      type: "SYSTEM",
+      title: "Support Request Received",
+      message: `Your ticket ${ticketId} has been created successfully.`,
+      link: `/support/${ticketId}`,
+    }).catch((err) => {
+      logger.error(
+        `[Notification DB Error] Ticket creation alert failed for ${userId}`,
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+
+    logger.info(
+      `[Notification] Ticket creation alerts dispatched for Ticket: ${ticketId}`,
+    );
+  }
+
+  public static async sendTicketReplyNotification(
+    userId: Types.ObjectId,
+    email: string,
+    firstname: string,
+    ticketId: string,
+    replyMessage: string,
+  ): Promise<void> {
+    // Generate a short preview of the message
+    const replyPreview =
+      replyMessage.length > 100
+        ? replyMessage.substring(0, 100) + "..."
+        : replyMessage;
+
+    await dispatchEmailJob({
+      type: "TICKET_REPLIED",
+      to: email,
+      data: { firstname, ticketId, replyPreview },
+    });
+
+    Notification.create({
+      recipientId: userId,
+      type: "SYSTEM",
+      title: "Support Ticket Updated",
+      message: `An agent has replied to your ticket ${ticketId}.`,
+      link: `/support/${ticketId}`,
+    }).catch((err) => {
+      logger.error(
+        `[Notification DB Error] Ticket reply alert failed for ${userId}`,
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+
+    logger.info(
+      `[Notification] Ticket reply alerts dispatched for Ticket: ${ticketId}`,
+    );
+  }
+
   // QUEUE COMPILER (Used ONLY by email.worker.ts)
 
   /**
@@ -583,6 +657,24 @@ export class NotificationService {
         return {
           subject: "Your Data Export - Reshma Bangles Privacy",
           html: dataExportTemplate(payload.data.firstname),
+        };
+      case "TICKET_CREATED":
+        return {
+          subject: `Support Request Received: ${payload.data.ticketId}`,
+          html: ticketCreatedTemplate(
+            payload.data.firstname,
+            payload.data.ticketId,
+            payload.data.ticketSubject,
+          ),
+        };
+      case "TICKET_REPLIED":
+        return {
+          subject: `Update on your Support Ticket: ${payload.data.ticketId}`,
+          html: ticketRepliedTemplate(
+            payload.data.firstname,
+            payload.data.ticketId,
+            payload.data.replyPreview,
+          ),
         };
       default:
         // We stringify the raw payload to capture the bug in server logs.

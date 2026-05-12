@@ -190,6 +190,13 @@ The API strictly adheres to the following HTTP status codes mapping:
 **XIII. DevOps & Health Module (`/health`)**
 * `GET /health` - **(New)** *(Public)* Load Balancer Liveness Probe. Verifies active connections to MongoDB, Redis, and Typesense clusters.
 
+**XIV. Support Module (`/support`)**  
+* `GET /support/tickets/me` - *(Public)* Fetch paginated ticket history for the logged-in user.
+* `POST /support/tickets` - *(Public)* Create a new polymorphic support ticket (Accepts Cloudinary `images`).
+* `POST /support/tickets/:ticketId/reply` - *(Public)* Customer replies to an existing ticket.
+* `GET /support/admin/tickets` - *(Admin)* View the global platform arbitration queue.
+* `POST /support/admin/tickets/:ticketId/reply` - *(Admin)* Admin replies to a customer's ticket (Auto-shifts state).
+* `PATCH /support/admin/tickets/:ticketId/state` - *(Admin)* Escalate priority or forcefully close a ticket.
 --- 
 
 ## Endpoint Documentation Template  

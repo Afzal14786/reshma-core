@@ -58,6 +58,8 @@ The unified entry point for the entire application. It contains highly specific 
 - `sendOrderCancelledNotification(...)`: (New) Dispatches a cancellation alert with the specific reason (e.g., Payment Timeout), ensuring the user is informed of inventory restoration.
 
 - `sendOrderShippedNotification(...)`: Dispatches strictly-typed HTML emails to BullMQ containing `trackingNumber` and `courierName`.  
+- `sendTicketCreatedNotification(...)`: Dispatches an alert confirming receipt of a support request.
+- `sendTicketReplyNotification(...)`: Dispatches an email containing a 100-character preview of an Admin's reply to keep the customer engaged.
 
 
 ### 2. The Presentation Layer (`notification.controller.ts`)

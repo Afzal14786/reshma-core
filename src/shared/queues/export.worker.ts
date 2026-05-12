@@ -4,14 +4,15 @@ import env from "@config/env";
 import logger from "@config/logger";
 
 // Mongoose Models for direct DB access
-import { User } from "../../modules/users/user.model";
-import { Order } from "../../modules/orders/order.model";
-import { Cart } from "../../modules/cart/cart.model";
-import { Wishlist } from "../../modules/wishlists/wishlist.model";
-import { Interaction } from "../../modules/interactions/interaction.model";
+import { User } from "@modules/users/user.model";
+import { Order } from "@modules/orders/order.model";
+import { Cart } from "@modules/cart/cart.model";
+import { Wishlist } from "@modules/wishlists/wishlist.model";
+import { Interaction } from "@modules/interactions/interaction.model";
+import { Ticket } from "@modules/support/support.model";
 
 // Notification Facade
-import { NotificationService } from "../../modules/notifications/notification.service";
+import { NotificationService } from "@modules/notifications/notification.service";
 
 /**
  * SECURITY UTILITY: CodeQL CWE-117 Neutralizer
@@ -46,15 +47,16 @@ export const dataExportWorker = new Worker(
     try {
       // 1. Parallel Execution: Query all domains simultaneously for maximum performance
       // Using .lean() strips heavy Mongoose wrappers, saving massive amounts of RAM
-      const [profile, orders, cart, wishlist, interactions] = await Promise.all(
-        [
+      const [profile, orders, cart, wishlist, interactions, tickets] =
+        await Promise.all([
           User.findOne({ _id: { $eq: safeUserId } }).lean(),
           Order.find({ user: { $eq: safeUserId } }).lean(),
           Cart.findOne({ user: { $eq: safeUserId } }).lean(),
           Wishlist.findOne({ user: { $eq: safeUserId } }).lean(),
           Interaction.find({ user: { $eq: safeUserId } }).lean(),
-        ],
-      );
+          Ticket.find({ user: { $eq: safeUserId } }).lean(),
+          Ticket.find({ user: { $eq: safeUserId } }).lean(),
+        ]);
 
       if (!profile) {
         logger.warn(
@@ -88,6 +90,7 @@ export const dataExportWorker = new Worker(
         },
         activity: {
           reviewsAndComments: interactions,
+          supportTickets: tickets,
         },
       };
 

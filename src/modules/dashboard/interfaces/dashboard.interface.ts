@@ -48,4 +48,5 @@ export interface IDashboardMetrics {
     totalRegisteredUsers: number;
     newSignupsInPeriod: number;
   };
+  pendingSupportTickets: number;
 }
