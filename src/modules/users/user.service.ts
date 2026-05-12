@@ -12,6 +12,7 @@ import { OrderService } from "../orders/order.service";
 import { CartService } from "../cart/cart.service";
 import { WishlistService } from "../wishlists/wishlist.service";
 import { ReturnService } from "../returns/return.service";
+import { SupportService } from "@modules/support/support.service";
 
 import { UpdateProfileInput } from "./dtos/update-profile.dto";
 import { AddAddressInput, UpdateAddressInput } from "./dtos/address.dto";
@@ -327,6 +328,7 @@ export class UserService {
       // 2. Anonymize Immutable Financial Records (Preserve tax math, destroy PII)
       await OrderService.anonymizeUserOrders(safeUserId, session);
       await ReturnService.anonymizeUserReturns(safeUserId, session);
+      await SupportService.anonymizeUserTickets(safeUserId, session);
 
       // 3. Destroy the Identity
       const deletedUser = await User.findOneAndDelete({
