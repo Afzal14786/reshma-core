@@ -158,9 +158,7 @@ export class CartService {
 
     let needsHeal = false;
 
-    // ==========================================
     // PASS 1: Aggregate Raw Totals
-    // ==========================================
     for (const item of cart.items) {
       const product = item.product as unknown as IPopulatedProduct | null;
 
@@ -181,6 +179,20 @@ export class CartService {
 
     if (needsHeal) {
       cart.items = validItems as unknown as typeof cart.items;
+    }
+
+    // UI Deadlock Prevention
+    // If the live subTotal changed (e.g., Admin altered a price), we must dynamically
+    // re-evaluate the cached coupon. Otherwise, the user gets stuck in an infinite loop
+    // where Checkout rejects the cart, but refreshing the page keeps the invalid coupon.
+    if (cart.appliedCoupon) {
+      const originalDiscount = cart.discountAmount;
+      await this.recalculateCartTotals(cart, safeUserId);
+
+      if (cart.discountAmount !== originalDiscount || needsHeal) {
+        await cart.save();
+      }
+    } else if (needsHeal) {
       await cart.save();
     }
 
@@ -231,7 +243,9 @@ export class CartService {
 
     // PASS 3: Shipping & Final Assembly
     // Rule: Free shipping over ₹2000
-    const totalAfterDiscount = cart.totalAfterDiscount || totals.subTotal;
+    // If a coupon makes the cart free, totalAfterDiscount will correctly remain 0 instead of reverting to subTotal.
+    const totalAfterDiscount =
+      cart.appliedCoupon != null ? cart.totalAfterDiscount : totals.subTotal;
     totals.estimatedShipping = totalAfterDiscount > 2000 ? 0 : 100;
 
     // Extract the 18% service tax from the shipping charge
