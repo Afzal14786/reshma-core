@@ -19,6 +19,12 @@ import {
 const router = Router();
 
 /**
+ * We apply the standard limiter globally to prevent basic enumeration attacks
+ * before the request even reaches the database.
+ */
+router.use(standardLimiter);
+
+/**
  * SECURITY (CodeQL): Global Authentication Firewall
  * Every single route in this module requires a valid JWT.
  */
@@ -44,7 +50,6 @@ router.get(
  */
 router.post(
   "/tickets",
-  standardLimiter, // Protects against ticket spamming
   restrictTo("USER"),
   upload.array("images", 3), // Intercepts multipart/form-data and sends to Cloudinary
   validate(CreateTicketSchema),
@@ -57,7 +62,6 @@ router.post(
  */
 router.post(
   "/tickets/:ticketId/reply",
-  standardLimiter,
   restrictTo("USER"),
   upload.array("images", 3),
   validate(ReplyTicketSchema),
