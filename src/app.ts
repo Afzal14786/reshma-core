@@ -46,17 +46,16 @@ app.use("/api", standardLimiter);
  * Payload Parsers
  * * ARCHITECTURE NOTE:
  * We use the 'verify' hook to intercept the raw Buffer stream before it gets parsed into JSON.
- * This is absolutely critical for Razorpay Webhooks, which require the exact, unparsed string
+ * This is absolutely critical for Razorpay & Shiprocket Webhooks, which require the exact, unparsed string
  * for HMAC SHA256 cryptographic signature validation.
  */
 app.use(
   express.json({
     limit: "10kb", // Strict limit to prevent Payload Too Large attacks
     verify: (req: Request, res: Response, buf: Buffer) => {
-      // If the request is targeting our webhook route, safely attach the raw string
+      // If the request is targeting any webhook route, safely attach the raw string
       if (req.originalUrl.includes("/webhook")) {
-        // We cast to an unknown intersection to satisfy TypeScript without using 'any'
-        (req as unknown as { rawBody: string }).rawBody = buf.toString("utf8");
+        req.rawBody = buf.toString("utf8");
       }
     },
   }),
