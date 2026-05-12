@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Added ~ Security & Financial Integrity 
+
+* **TOCTOU Checkout Vulnerability:** Patched a Time-of-Check to Time-of-Use vulnerability in `OrderService`. The checkout engine now dynamically recalculates coupon validity and discount ratios against the live database subtotal at the exact millisecond of checkout, preventing exploitation of cached cart discounts if an admin changes product pricing mid-session.
+* **Falsy Zero Math Bug:** Resolved a JavaScript falsy evaluation error in `CartService`. Replaced the `||` operator with an explicit null check (`!= null`) to ensure that 100% promotional discounts accurately result in a ₹0 grand total without reverting to the pre-discount subtotal.
+* **Checkout Deadlock Resolution:** Implemented a self-healing UI deadlock prevention mechanism in `CartService.getCart()`. If a cart's live subtotal falls below a previously applied coupon's threshold, the system now dynamically strips the invalid coupon during the fetch phase, breaking the infinite loop of checkout rejections.
+
 ### Added ~ Infrastructure Hardening & Resilience Epic
 
 ### Security & Financial Integrity
