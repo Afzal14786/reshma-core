@@ -13,6 +13,8 @@ import {
 import { Order } from "@modules/orders/order.model";
 import { Product } from "@modules/products/models/base-product.model";
 import { User } from "@modules/users/user.model";
+import { Ticket } from "@modules/support/support.model";
+import { TicketStatus } from "@modules/support/interfaces/support.interface";
 
 /**
  * Interface mapping the exact projection returned by the lean() inventory query.
@@ -50,7 +52,7 @@ export class DashboardService {
     query: DateRangeQueryInput,
   ): Promise<IDashboardMetrics> {
     try {
-      // 1. Establish the Temporal Boundary
+      // Establish the Temporal Boundary
       // If no dates are provided, default to a 30-day rolling window to prevent full collection scans.
       const endDate = query.endDate || new Date();
       const startDate =
@@ -69,16 +71,25 @@ export class DashboardService {
         ),
       );
 
-      // 2. Parallel Execution Strategy
+      // Parallel Execution Strategy
       // We fire the three distinct domain queries simultaneously to cut latency.
-      const [orderAggregations, lowStockProducts, userStats] =
-        await Promise.all([
-          this.aggregateOrderData(dateMatchQuery),
-          this.fetchInventoryAlerts(),
-          this.aggregateUserMetrics(dateMatchQuery),
-        ]);
+      const [
+        orderAggregations,
+        lowStockProducts,
+        userStats,
+        pendingSupportTickets,
+      ] = await Promise.all([
+        this.aggregateOrderData(dateMatchQuery),
+        this.fetchInventoryAlerts(),
+        this.aggregateUserMetrics(dateMatchQuery),
+        Ticket.countDocuments({
+          status: {
+            $in: [TicketStatus.OPEN, TicketStatus.WAITING_ON_CUSTOMER],
+          },
+        }),
+      ]);
 
-      // 3. Assemble and Format the Final Payload
+      // Assemble and Format the Final Payload
       return {
         dateRange: {
           start: startDate,
@@ -89,6 +100,7 @@ export class DashboardService {
         topSellingProducts: orderAggregations.topProducts,
         inventoryAlerts: lowStockProducts,
         userMetrics: userStats,
+        pendingSupportTickets,
       };
     } catch (error: unknown) {
       const errMsg =
