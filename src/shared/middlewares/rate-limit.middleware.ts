@@ -35,6 +35,8 @@ export const standardLimiter = rateLimit({
   max: 100, // Limit each IP to 100 requests per `window`
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // UNIQUE IDENTIFIER: Prevents double-count errors when layered with specific limiters
+  requestPropertyName: "standardRateLimit",
   message: {
     success: false,
     statusCode: HTTP_STATUS.TOO_MANY_REQUESTS,
@@ -49,6 +51,8 @@ export const authLimiter = rateLimit({
   max: 10, // Limit each IP to 10 authentication requests per hour
   standardHeaders: true,
   legacyHeaders: false,
+  // UNIQUE IDENTIFIER: Prevents collision with standardLimiter
+  requestPropertyName: "authRateLimit",
   message: {
     success: false,
     statusCode: HTTP_STATUS.TOO_MANY_REQUESTS,
@@ -63,6 +67,8 @@ export const checkoutLimiter = rateLimit({
   max: 5, // Strict limit on order creation to prevent card-testing bots
   standardHeaders: true,
   legacyHeaders: false,
+  // UNIQUE IDENTIFIER: Prevents collision with standardLimiter
+  requestPropertyName: "checkoutRateLimit",
   message: {
     success: false,
     statusCode: HTTP_STATUS.TOO_MANY_REQUESTS,
@@ -84,6 +90,8 @@ export const healthLimiter = rateLimit({
   max: 3000, // ~3.3 requests per second
   standardHeaders: true,
   legacyHeaders: false,
+  // UNIQUE IDENTIFIER: Prevents collision with standardLimiter
+  requestPropertyName: "healthRateLimit",
   message: {
     success: false,
     statusCode: HTTP_STATUS.TOO_MANY_REQUESTS,
