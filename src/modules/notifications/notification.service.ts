@@ -564,9 +564,7 @@ export class NotificationService {
     subject: string;
     html: string;
   }> {
-    // We import baseEmailLayout here locally just for the inline fallback below
-    const { baseEmailLayout } = await import("./templates/layout");
-
+    
     switch (payload.type) {
       case "OTP_VERIFICATION":
         return {
