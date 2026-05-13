@@ -564,7 +564,6 @@ export class NotificationService {
     subject: string;
     html: string;
   }> {
-    
     switch (payload.type) {
       case "OTP_VERIFICATION":
         return {
