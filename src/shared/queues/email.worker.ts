@@ -33,8 +33,8 @@ const emailWorker = new Worker(
   async (job: Job) => {
     const payload = job.data as EmailJobPayload;
 
-    // Ask the NotificationService to generate the exact Subject and HTML for this type
-    const { subject, html } = NotificationService.compileEmailTemplate(payload);
+    const { subject, html } =
+      await NotificationService.compileEmailTemplate(payload);
 
     // 1. Build the base email parameters using our strict interface
     const mailOptions: IMailOptions = {

@@ -1,39 +1,60 @@
 import { baseEmailLayout } from "./layout";
+import env from "@config/env";
 
 /**
  * DPDP / GDPR Data Export Email Template
  * * ARCHITECTURE NOTE:
- * This template strictly handles the HTML body. The actual JSON buffer
+ * This template strictly handles the MJML body. The actual JSON buffer
  * attachment is handled dynamically by Nodemailer in the worker layer.
  */
-export const dataExportTemplate = (firstname: string): string => {
+export const dataExportTemplate = async (
+  firstname: string,
+): Promise<string> => {
   const content = `
-    <div style="text-align: center; margin-bottom: 24px;">
-      <h2 style="color: #333333; margin-bottom: 8px;">Your Data Export is Ready</h2>
-      <p style="color: #666666; font-size: 16px;">Requested under Data Protection Regulations</p>
-    </div>
+      <mj-text align="left" css-class="heading-text dark-heading" color="#111827" padding-bottom="16px" font-weight="bold">
+        🛡️ Your Data is Ready
+      </mj-text>
+      
+      <mj-text align="left" css-class="body-text dark-text" color="#4B5563" padding-bottom="32px" line-height="1.5">
+        Hi ${firstname},<br><br>
+        Pursuant to your privacy request and our commitment to the Digital Personal Data Protection Act (DPDP), we have compiled a complete, machine-readable export of the personal data associated with your Reshma Bangles account.
+      </mj-text>
 
-    <p>Hi ${firstname},</p>
-    
-    <p>Pursuant to your recent request, we have compiled a complete copy of the personal data associated with your Reshma Bangles account.</p>
-    
-    <div style="background-color: #f8f9fa; border-left: 4px solid #3448C5; padding: 16px; margin: 24px 0;">
-      <h3 style="margin-top: 0; color: #333333; font-size: 16px;">What's Included:</h3>
-      <ul style="color: #555555; margin-bottom: 0;">
-        <li>Identity and Demographic Profile</li>
-        <li>Complete Order and Financial History</li>
-        <li>Shopping Cart and Wishlist States</li>
-        <li>Product Interactions and Reviews</li>
-      </ul>
-    </div>
+      <mj-text padding="0" padding-bottom="32px">
+        <div style="background-color: #F8F9FA; border-left: 4px solid #D97706; border-radius: 4px; padding: 20px;">
+          <p style="margin: 0 0 12px 0; font-size: 15px; font-weight: bold; color: #111827;" class="dark-heading">
+            📎 Secure JSON File Attached
+          </p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #4B5563; line-height: 1.6;" class="dark-text">
+            <li>Identity and Demographic Profile</li>
+            <li>Complete Order and Financial History</li>
+            <li>Product Interactions and Reviews</li>
+          </ul>
+          <p style="margin: 16px 0 0 0; font-size: 14px; color: #4B5563; line-height: 1.5;" class="dark-text">
+            Your requested data is attached directly to this email as an <strong>export.json</strong> file. You can open and view this file using any standard web browser or text editor.
+          </p>
+        </div>
+      </mj-text>
 
-    <p><strong>SECURITY WARNING:</strong> The attached <code>data-export.json</code> file contains highly sensitive personal and financial information. Please ensure you download and store this file on a secure, private device. Do not forward this email or share the file with untrusted third parties.</p>
+      <mj-text padding="0" padding-bottom="32px">
+        <div style="background-color: #FEF2F2; border-left: 4px solid #EF4444; border-radius: 4px; padding: 16px;">
+          <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: bold; color: #B91C1C; text-transform: uppercase; letter-spacing: 1px;">
+            ⚠️ Critical Privacy Warning
+          </p>
+          <p style="margin: 0; font-size: 14px; color: #7F1D1D; line-height: 1.5;">
+            This file contains highly sensitive personal, address, and financial interaction data. <strong>Do not forward this email or share this file with anyone.</strong> Please ensure you download and store it only on a private, secure device.
+          </p>
+        </div>
+      </mj-text>
 
-    <p>If you did not request this data export, please contact our security team immediately and change your account password.</p>
-
-    <br/>
-    <p>Best regards,<br/>The Reshma Bangles Privacy Team</p>
+      <mj-text align="left" css-class="small-text dark-muted" color="#6B7280" line-height="1.5">
+        <strong>Didn't request this?</strong><br>
+        If you did not initiate a data portability request from your account dashboard, your account may be compromised. Please <a href="${env.CLIENT_URL}/support" class="footer-link">contact our privacy team immediately</a> to secure your account.
+      </mj-text>
   `;
 
-  return baseEmailLayout("Data Export - ", content);
+  return await baseEmailLayout(
+    "Your Data Export - Reshma Bangles Privacy",
+    content,
+  );
 };

@@ -1,3 +1,8 @@
+import {
+  IOrderItem,
+  IOrderShippingAddress,
+} from "@modules/orders/interfaces/order.interface";
+
 /**
  * Strict Email Job Typings
  * * ARCHITECTURE NOTE:
@@ -30,7 +35,7 @@ interface BaseEmailJob {
 
 export interface IOtpVerificationJob extends BaseEmailJob {
   type: "OTP_VERIFICATION";
-  data: { firstname: string; otp: string };
+  data: { firstname: string; otp: string; expiryTimeIso: string };
 }
 
 export interface IWelcomeEmailJob extends BaseEmailJob {
@@ -50,7 +55,13 @@ export interface IProfileUpdateJob extends BaseEmailJob {
 
 export interface IOrderConfirmationJob extends BaseEmailJob {
   type: "ORDER_CONFIRMATION";
-  data: { firstname: string; orderNumber: string; totalAmount: number };
+  data: {
+    firstname: string;
+    orderNumber: string;
+    totalAmount: number;
+    items: IOrderItem[];
+    shippingAddress: IOrderShippingAddress;
+  };
 }
 
 export interface IOrderCancelledJob extends BaseEmailJob {
@@ -90,7 +101,13 @@ export interface IReturnRejectedJob extends BaseEmailJob {
 
 export interface IReturnRefundedJob extends BaseEmailJob {
   type: "RETURN_REFUNDED";
-  data: { firstname: string; orderNumber: string; refundAmount: number };
+  data: {
+    firstname: string;
+    orderNumber: string;
+    refundAmount: number;
+    refundMethod: string;
+    refundId: string;
+  };
 }
 
 // DPDP / GDPR Takeout Payload

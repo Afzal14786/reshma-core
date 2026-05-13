@@ -1,34 +1,37 @@
 import { baseEmailLayout } from "./layout";
 import env from "@config/env";
 
-export const passwordResetTemplate = (
+export const passwordResetTemplate = async (
   firstname: string,
   resetToken: string,
-): string => {
+): Promise<string> => {
   const resetUrl = `${env.CLIENT_URL}/auth/reset-password?token=${resetToken}`;
 
   const content = `
-      <h2 style="margin-top: 0; color: #111827; font-size: 24px;">Password Reset Request</h2>
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
-          Hi ${firstname},<br><br>
-          We received a request to reset the password associated with your Reshma Bangles account. 
-          If you made this request, please click the button below to set a new secure password.
-      </p>
+      <mj-text align="left" css-class="heading-text dark-heading" color="#111827" padding-bottom="16px" font-weight="bold">
+        🔒 Reset Your Password
+      </mj-text>
       
-      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0;">
-          <tr>
-              <td align="center">
-                  <a href="${resetUrl}" style="background-color: #111827; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 14px;">
-                      Reset Password
-                  </a>
-              </td>
-          </tr>
-      </table>
+      <mj-text align="left" css-class="body-text dark-text" color="#4B5563" padding-bottom="32px">
+        Hi ${firstname},<br><br>
+        We received a request to reset the password associated with your Reshma Bangles account. If you made this request, please click the button below to set a new, secure password.
+      </mj-text>
       
-      <p style="color: #ef4444; font-size: 14px; background-color: #fef2f2; padding: 15px; border-radius: 4px; border-left: 4px solid #ef4444;">
-          <strong>Security Notice:</strong> This link will expire in 15 minutes. If you did not request a password reset, you can safely ignore this email. Your account remains secure.
-      </p>
+      <mj-button href="${resetUrl}" background-color="#D97706" color="#FFFFFF" font-size="16px" font-weight="bold" border-radius="8px" width="100%" inner-padding="14px 28px" padding-bottom="32px">
+        Reset Password
+      </mj-button>
+
+      <mj-text align="left" css-class="small-text dark-muted" color="#EF4444" padding-bottom="32px" font-weight="600">
+        ⏳ For your security, this link will expire in 15 minutes.
+      </mj-text>
+
+      <mj-divider border-width="1px" border-color="#F3F4F6" padding-bottom="32px" css-class="dark-border" />
+
+      <mj-text align="left" css-class="small-text dark-muted" color="#9CA3AF" line-height="1.5">
+        <strong>Didn't request this?</strong><br>
+        If you did not request a password reset, you can safely ignore this email. Your password will not change. If you believe your account has been compromised, please <a href="${env.CLIENT_URL}/support" class="footer-link">contact our support team</a> immediately.
+      </mj-text>
   `;
 
-  return baseEmailLayout("Password Reset Instructions", content);
+  return await baseEmailLayout("Reset Your Password - Reshma Bangles", content);
 };

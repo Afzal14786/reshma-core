@@ -1,34 +1,39 @@
 import { baseEmailLayout } from "./layout";
+import env from "@config/env";
 
-export const ticketCreatedTemplate = (
+export const ticketCreatedTemplate = async (
   firstname: string,
   ticketId: string,
   ticketSubject: string,
-): string => {
+): Promise<string> => {
   const content = `
-    <h2 style="color: #333333; font-family: sans-serif;">Support Request Received</h2>
-    <p style="font-size: 16px; color: #555555; line-height: 1.5;">Hi ${firstname},</p>
-    <p style="font-size: 16px; color: #555555; line-height: 1.5;">
-      We have successfully received your support request. Our team is currently reviewing the details and will get back to you as soon as possible.
-    </p>
-    
-    <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #111827; margin: 25px 0; border-radius: 4px;">
-      <p style="margin: 0 0 8px 0; font-size: 14px; color: #333333;">
-        <strong style="color: #111827;">Ticket ID:</strong> ${ticketId}
-      </p>
-      <p style="margin: 0; font-size: 14px; color: #333333;">
-        <strong style="color: #111827;">Subject:</strong> ${ticketSubject}
-      </p>
-    </div>
+      <mj-text align="left" css-class="heading-text dark-heading" color="#111827" padding-bottom="16px" font-weight="bold">
+        🎫 Support Request Received
+      </mj-text>
+      
+      <mj-text align="left" css-class="body-text dark-text" color="#4B5563" padding-bottom="32px">
+        Hi ${firstname},<br><br>
+        We have successfully received your support request. Our customer success team is reviewing the details and will get back to you shortly.
+      </mj-text>
 
-    <p style="font-size: 16px; color: #555555; line-height: 1.5;">
-      You can track the status of your request or add more information at any time by logging into your account dashboard.
-    </p>
-    <p style="font-size: 16px; color: #555555; line-height: 1.5; margin-top: 30px;">
-      Best regards,<br>
-      <strong>The Reshma Bangles Support Team</strong>
-    </p>
+      <mj-text padding="0" padding-bottom="32px">
+        <div style="background-color: #F8F9FA; border-left: 4px solid #D97706; border-radius: 4px; padding: 16px;">
+          <p style="margin: 0 0 4px 0; font-size: 13px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px;">Ticket ID</p>
+          <p style="margin: 0 0 16px 0; font-size: 15px; font-weight: 600; color: #111827;" class="dark-heading">${ticketId}</p>
+          
+          <p style="margin: 0 0 4px 0; font-size: 13px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px;">Subject</p>
+          <p style="margin: 0; font-size: 15px; font-weight: 600; color: #111827;" class="dark-heading">${ticketSubject}</p>
+        </div>
+      </mj-text>
+
+      <mj-text align="left" css-class="small-text dark-muted" color="#D97706" padding-bottom="32px" font-weight="bold">
+        ⏱️ We typically respond within 24 business hours.
+      </mj-text>
+
+      <mj-button href="${env.CLIENT_URL}/support/${ticketId}" background-color="#D97706" color="#FFFFFF" font-size="16px" font-weight="bold" border-radius="8px" width="100%" inner-padding="14px 28px" padding-bottom="32px">
+        View Ticket Status
+      </mj-button>
   `;
 
-  return baseEmailLayout("Support Request Received", content);
+  return await baseEmailLayout(`Support Ticket Created - ${ticketId}`, content);
 };
