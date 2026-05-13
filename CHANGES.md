@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Added ~ Security, Compliance & Concurrency Hardening
+* **Atomic State Transitions (Orders):** Eliminated critical TOCTOU race conditions in the checkout and webhook pipelines. Replaced `order.save()` with atomic `findOneAndUpdate` state locks. This guarantees idempotency and prevents ghost cancellations or double-incrementing of coupon usage during concurrent frontend and webhook pings.
+* **Verified Buyer Legal Gatekeeper (Interactions):** Implemented strict validation to comply with E-Commerce rules regarding fake reviews. The platform now cryptographically verifies that a user has a `DELIVERED` order for a specific product before permitting them to submit a rating or review.
+* **Timezone-Neutral Aggregations (Dashboard):** Resolved a data desync vulnerability caused by Docker UTC server timezones. Dashboard temporal boundaries now utilize strict `setUTCHours` configurations, ensuring Indian Standard Time (IST) midnight settlements perfectly align with backend revenue reporting regardless of cloud host location.
+* **Prototype Pollution Prevention (Cart):** Resolved a CodeQL (CWE-1321) vulnerability in the cart attribute reconstruction logic. Dynamic user payloads are now mapped to a pure dictionary via `Object.create(null)` with explicit dropping of `__proto__` and `constructor` keys to protect the V8 memory heap.
+
 ### Added ~ Security & Financial Integrity 
 
 * **TOCTOU Checkout Vulnerability:** Patched a Time-of-Check to Time-of-Use vulnerability in `OrderService`. The checkout engine now dynamically recalculates coupon validity and discount ratios against the live database subtotal at the exact millisecond of checkout, preventing exploitation of cached cart discounts if an admin changes product pricing mid-session.
