@@ -247,14 +247,21 @@ export class UserService {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Store in Redis with a 10-minute (600 seconds) expiration
+    const TTL_SECONDS = 600; // 10 minutes
+    const expiryTimeIso = new Date(
+      Date.now() + TTL_SECONDS * 1000,
+    ).toISOString();
+
+    // Store in Redis with a 10-minute expiration
     const redisKey = `pwd_update_otp:${userId.toString()}`;
-    await redisClient.setEx(redisKey, 600, otp);
+    await redisClient.setEx(redisKey, TTL_SECONDS, otp);
 
     // Delegate to Notification Facade (No queue logic here)
     await NotificationService.sendPasswordUpdateOtp(
       user.email,
       user.firstname,
       otp,
+      expiryTimeIso,
     );
   }
 

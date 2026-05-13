@@ -338,6 +338,8 @@ export class OrderService {
             userDoc.firstname,
             savedOrder.orderNumber,
             savedOrder.pricing.totalAmount,
+            savedOrder.items,
+            savedOrder.shippingAddress,
           );
         }
       } catch (notifyErr) {
@@ -447,6 +449,8 @@ export class OrderService {
           userDoc.firstname,
           lockedOrder.orderNumber,
           lockedOrder.pricing.totalAmount,
+          lockedOrder.items,
+          lockedOrder.shippingAddress,
         );
       }
     } catch (notifyErr) {
@@ -552,6 +556,8 @@ export class OrderService {
             userDoc.firstname,
             lockedOrder.orderNumber,
             lockedOrder.pricing.totalAmount,
+            lockedOrder.items,
+            lockedOrder.shippingAddress,
           );
         }
       } catch (notifyErr) {
