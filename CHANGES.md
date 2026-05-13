@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Added ~ Features
+* **Public Password Recovery Pipeline:** Implemented the complete "Forgot Password" and "Reset Password" flows in the Auth module. Integrates seamlessly with Redis for 15-minute secure token expiry.
+* **Order Shipped Template:** Added a brand new `order-shipped.ts` MJML template featuring the visual timeline tracker and dynamic courier/tracking data.
+
+### UI & Notification Engine Overhaul (Blueprint 6.x)
+* **MJML Enterprise Templates:** Completely redesigned all 15 transactional email templates (`welcome`, `order-placed`, `return-approved`, `data-export`, etc.) to match the "Handcrafted Elegance" brand identity.
+* **Dark Mode & Responsive Design:** Replaced rigid HTML tables with fluid `<div>` structures and injected CSS media queries for automatic Dark Mode color inversion.
+* **Component Standardization:** Enforced a strict UI system using Deep Charcoal, Amber Glow, and 4px left-bordered Information Cards across all templates. Added a universal layout wrapper (`layout.ts`) featuring social media icons and gradient utilities.
+
+### Security & Infrastructure
+* **Rate Limiting Collision Fix:** Resolved the Express `ERR_ERL_DOUBLE_COUNT` error by explicitly assigning a unique `requestPropertyName` to all layered limiters (`standardLimiter`, `authLimiter`, `checkoutLimiter`). 
+* **Bcrypt DoS Protection (CWE-400):** Introduced `reset-password.dto.ts` with a strict `.max(64)` character limit on passwords, immunizing the server against Event Loop freezing via payload bloat.
+* **Strict Typing & Zero 'any':** Purged the `any` keyword from `email.interface.ts` and `notification.service.ts`. Strongly typed the payload interfaces using domain models (`IOrderItem`, `IOrderShippingAddress`).
+
+### Billing & Legal
+* **GST-Compliant PDF Invoices:** Completely rewrote `invoice.generator.ts`.
+  * Now asynchronously fetches the Cloudinary logo as a binary buffer.
+  * Dynamically maps CGST/SGST/IGST onto a structured A4 table.
+  * Added mandatory legal footers (Jurisdiction, Return Policy, and Authorized Signatory block).
+
+### Bug Fixes
+* **Missing Arguments Fix:** Corrected `order.service.ts` to pass the required `items` and `shippingAddress` payloads to the Notification Service across all three checkout scenarios (COD, Webhook, Frontend Verification).
+* **Dependency Updates:** Updated `package.json` and `package-lock.json` to accommodate MJML compilation and updated validation dependencies.
+
+---
+*Architectural Note: This completes the Node.js/Express Application Layer. The codebase is now mathematically robust, CodeQL compliant, and ready for Docker containerization (Phase 2).*
+
 ### Added ~ Security, Compliance & Concurrency Hardening
 * **Atomic State Transitions (Orders):** Eliminated critical TOCTOU race conditions in the checkout and webhook pipelines. Replaced `order.save()` with atomic `findOneAndUpdate` state locks. This guarantees idempotency and prevents ghost cancellations or double-incrementing of coupon usage during concurrent frontend and webhook pings.
 * **Verified Buyer Legal Gatekeeper (Interactions):** Implemented strict validation to comply with E-Commerce rules regarding fake reviews. The platform now cryptographically verifies that a user has a `DELIVERED` order for a specific product before permitting them to submit a rating or review.
