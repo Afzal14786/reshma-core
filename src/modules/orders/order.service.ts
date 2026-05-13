@@ -354,6 +354,7 @@ export class OrderService {
 
   /**
    * Frontend Cryptographic Handshake
+   * ARCHITECTURE NOTE: Uses Atomic Transitions to prevent Webhook Race Conditions.
    */
   public static async verifyFrontendPayment(
     userId: string,
@@ -389,20 +390,50 @@ export class OrderService {
       );
     }
 
-    order.paymentStatus = "PAID";
-    order.orderStatus = "PROCESSING";
-    order.gatewayPaymentId = gatewayPaymentId;
-    order.gatewaySignature = gatewaySignature;
-
-    await order.save();
-    logger.info(
-      this.safeLog(`Order Paid via Frontend Handshake: ${order.orderNumber}`),
+    // ATOMIC TRANSITION
+    // We only update if the status is strictly STILL pending at this exact millisecond.
+    const lockedOrder = await Order.findOneAndUpdate(
+      { _id: order._id, paymentStatus: "PENDING" },
+      {
+        $set: {
+          paymentStatus: "PAID",
+          orderStatus: "PROCESSING",
+          gatewayPaymentId: gatewayPaymentId,
+          gatewaySignature: gatewaySignature,
+        },
+      },
+      { new: true },
     );
 
-    // --- ASYNC NOTIFICATION & INVOICE ENGINE TRIGGER ---
+    // If lockedOrder is null, the Webhook processed it milliseconds before the frontend redirect. Safely abort.
+    if (!lockedOrder) return Order.findById(order._id);
 
-    // FIRE AND FORGET: Drop invoice job into BullMQ (Non-blocking)
-    await InvoiceQueueManager.enqueueInvoiceGeneration(order._id.toString());
+    logger.info(
+      this.safeLog(
+        `Order Paid via Frontend Handshake: ${lockedOrder.orderNumber}`,
+      ),
+    );
+
+    // ATOMIC SCARCITY: Increment usage
+    if (lockedOrder.pricing && lockedOrder.pricing.appliedCoupon) {
+      try {
+        await CouponModel.findOneAndUpdate(
+          { _id: { $eq: lockedOrder.pricing.appliedCoupon } },
+          { $inc: { usedCount: 1 } },
+        );
+      } catch (err) {
+        logger.error(
+          this.safeLog(
+            `Failed to increment coupon usage for order ${lockedOrder.orderNumber}`,
+          ),
+        );
+      }
+    }
+
+    // --- ASYNC NOTIFICATION & INVOICE ENGINE TRIGGER ---
+    await InvoiceQueueManager.enqueueInvoiceGeneration(
+      lockedOrder._id.toString(),
+    );
 
     try {
       const userDoc = await User.findOne({ _id: { $eq: safeUserId } })
@@ -414,23 +445,24 @@ export class OrderService {
           userDoc._id as mongoose.Types.ObjectId,
           userDoc.email,
           userDoc.firstname,
-          order.orderNumber,
-          order.pricing.totalAmount,
+          lockedOrder.orderNumber,
+          lockedOrder.pricing.totalAmount,
         );
       }
     } catch (notifyErr) {
       logger.error(
         this.safeLog(
-          `Failed to dispatch Razorpay confirmation for ${order.orderNumber}`,
+          `Failed to dispatch Razorpay confirmation for ${lockedOrder.orderNumber}`,
         ),
       );
     }
 
-    return order;
+    return lockedOrder;
   }
 
   /**
    * Server-to-Server Webhook Processing
+   * ARCHITECTURE NOTE: Uses Atomic Transitions to guarantee Idempotency.
    */
   public static async processWebhook(
     rawBody: string,
@@ -451,60 +483,65 @@ export class OrderService {
       const paymentEntity = parsedBody.payload.payment.entity;
       const rzpOrderId = paymentEntity.order_id;
 
-      const order = await Order.findOne({
-        gatewayOrderId: { $eq: String(rzpOrderId) },
-      });
+      // ATOMIC TRANSITION
+      const lockedOrder = await Order.findOneAndUpdate(
+        { gatewayOrderId: String(rzpOrderId), paymentStatus: "PENDING" },
+        {
+          $set: {
+            paymentStatus: "PAID",
+            orderStatus: "PROCESSING",
+            gatewayPaymentId: paymentEntity.id,
+          },
+        },
+        { new: true },
+      );
 
-      if (!order) return;
-
-      if (order.paymentStatus === "PAID") {
+      // If null, the Frontend Handshake already processed it. Safely abort.
+      if (!lockedOrder) {
         logger.info(
           this.safeLog(
-            `[Webhook] Order ${order.orderNumber} already PAID. Ignoring idempotent ping.`,
+            `[Webhook] Order already PAID or not found. Ignoring idempotent ping.`,
           ),
         );
         return;
       }
 
-      order.paymentStatus = "PAID";
-      order.orderStatus = "PROCESSING";
-      order.gatewayPaymentId = paymentEntity.id;
-      await order.save();
+      logger.info(
+        this.safeLog(
+          `[Webhook] Order ${lockedOrder.orderNumber} marked as PAID via background ping.`,
+        ),
+      );
 
       // ---> ATOMIC SCARCITY: Increment usage when Razorpay confirms money is in the bank
-      if (order.pricing && order.pricing.appliedCoupon) {
+      if (lockedOrder.pricing && lockedOrder.pricing.appliedCoupon) {
         try {
           await CouponModel.findOneAndUpdate(
-            { _id: { $eq: order.pricing.appliedCoupon } },
+            { _id: { $eq: lockedOrder.pricing.appliedCoupon } },
             { $inc: { usedCount: 1 } },
           );
           logger.info(
             this.safeLog(
-              `[Webhook] Incremented usage count for coupon on order ${order.orderNumber}`,
+              `[Webhook] Incremented usage count for coupon on order ${lockedOrder.orderNumber}`,
             ),
           );
         } catch (couponErr) {
           logger.error(
             this.safeLog(
-              `[Webhook] Failed to increment coupon usage for order ${order.orderNumber}`,
+              `[Webhook] Failed to increment coupon usage for order ${lockedOrder.orderNumber}`,
             ),
           );
         }
       }
 
-      logger.info(
-        this.safeLog(
-          `[Webhook] Order ${order.orderNumber} marked as PAID via background ping.`,
-        ),
+      // --- ASYNC NOTIFICATION & INVOICE ENGINE TRIGGER ---
+      await InvoiceQueueManager.enqueueInvoiceGeneration(
+        lockedOrder._id.toString(),
       );
 
-      // --- ASYNC NOTIFICATION & INVOICE ENGINE TRIGGER ---
-
-      // FIRE AND FORGET: Drop invoice job into BullMQ (Non-blocking)
-      await InvoiceQueueManager.enqueueInvoiceGeneration(order._id.toString());
-
       try {
-        const userDoc = await User.findOne({ _id: { $eq: String(order.user) } })
+        const userDoc = await User.findOne({
+          _id: { $eq: String(lockedOrder.user) },
+        })
           .select("firstname email")
           .lean();
 
@@ -513,14 +550,14 @@ export class OrderService {
             userDoc._id as mongoose.Types.ObjectId,
             userDoc.email,
             userDoc.firstname,
-            order.orderNumber,
-            order.pricing.totalAmount,
+            lockedOrder.orderNumber,
+            lockedOrder.pricing.totalAmount,
           );
         }
       } catch (notifyErr) {
         logger.error(
           this.safeLog(
-            `Failed to dispatch Webhook confirmation for ${order.orderNumber}`,
+            `Failed to dispatch Webhook confirmation for ${lockedOrder.orderNumber}`,
           ),
         );
       }
@@ -551,9 +588,21 @@ export class OrderService {
       session.startTransaction();
 
       try {
-        order.orderStatus = "CANCELLED";
+        // ATOMIC RE-VERIFICATION
+        // Guarantee the order wasn't paid via webhook in the milliseconds since we fetched the list
+        const lockedOrder = await Order.findOneAndUpdate(
+          { _id: order._id, orderStatus: "PENDING" },
+          { $set: { orderStatus: "CANCELLED" } },
+          { session, new: true },
+        );
 
-        for (const item of order.items) {
+        // If lockedOrder is null, the status changed (likely PAID via webhook). Skip cancellation.
+        if (!lockedOrder) {
+          await session.abortTransaction();
+          continue;
+        }
+
+        for (const item of lockedOrder.items) {
           await Product.findOneAndUpdate(
             { _id: { $eq: String(item.product) } },
             { $inc: { currentStock: item.quantity } },
@@ -561,13 +610,37 @@ export class OrderService {
           );
         }
 
-        await order.save({ session });
         await session.commitTransaction();
         logger.info(
           this.safeLog(
-            `[Cron] Restored inventory for abandoned order: ${order.orderNumber}`,
+            `[Cron] Restored inventory for abandoned order: ${lockedOrder.orderNumber}`,
           ),
         );
+
+        // Executed outside the transaction, and only if the commit succeeded
+        try {
+          const userDoc = await User.findOne({
+            _id: { $eq: String(lockedOrder.user) },
+          })
+            .select("firstname email")
+            .lean();
+
+          if (userDoc) {
+            await NotificationService.sendOrderCancelledNotification(
+              userDoc._id as mongoose.Types.ObjectId,
+              userDoc.email,
+              userDoc.firstname,
+              lockedOrder.orderNumber,
+              "Payment timeout. Your order was abandoned at checkout.",
+            );
+          }
+        } catch (notifyErr) {
+          logger.error(
+            this.safeLog(
+              `Failed to dispatch cancellation notification for ${lockedOrder.orderNumber}`,
+            ),
+          );
+        }
       } catch (error) {
         await session.abortTransaction();
         logger.error(
@@ -576,29 +649,6 @@ export class OrderService {
         continue;
       } finally {
         await session.endSession();
-      }
-
-      // Executed outside the transaction, and only if the commit succeeded
-      try {
-        const userDoc = await User.findOne({ _id: { $eq: String(order.user) } })
-          .select("firstname email")
-          .lean();
-
-        if (userDoc) {
-          await NotificationService.sendOrderCancelledNotification(
-            userDoc._id as mongoose.Types.ObjectId,
-            userDoc.email,
-            userDoc.firstname,
-            order.orderNumber,
-            "Payment timeout. Your order was abandoned at checkout.",
-          );
-        }
-      } catch (notifyErr) {
-        logger.error(
-          this.safeLog(
-            `Failed to dispatch cancellation notification for ${order.orderNumber}`,
-          ),
-        );
       }
     }
   }

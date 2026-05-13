@@ -54,9 +54,19 @@ export class DashboardService {
     try {
       // Establish the Temporal Boundary
       // If no dates are provided, default to a 30-day rolling window to prevent full collection scans.
-      const endDate = query.endDate || new Date();
-      const startDate =
-        query.startDate || new Date(new Date().setDate(endDate.getDate() - 30));
+      const rawEndDate = query.endDate || new Date();
+      const rawStartDate =
+        query.startDate ||
+        new Date(new Date().setDate(rawEndDate.getDate() - 30));
+
+      // TIMEZONE NEUTRALIZATION
+      // Locks the boundaries to the absolute start and end of the day.
+      // This prevents Docker UTC environments from shifting Indian sales data across midnight.
+      const startDate = new Date(rawStartDate);
+      startDate.setUTCHours(0, 0, 0, 0);
+
+      const endDate = new Date(rawEndDate);
+      endDate.setUTCHours(23, 59, 59, 999);
 
       const dateMatchQuery = {
         createdAt: {
