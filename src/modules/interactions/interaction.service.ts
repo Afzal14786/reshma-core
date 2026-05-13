@@ -56,6 +56,7 @@ export class InteractionService {
 
     // Rule 3: The Trust Layer (Verified Purchase Check)
     let isVerifiedPurchase = false;
+
     if (payload.type === InteractionType.REVIEW) {
       const verifiedOrder = await Order.exists({
         user: userObjId,
@@ -63,9 +64,14 @@ export class InteractionService {
         orderStatus: "DELIVERED",
       });
 
-      if (verifiedOrder) {
-        isVerifiedPurchase = true;
+      if (!verifiedOrder) {
+        throw new AppError(
+          HTTP_STATUS.FORBIDDEN,
+          "You can only review products that have been successfully purchased and delivered to you.",
+        );
       }
+
+      isVerifiedPurchase = true;
     }
 
     // Strict Persistence Mapping
