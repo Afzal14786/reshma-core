@@ -1,5 +1,6 @@
-import { User } from "../users/user.model";
-import { IUser } from "../users/interfaces/user.interface";
+import mongoose from "mongoose";
+import { User } from "@modules/users/user.model";
+import { IUser } from "@modules/users/interfaces/user.interface";
 import { RegisterInput } from "./dtos/register.dto";
 import { LoginInput } from "./dtos/login.dto";
 import { AppError } from "@shared/utils/app-error";
@@ -89,15 +90,20 @@ export class AuthService {
 
     // Generate a cryptographically secure 6-digit OTP
     const otp = crypto.randomInt(100000, 999999).toString();
+    const TTL_SECONDS = 600; // 10 minutes
+    const expiryTimeIso = new Date(
+      Date.now() + TTL_SECONDS * 1000,
+    ).toISOString();
 
     // Cache in Redis with a strict 10-minute (600s) TTL
-    await redisClient.setEx(`otp:${targetUser.email}`, 600, otp);
+    await redisClient.setEx(`otp:${targetUser.email}`, TTL_SECONDS, otp);
 
     // Hand off to the background worker to dispatch the HTML email
     await NotificationService.sendOtpEmail(
       targetUser.email,
       targetUser.firstname,
       otp,
+      expiryTimeIso,
     );
 
     return {
@@ -300,6 +306,84 @@ export class AuthService {
         "Google authentication failed or token expired. Please try again.",
       );
     }
+  }
+
+  /**
+   * PUBLIC RESET STAGE 1: Initiates the Password Reset Flow
+   * Used when a user is locked out and clicks "Forgot Password".
+   */
+  public static async forgotPassword(email: string): Promise<void> {
+    const user = await User.findOne({ email: { $eq: email } });
+
+    // SECURITY BEST PRACTICE: Prevent Email Enumeration.
+    // Return silently if user doesn't exist, preventing attackers from guessing emails.
+    if (!user) return;
+
+    if (user.authProvider === "GOOGLE") {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        "OAuth accounts do not use passwords. Please log in with Google.",
+      );
+    }
+
+    // Generate a 64-character cryptographically secure token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    // Store in Redis with a 15-minute TTL
+    const TTL_SECONDS = 900;
+    await redisClient.setEx(
+      `pwd_reset:${hashedToken}`,
+      TTL_SECONDS,
+      user._id.toString(),
+    );
+
+    // Dispatch the Reset Email
+    await NotificationService.sendPasswordReset(
+      user.email,
+      user.firstname,
+      resetToken,
+    );
+  }
+
+  /**
+   * PUBLIC RESET STAGE 2: Verifies Token and Updates Password
+   */
+  public static async resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<void> {
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    const redisKey = `pwd_reset:${hashedToken}`;
+
+    const userId = await redisClient.get(redisKey);
+
+    if (!userId) {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        "Reset link is invalid or has expired. Please request a new one.",
+      );
+    }
+
+    const user = await User.findById(userId);
+    if (!user) throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found.");
+
+    // Update password (Mongoose pre-save hook will hash it)
+    user.password = newPassword;
+    await user.save();
+
+    // Destroy the token to prevent reuse
+    await redisClient.del(redisKey);
+
+    // Dispatch Security Alert
+    await NotificationService.sendPasswordUpdateConfirmation(
+      user._id as mongoose.Types.ObjectId,
+      user.email,
+      user.firstname,
+    );
   }
 
   /**

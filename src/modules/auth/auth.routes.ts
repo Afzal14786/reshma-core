@@ -7,6 +7,10 @@ import { RegisterSchema } from "./dtos/register.dto";
 import { LoginSchema } from "./dtos/login.dto";
 import { VerifyOtpSchema } from "./dtos/verify-otp.dto";
 import { googleLoginSchema } from "./dtos/google.dto";
+import {
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
+} from "./dtos/reset-password.dto";
 
 const router = Router();
 
@@ -18,6 +22,22 @@ const router = Router();
  * the 'validate' middleware acts as an absolute firewall, guaranteeing
  * malicious payloads never reach the AuthController.
  */
+
+// POST /api/v1/auth/forgot-password -> Dispatches the reset token email (PUBLIC)
+router.post(
+  "/forgot-password",
+  authLimiter,
+  validate(ForgotPasswordSchema),
+  AuthController.forgotPassword,
+);
+
+// POST /api/v1/auth/reset-password -> Verifies token and updates password (PUBLIC)
+router.post(
+  "/reset-password",
+  authLimiter,
+  validate(ResetPasswordSchema),
+  AuthController.resetPassword,
+);
 
 // POST /api/v1/auth/register -> Creates unverified user and dispatches OTP
 router.post(
