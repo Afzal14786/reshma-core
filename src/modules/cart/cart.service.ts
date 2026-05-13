@@ -102,10 +102,19 @@ export class CartService {
     attributes?: Record<string, AttributeValue>,
   ): Record<string, AttributeValue> | undefined {
     if (!attributes) return undefined;
-    const safeAttributes: Record<string, AttributeValue> = {};
+
+    // PROTOTYPE POLLUTION GUARD
+    // Initialize an object with absolutely no prototype chain to prevent CWE-1321
+    const safeAttributes: Record<string, AttributeValue> = Object.create(null);
+
     for (const [key, value] of Object.entries(attributes)) {
+      // Explicitly drop dangerous prototype traversal keys
+      if (key === "__proto__" || key === "constructor" || key === "prototype") {
+        continue;
+      }
       safeAttributes[key] = value;
     }
+
     return safeAttributes;
   }
 
