@@ -371,22 +371,35 @@ export class ReturnService {
     const order = await Order.findOne({
       _id: { $eq: String(returnRequest.order) },
     });
+
     if (!order || !order.gatewayPaymentId) {
       throw new AppError(
         HTTP_STATUS.INTERNAL_SERVER_ERROR,
-        "Gateway payment reference missing.",
+        "Gateway payment reference missing. Cannot legally reverse transaction.",
       );
     }
+
+    let razorpayRefundId = "txn_processing";
 
     // Gateway Handshake (Occurs outside Transaction to prevent pool starvation)
     try {
       const refundAmountPaise = Math.round(
         returnRequest.refundAmountEstimate * 100,
       );
-      await razorpay.payments.refund(order.gatewayPaymentId, {
-        amount: refundAmountPaise,
-        speed: "optimum",
-      });
+
+      // Capture the Gateway Response
+      const gatewayResponse = await razorpay.payments.refund(
+        order.gatewayPaymentId,
+        {
+          amount: refundAmountPaise,
+          speed: "optimum",
+        },
+      );
+
+      // Capture the exact legal ID provided by the RBI-regulated gateway
+      if (gatewayResponse && gatewayResponse.id) {
+        razorpayRefundId = gatewayResponse.id;
+      }
     } catch (error) {
       logger.error(
         `[Razorpay Refund Failure] ReturnID: ${safeReturnId}`,
@@ -394,7 +407,7 @@ export class ReturnService {
       );
       throw new AppError(
         HTTP_STATUS.INTERNAL_SERVER_ERROR,
-        "Razorpay rejected the refund. Check gateway logs.",
+        "Razorpay rejected the refund. Check gateway logs for compliance issues.",
       );
     }
 
@@ -425,6 +438,7 @@ export class ReturnService {
         email: string;
         firstname: string;
       };
+
       setImmediate(() => {
         NotificationService.sendReturnRefundedNotification(
           userDoc._id,
@@ -432,6 +446,8 @@ export class ReturnService {
           userDoc.firstname,
           order.orderNumber,
           returnRequest.refundAmountEstimate,
+          "Original Payment Method",
+          razorpayRefundId,
         ).catch((err) =>
           logger.error(
             "[Notification Error] Refund confirmation alert failed",

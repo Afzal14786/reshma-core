@@ -177,6 +177,54 @@ export class AuthController {
   }
 
   /**
+   * POST /api/v1/auth/forgot-password
+   * Public route to request a reset link.
+   */
+  public static forgotPassword = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { email } = req.body;
+      await AuthService.forgotPassword(email);
+
+      new ApiResponse(
+        res,
+        HTTP_STATUS.OK,
+        "If an account with that email exists, a password reset link has been sent.",
+        null,
+      ).send();
+    } catch (error: unknown) {
+      next(error);
+    }
+  };
+
+  /**
+   * POST /api/v1/auth/reset-password
+   * Public route to submit the new password using the email token.
+   */
+  public static resetPassword = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { token, newPassword } = req.body;
+      await AuthService.resetPassword(token, newPassword);
+
+      new ApiResponse(
+        res,
+        HTTP_STATUS.OK,
+        "Your password has been successfully reset. You can now log in.",
+        null,
+      ).send();
+    } catch (error: unknown) {
+      next(error);
+    }
+  };
+
+  /**
    * GET /api/v1/auth/logout
    * Securely destroys the session locally (clearing cookies) and remotely (Redis Blacklist).
    */

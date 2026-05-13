@@ -1,8 +1,12 @@
-import { dispatchEmailJob } from "../../shared/queues/email.queue";
+import { dispatchEmailJob } from "@shared/queues/email.queue";
 import { EmailJobPayload } from "./interface/email.interface";
 import { Notification } from "./notification.model";
 import { Types } from "mongoose";
-import logger from "../../config/logger";
+import {
+  IOrderItem,
+  IOrderShippingAddress,
+} from "@modules/orders/interfaces/order.interface";
+import logger from "@config/logger";
 
 // Template Imports
 import { otpVerificationTemplate } from "./templates/otp-verification";
@@ -13,6 +17,7 @@ import { orderPlacedTemplate } from "./templates/order-placed";
 import { orderCancelledTemplate } from "./templates/order-cancel";
 import { orderDeliveredTemplate } from "./templates/order-delivered";
 import { dataExportTemplate } from "./templates/data-export";
+import { orderShippedTemplate } from "./templates/order-shipped";
 
 import { returnRequestedTemplate } from "./templates/return-requested";
 import { returnApprovedTemplate } from "./templates/return-approved";
@@ -42,11 +47,12 @@ export class NotificationService {
     to: string,
     firstname: string,
     otp: string,
+    expiryTimeIso: string,
   ): Promise<void> {
     await dispatchEmailJob({
       type: "OTP_VERIFICATION",
       to,
-      data: { firstname, otp },
+      data: { firstname, otp, expiryTimeIso },
     });
     logger.info(`[Notification] OTP email job queued for ${to}`);
   }
@@ -103,11 +109,12 @@ export class NotificationService {
     to: string,
     firstname: string,
     otp: string,
+    expiryTimeIso: string,
   ): Promise<void> {
     await dispatchEmailJob({
       type: "OTP_VERIFICATION",
       to,
-      data: { firstname, otp },
+      data: { firstname, otp, expiryTimeIso },
     });
     logger.info(`[Notification] Password Update OTP queued for ${to}`);
   }
@@ -289,18 +296,20 @@ export class NotificationService {
     firstname: string,
     orderNumber: string,
     refundAmount: number,
+    refundMethod: string,
+    refundId: string,
   ): Promise<void> {
     await dispatchEmailJob({
       type: "RETURN_REFUNDED",
       to: email,
-      data: { firstname, orderNumber, refundAmount },
+      data: { firstname, orderNumber, refundAmount, refundMethod, refundId }, // <-- NEW
     });
 
     Notification.create({
       recipientId: userId,
       type: "RETURN",
       title: "Refund Processed",
-      message: `A refund of ₹${refundAmount.toFixed(2)} has been processed for order ${orderNumber}.`,
+      message: `A refund of ₹${refundAmount.toFixed(2)} has been processed for order ${orderNumber}. Ref: ${refundId}`,
       link: `/returns`,
     }).catch((err) =>
       logger.error(
@@ -349,11 +358,13 @@ export class NotificationService {
     firstname: string,
     orderNumber: string,
     totalAmount: number,
+    items: IOrderItem[],
+    shippingAddress: IOrderShippingAddress,
   ): Promise<void> {
     await dispatchEmailJob({
       type: "ORDER_CONFIRMATION",
       to: email,
-      data: { firstname, orderNumber, totalAmount },
+      data: { firstname, orderNumber, totalAmount, items, shippingAddress },
     });
 
     // Fire-and-Forget In-App Notification
@@ -547,29 +558,34 @@ export class NotificationService {
   /**
    * Resolves the HTML template and Subject based on the Discriminator Type.
    * Guaranteed safe by TypeScript exhaustive checks.
+   * * ARCHITECTURE NOTE: Now asynchronous to support MJML compilation.
    */
-  public static compileEmailTemplate(payload: EmailJobPayload): {
+  public static async compileEmailTemplate(payload: EmailJobPayload): Promise<{
     subject: string;
     html: string;
-  } {
+  }> {
+    // We import baseEmailLayout here locally just for the inline fallback below
+    const { baseEmailLayout } = await import("./templates/layout");
+
     switch (payload.type) {
       case "OTP_VERIFICATION":
         return {
           subject: "Verify Your Email - Reshma Bangles",
-          html: otpVerificationTemplate(
+          html: await otpVerificationTemplate(
             payload.data.firstname,
             payload.data.otp,
+            payload.data.expiryTimeIso,
           ),
         };
       case "WELCOME_EMAIL":
         return {
           subject: "Welcome to Reshma Bangles!",
-          html: welcomeEmailTemplate(payload.data.firstname),
+          html: await welcomeEmailTemplate(payload.data.firstname),
         };
       case "PASSWORD_RESET":
         return {
           subject: "Password Reset Instructions",
-          html: passwordResetTemplate(
+          html: await passwordResetTemplate(
             payload.data.firstname,
             payload.data.resetToken,
           ),
@@ -577,7 +593,7 @@ export class NotificationService {
       case "PROFILE_UPDATE":
         return {
           subject: `Security Alert: ${payload.data.changedField} Updated`,
-          html: passwordUpdateTemplate(
+          html: await passwordUpdateTemplate(
             payload.data.firstname,
             payload.data.changedField,
             payload.data.time,
@@ -586,16 +602,18 @@ export class NotificationService {
       case "ORDER_CONFIRMATION":
         return {
           subject: `Order Confirmation #${payload.data.orderNumber} - Reshma Bangles`,
-          html: orderPlacedTemplate(
+          html: await orderPlacedTemplate(
             payload.data.firstname,
             payload.data.orderNumber,
             payload.data.totalAmount,
+            payload.data.items,
+            payload.data.shippingAddress,
           ),
         };
       case "ORDER_CANCELLED":
         return {
           subject: `Order Cancelled #${payload.data.orderNumber} - Reshma Bangles`,
-          html: orderCancelledTemplate(
+          html: await orderCancelledTemplate(
             payload.data.firstname,
             payload.data.orderNumber,
             payload.data.reason,
@@ -604,7 +622,7 @@ export class NotificationService {
       case "ORDER_DELIVERED":
         return {
           subject: `Your Reshma Bangles Order ${payload.data.orderNumber} has been delivered!`,
-          html: orderDeliveredTemplate(
+          html: await orderDeliveredTemplate(
             payload.data.firstname,
             payload.data.orderNumber,
           ),
@@ -612,16 +630,17 @@ export class NotificationService {
       case "ORDER_SHIPPED":
         return {
           subject: `Your Reshma Bangles Order ${payload.data.orderNumber} has shipped!`,
-          html: `
-              <h2>Hey, ${payload.data.firstname}!</h2>
-              <p>Your order <strong>${payload.data.orderNumber}</strong> has been handed over to <strong>${payload.data.courierName}</strong>.</p>
-              <p>Your Tracking Number is: <strong>${payload.data.trackingNumber}</strong></p>
-          `,
+          html: await orderShippedTemplate(
+            payload.data.firstname,
+            payload.data.orderNumber,
+            payload.data.trackingNumber,
+            payload.data.courierName,
+          ),
         };
       case "RETURN_REQUESTED":
         return {
           subject: `Return Request Received - ${payload.data.orderNumber}`,
-          html: returnRequestedTemplate(
+          html: await returnRequestedTemplate(
             payload.data.firstname,
             payload.data.orderNumber,
           ),
@@ -629,7 +648,7 @@ export class NotificationService {
       case "RETURN_APPROVED":
         return {
           subject: `Return Approved - ${payload.data.orderNumber}`,
-          html: returnApprovedTemplate(
+          html: await returnApprovedTemplate(
             payload.data.firstname,
             payload.data.orderNumber,
           ),
@@ -637,7 +656,7 @@ export class NotificationService {
       case "RETURN_REJECTED":
         return {
           subject: `Return Request Update - ${payload.data.orderNumber}`,
-          html: returnRejectedTemplate(
+          html: await returnRejectedTemplate(
             payload.data.firstname,
             payload.data.orderNumber,
             payload.data.reason,
@@ -646,22 +665,24 @@ export class NotificationService {
       case "RETURN_REFUNDED":
         return {
           subject: `Refund Processed - ${payload.data.orderNumber}`,
-          html: returnRefundedTemplate(
+          html: await returnRefundedTemplate(
             payload.data.firstname,
             payload.data.orderNumber,
             payload.data.refundAmount,
+            payload.data.refundMethod,
+            payload.data.refundId,
           ),
         };
 
       case "DATA_EXPORT":
         return {
           subject: "Your Data Export - Reshma Bangles Privacy",
-          html: dataExportTemplate(payload.data.firstname),
+          html: await dataExportTemplate(payload.data.firstname),
         };
       case "TICKET_CREATED":
         return {
           subject: `Support Request Received: ${payload.data.ticketId}`,
-          html: ticketCreatedTemplate(
+          html: await ticketCreatedTemplate(
             payload.data.firstname,
             payload.data.ticketId,
             payload.data.ticketSubject,
@@ -670,7 +691,7 @@ export class NotificationService {
       case "TICKET_REPLIED":
         return {
           subject: `Update on your Support Ticket: ${payload.data.ticketId}`,
-          html: ticketRepliedTemplate(
+          html: await ticketRepliedTemplate(
             payload.data.firstname,
             payload.data.ticketId,
             payload.data.replyPreview,

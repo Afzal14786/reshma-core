@@ -6,12 +6,27 @@ import { IOrder } from "./interfaces/order.interface";
  * * ARCHITECTURE NOTE:
  * Generates a purely in-memory PDF Buffer. We strictly avoid `fs.writeFile` to prevent
  * storage bloat and synchronous I/O Event Loop blocking during high-traffic checkouts.
- *
- * * LEGAL COMPLIANCE:
- * This generator natively unpacks the Immutable Tax Snapshot stored in the Order Document
- * to render a full Indian GST Table (HSN, Taxable Value, CGST/SGST/IGST).
+ * * * LOGO HANDLING:
+ * PDFKit requires images to be local or converted to a Buffer. We fetch the Cloudinary
+ * logo asynchronously before starting the PDF stream.
  */
-export const generateInvoiceBuffer = (order: IOrder): Promise<Buffer> => {
+export const generateInvoiceBuffer = async (order: IOrder): Promise<Buffer> => {
+  // 1. Asynchronously fetch the brand logo into a binary Buffer
+  let logoBuffer: Buffer | null = null;
+  const logoUrl =
+    "https://res.cloudinary.com/dl9bfojiu/image/upload/reshma_boutique_logo_hyvmk9.png";
+
+  try {
+    const response = await fetch(logoUrl);
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      logoBuffer = Buffer.from(arrayBuffer);
+    }
+  } catch (error) {
+    // Graceful fallback: If Cloudinary is down, we just print the text header.
+  }
+
+  // 2. Generate the PDF
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: "A4", margin: 50 });
@@ -21,30 +36,50 @@ export const generateInvoiceBuffer = (order: IOrder): Promise<Buffer> => {
       doc.on("data", (chunk) => buffers.push(chunk));
       doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-      // COMPANY HEADER (Updated to West Bengal Origin)
-      doc
-        .fontSize(20)
-        .font("Helvetica-Bold")
-        .text("RESHMA BANGLES", { align: "left" });
-      doc
-        .fontSize(10)
-        .font("Helvetica")
-        .text("Park Street, Esplanade", { align: "left" })
-        .text("Kolkata, West Bengal 700016", { align: "left" })
-        .text("GSTIN: 19AAAAA0000A1Z5", { align: "left" }) // 19 is the State Code for WB
-        .moveDown();
+      const startX = 50;
+      let textStartX = startX;
 
-      // INVOICE META DATA
+      // Render Logo if successfully fetched
+      if (logoBuffer) {
+        doc.image(logoBuffer, startX, 45, { width: 80 });
+        textStartX = 140; // Shift company text to the right of the logo
+      }
+
+      // COMPANY HEADER (Strict GST Details)
       doc
         .fontSize(16)
         .font("Helvetica-Bold")
-        .text("TAX INVOICE", { align: "right" });
+        .text("Reshma Bangles & Boutique", textStartX, 45, { align: "left" });
 
-      doc.moveTo(50, 130).lineTo(545, 130).lineWidth(1).stroke();
+      doc
+        .fontSize(9)
+        .font("Helvetica")
+        .text("23 S.D.B Street, Paikpara", textStartX, 65, { align: "left" })
+        .text("Bhadreshwar - 712125, Hooghly, West Bengal", textStartX, 77, {
+          align: "left",
+        })
+        .font("Helvetica-Bold")
+        .text("GSTIN: 19CWZPA5790C1Z1", textStartX, 92, { align: "left" })
+        .font("Helvetica")
+        .text(
+          "Email: mdafal14777@gmail.com | Phone: +91-9137116340, +91-9836522456",
+          textStartX,
+          107,
+          { align: "left" },
+        );
+
+      // INVOICE META DATA (Right Aligned)
+      doc
+        .fontSize(16)
+        .font("Helvetica-Bold")
+        .text("TAX INVOICE", 50, 45, { align: "right", width: 495 });
+
+      doc.moveTo(50, 135).lineTo(545, 135).lineWidth(1).stroke();
       doc.moveDown(2);
 
       const invoiceDate = new Date(order.createdAt).toLocaleDateString("en-IN");
 
+      // ORDER DETAILS
       doc
         .fontSize(10)
         .font("Helvetica-Bold")
@@ -85,7 +120,7 @@ export const generateInvoiceBuffer = (order: IOrder): Promise<Buffer> => {
       doc.font("Helvetica-Bold").fontSize(9);
 
       // Dynamic Column Widths for A4 Format
-      doc.text("Item", 50, tableTop);
+      doc.text("Item Description", 50, tableTop);
       doc.text("HSN", 210, tableTop);
       doc.text("Qty", 255, tableTop);
       doc.text("Taxable", 280, tableTop, { width: 50, align: "right" });
@@ -103,7 +138,7 @@ export const generateInvoiceBuffer = (order: IOrder): Promise<Buffer> => {
       let positionY = tableTop + 25;
 
       for (const item of order.items) {
-        // Line Item Total = Taxable Value + All Exact Tax Spits
+        // Line Item Total = Taxable Value + All Exact Tax Splits
         const itemTotal = item.taxableValue + item.cgst + item.sgst + item.igst;
         const safeName =
           item.name.length > 25
@@ -161,7 +196,7 @@ export const generateInvoiceBuffer = (order: IOrder): Promise<Buffer> => {
       offset += 15;
 
       if (order.pricing.discountAmount > 0) {
-        doc.text("Discount:", 345, totalsTop + offset, {
+        doc.text("Discount Applied:", 345, totalsTop + offset, {
           width: 100,
           align: "right",
         });
@@ -246,14 +281,67 @@ export const generateInvoiceBuffer = (order: IOrder): Promise<Buffer> => {
         { width: 90, align: "right" },
       );
 
-      // FOOTER
+      // LEGAL FOOTER: Terms & Authorized Signatory
+
+      const pageHeight = doc.page.height;
+      const termsY = pageHeight - 160;
+
       doc
+        .moveTo(50, termsY - 10)
+        .lineTo(545, termsY - 10)
+        .lineWidth(1)
+        .stroke();
+
+      // T&C Section
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(9)
+        .text("Terms & Conditions:", 50, termsY);
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .text(
+          "1. All disputes are subject to Hooghly Jurisdiction only.",
+          50,
+          termsY + 15,
+        )
+        .text(
+          "2. Returns are accepted within 7 days of delivery as per company policy.",
+          50,
+          termsY + 27,
+        )
+        .text(
+          "3. Goods once sold will not be taken back without valid return authorization.",
+          50,
+          termsY + 39,
+        );
+
+      // Authorized Signatory Box
+      doc
+        .font("Helvetica-Bold")
         .fontSize(10)
-        .font("Helvetica-Oblique")
-        .text("Thank you for shopping with Reshma Bangles!", 50, 700, {
-          align: "center",
-          width: 495,
+        .text("For Reshma Bangles & Boutique", 350, termsY, {
+          align: "right",
+          width: 195,
         });
+      doc
+        .font("Helvetica")
+        .fontSize(9)
+        .text("Authorized Signatory", 350, termsY + 50, {
+          align: "right",
+          width: 195,
+        });
+
+      // Final automated stamp
+      doc
+        .fontSize(8)
+        .font("Helvetica-Oblique")
+        .text(
+          "This is a computer-generated invoice and does not require a physical signature.",
+          50,
+          pageHeight - 50,
+          { align: "center", width: 495 },
+        );
 
       doc.end();
     } catch (error) {
