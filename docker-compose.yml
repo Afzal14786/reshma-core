@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # 1. THE API GATEWAY
+  reshma-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reshma-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - MONGODB_URI=mongodb://reshma-db:27017/reshmabangles
+      - REDIS_URL=redis://reshma-redis:6379
+      # NEW: Point the API to the internal Typesense container
+      - TYPESENSE_HOST=reshma-typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
+    depends_on:
+      reshma-db:
+        condition: service_started
+      reshma-redis:
+        condition: service_started
+      reshma-typesense:
+        condition: service_started
+    networks:
+      - reshma-network
+
+  # 2. THE BACKGROUND WORKER
+  reshma-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reshma-worker
+    restart: unless-stopped
+    command: ["node", "dist/shared/queues/email.worker.js"] 
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://reshma-db:27017/reshmabangles
+      - REDIS_URL=redis://reshma-redis:6379
+    depends_on:
+      reshma-redis:
+        condition: service_started
+    networks:
+      - reshma-network
+
+  # 3. REDIS (Cache & Rate Limiter)
+  reshma-redis:
+    image: redis:7-alpine
+    container_name: reshma-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - reshma-network
+
+  # 4. MONGODB (Database)
+  reshma-db:
+    image: mongo:7.0
+    container_name: reshma-db
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - reshma-network
+
+  # 5. TYPESENSE (The Search Engine)
+  reshma-typesense:
+    image: typesense/typesense:0.25.2 # Highly stable production image
+    container_name: reshma-typesense
+    restart: always
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense_data:/data
+    # Configure the internal startup command. 
+    # Make sure 'your-super-secret-key' matches the TYPESENSE_API_KEY in your .env file!
+    command: '--data-dir /data --api-key=your-super-secret-key --enable-cors=true'
+    networks:
+      - reshma-network
+
+# Define persistent storage so you don't lose data when containers restart
+volumes:
+  mongodb_data:
+  redis_data:
+  typesense_data:
+
+# The secure internal network
+networks:
+  reshma-network:
+    driver: bridge
