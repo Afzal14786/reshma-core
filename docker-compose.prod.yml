@@ -1,0 +1,93 @@
+services:
+  # 1. THE API GATEWAY (Public Facing)
+  reshma-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reshma-api
+    restart: always
+    ports:
+      - "5000:5000" # ONLY the API is exposed to the outside world
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@reshma-db:27017/reshmabangles?authSource=admin
+      - REDIS_URL=redis://default:${REDIS_PASSWORD}@reshma-redis:6379
+      - TYPESENSE_HOST=reshma-typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+    depends_on:
+      reshma-db:
+        condition: service_healthy
+      reshma-redis:
+        condition: service_healthy
+      reshma-typesense:
+        condition: service_healthy # FIX: API now waits for Typesense to be ready
+
+  # 2. THE BACKGROUND WORKER (Internal)
+  reshma-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reshma-worker
+    restart: always
+    command: ["node", "dist/shared/queues/email.worker.js"] 
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@reshma-db:27017/reshmabangles?authSource=admin
+      - REDIS_URL=redis://default:${REDIS_PASSWORD}@reshma-redis:6379
+    depends_on:
+      reshma-redis:
+        condition: service_healthy
+
+  # 3. MONGODB (Air-Gapped)
+  reshma-db:
+    image: mongo:7.0
+    container_name: reshma-db
+    restart: always
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 4. REDIS (Air-Gapped)
+  reshma-redis:
+    image: redis:7-alpine
+    container_name: reshma-redis
+    restart: always
+    command: /bin/sh -c 'redis-server --requirepass "$${REDIS_PASSWORD}"'
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 5. TYPESENSE (Air-Gapped)
+  reshma-typesense:
+    image: typesense/typesense:0.25.2
+    container_name: reshma-typesense
+    restart: always
+    command: '--data-dir /data --api-key=${TYPESENSE_API_KEY} --enable-cors=true'
+    volumes:
+      - typesense_data:/data
+    healthcheck: # FIX: Ensures the search engine is fully indexed and ready
+      test: ["CMD", "wget", "-qO-", "http://localhost:8108/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongodb_data:
+  redis_data:
+  typesense_data:
