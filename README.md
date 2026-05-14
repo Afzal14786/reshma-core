@@ -5,334 +5,339 @@
 
 <div align="center">
 
-  # 🛍️ Reshma Bangles & Boutique (API Core)
-  
-  **The highly scalable, polymorphic backend engine powering a pan-India B2C fashion and accessory platform.**
+# 🛍️ Reshma Bangles & Boutique (API Core)
 
-  [![Node.js](https://img.shields.io/badge/Node.js-20.x-43853D?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
-  [![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-  [![Express.js](https://img.shields.io/badge/Express.js-5.x-000000?style=flat&logo=express&logoColor=white)](https://expressjs.com/)
-  [![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
-  [![Mongoose](https://img.shields.io/badge/Mongoose-9.x-880000?style=flat&logo=mongoose&logoColor=white)](https://mongoosejs.com/)
-  [![Redis](https://img.shields.io/badge/Redis-BullMQ-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io/)
+**The highly scalable, polymorphic backend engine powering a pan‑India B2C fashion and accessory platform.**
+
+[![Node.js](https://img.shields.io/badge/Node.js-20.x-43853D?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Express.js](https://img.shields.io/badge/Express.js-5.x-000000?style=flat&logo=express&logoColor=white)](https://expressjs.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![Redis](https://img.shields.io/badge/Redis-BullMQ-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io/)
+[![CodeQL](https://img.shields.io/badge/CodeQL-Security_Scan-1C2C4E?style=flat&logo=github&logoColor=white)](https://codeql.github.com/)
+[![License](https://img.shields.io/badge/License-ISC-blue.svg)](LICENCE)
 
 </div>
 
 ---
 
-## About The Startup
-**Reshma Bangles & Boutique** is a dedicated B2C online retail platform serving customers across India. The catalog spans highly diverse categories, ranging from fragile glass bangles sold by the dozen, to readymade apparel, and unstitched fabrics requiring custom tailoring measurements.
+## Table of Contents
 
-### Business Logic Core Highlights
-* **Dynamic Checkout Math:** Automated computation of Base Price + GST % + Heavy Shipping Fees + Cash On Delivery (COD) surcharges.
-* **Strict Return Arbitration:** Returns are conditionally blocked (e.g., innerwear) and explicitly require photographic proof uploaded via Cloudinary for fragile items.
-* **Background Notifications:** Asynchronous queue processing for "Notify Me" alerts and order status emails.
+- [About the Startup](#about-the-startup)
+- [Key Features & Business Logic](#key-features--business-logic)
+- [Tech Stack](#tech-stack)
+- [System Architecture](#system-architecture)
+- [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [Installation & Run (npm)](#installation--run-npm)
+  - [Run with Docker Compose](#run-with-docker-compose)
+- [Environment Variables](#environment-variables)
+- [API Reference](#api-reference)
+- [Testing Guides](#testing-guides)
+- [Documentation Hub](#documentation-hub)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
+- [Author](#author)
 
 ---
 
-## Master Planning Documents
+## About the Startup
 
-To understand the full scope of this startup, including the Product Requirements Document (PRD), exact database mappings, and our initial 50-item inventory schema, please refer to our official planning documents:
+**Reshma Bangles & Boutique** is a dedicated B2C online retail platform serving customers across India. The catalog spans highly diverse categories, from fragile glass bangles sold by the dozen, to readymade apparel, and unstitched fabrics that require custom tailoring measurements.
 
-<div align="center">
+This backend is built to handle that complexity natively – using a polymorphic database design, dynamic GST calculations, and a stateless JWT architecture that scales horizontally.
 
-  [![Notion Hub](https://img.shields.io/badge/Notion-System_Architecture_&_PRD-000000?style=flat&logo=notion&logoColor=white)](https://diligent-salesman-3d3.notion.site/ebd/345fe41c78a880d7b716e81c153c0aed)
-  [![Google Sheets](https://img.shields.io/badge/Google_Sheets-Master_Product_Catalog-34A853?style=flat&logo=googlesheets&logoColor=white)](https://docs.google.com/spreadsheets/d/1QPfN6ntKm5pgzsQ4kqr5KpQRyDPtn_zdxEk-da7S5iI/edit?usp=sharing)
+---
 
-</div>
+## Key Features & Business Logic
 
-*(Note: These documents are set to View-Only to protect proprietary business logic).*
-
-## Internal Documentation Hub
-
-Reshma-Core utilizes a strict Domain-Driven Design (DDD) architecture. We maintain comprehensive internal documentation covering API standards, security, testing, and feature modules. Click any link below to navigate directly to the respective guide:
-
-### Architecture & System Design
-* **[System Overview](./docs/architecture/system-overview.md)** - The master blueprint and folder structure of the Reshma-Core backend.
-* **[Authentication & Security Architecture](./docs/architecture/auth-architecture.md)** - Deep dive into the Two-Token stateless JWT, Google OAuth, and Redis OTP flows.
-* **[Database Design Strategy](./docs/architecture/database-design.md)** - Explains the Mongoose Polymorphic single-collection strategy and ADRs.
-* **[Product Catalog Schema](./docs/architecture/product-catalog.md)** - Maps the physical Google Sheet inventory data to the strict database rules.
-* **[Security Hardening](./docs/architecture/security-hardening.md)** - Details on rate-limiting, Zod payload firewalls, and strict XSS/CSRF prevention.  
-* **[Cart & Session Sync](./docs/modules/cart-module.md)** - Documentation on the Self-Healing Cart and Guest-to-User merge logic.
-
-### API Integration Standards (For Frontend Teams)
-* **[API Design & Integration Standards](./docs/api/api-standards.md)** - Expected JSON response shapes, token handling, and base URLs.
-* **[Error Codes & Handling Guide](./docs/api/error-codes.md)** - Standardized error payloads and our HTTP status code dictionary.
-
-### Testing & Setup Runbooks
-* **[Authentication Testing Runbook](./docs/api/thunder-tests/auth-runbook.md)** - Sequential manual testing steps for the Auth Epic.
-* **[Product Catalog Testing Runbook](./docs/api/thunder-tests/product-runbook.md)** - Testing instructions for `multipart/form-data` uploads and polymorphic Zod payloads.
-* **[Local Development Setup](./docs/setup/local-development.md)** - Step-by-step guide to booting the Node server, Redis cache, and background workers.
-* **[Environment Variables](./docs/setup/environment-variables.md)** - Required `.env` configuration for fail-fast boot sequences.
+- **Polymorphic Product Catalog** – One `Products` collection with Mongoose discriminators: Bangles, Apparel, Fabric, Innerwear, Accessories. Each type enforces its own validation rules.
+- **Dynamic Checkout Math** – Automatic computation of Base Price + GST (CGST/SGST/IGST) + shipping fees + COD surcharges.
+- **Proportional Discounting** – Cart‑level coupons are distributed across line items so refunds reflect the actual consideration paid.
+- **Two‑Token Authentication** – Short‑lived Access Token (memory) + `HttpOnly` Refresh Token (cookie). Immune to XSS and CSRF.
+- **Background Workers (BullMQ)** – Email sending, PDF invoice generation, and search index synchronisation never block the main event loop.
+- **Redis Edge Cache** – Public catalog responses are cached in Redis (5‑minute TTL) to shield MongoDB from thundering herds.
+- **Typesense Search** – Sub‑50ms typo‑tolerant search with faceted filtering, synchronised asynchronously.
+- **Shiprocket Integration** – Automated order dispatch, AWB generation, and webhook‑driven delivery status updates.
+- **Return & Refund Engine** – 3‑stage state machine with Razorpay refunds and atomic inventory restocking.
+- **Support Ticketing** – Threaded conversations, Cloudinary image attachments, and full DPDP/GDPR anonymisation.
+- **Admin Dashboard** – Real‑time financial aggregations using MongoDB `$facet` pipelines.
+- **Data Portability** – Asynchronous JSON export of user data (Right to Access) and irreversible scrubbing (Right to be Forgotten).
 
 ---
 
 ## Comprehensive Tech Stack
 
-| Category | Technology | Description / Purpose |
-| :--- | :--- | :--- |
-| **Runtime & Framework** | ![Node.js](https://img.shields.io/badge/Node.js-43853D?style=flat&logo=node.js&logoColor=white) ![Express.js](https://img.shields.io/badge/Express.js-000000?style=flat&logo=express&logoColor=white) | Core asynchronous I/O engine and web framework. |
-| **Language** | ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white) | Strict type safety across the entire application. |
-| **Database & ODM** | ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat&logo=mongodb&logoColor=white) ![Mongoose](https://img.shields.io/badge/Mongoose-880000?style=flat&logo=mongoose&logoColor=white) | Polymorphic catalog scaling and dynamic cart structures. |
-| **Queue & Caching** | ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat&logo=redis&logoColor=white) ![BullMQ](https://img.shields.io/badge/BullMQ-FF4081?style=flat) | Offloading email blasts and heavy notifications. |
-| **Media Pipeline** | ![Cloudinary](https://img.shields.io/badge/Cloudinary-3448C5?style=flat&logo=cloudinary&logoColor=white) ![Multer](https://img.shields.io/badge/Multer-Memory_Storage-orange?style=flat) | On-the-fly image compression and multipart/form-data handling. |
-| **Security** | ![Helmet](https://img.shields.io/badge/Helmet-Security-blue?style=flat) ![RateLimit](https://img.shields.io/badge/Express_Rate_Limit-Protection-red?style=flat) | HTTP header protection and brute-force/DDoS prevention. |
-| **Utilities** | ![Morgan](https://img.shields.io/badge/Morgan-HTTP_Logger-green?style=flat) ![Dotenv](https://img.shields.io/badge/Dotenv-Environment-ECD53F?style=flat) | API request logging and secure environment variable management. |
+| Category | Technology | Badges | Description / Purpose |
+| :--- | :--- | :--- | :--- |
+| **Runtime & Framework** | Node.js<br>Express.js | [![Node.js](https://img.shields.io/badge/Node.js-20.x-43853D?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)<br>[![Express.js](https://img.shields.io/badge/Express.js-5.x-000000?style=flat&logo=express&logoColor=white)](https://expressjs.com/) | Core asynchronous I/O engine and web framework. |
+| **Language** | TypeScript | [![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) | Strict type safety; `noImplicitAny`, `strictNullChecks`. |
+| **Database & ODM** | MongoDB<br>Mongoose | [![MongoDB](https://img.shields.io/badge/MongoDB-7.x-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)<br>[![Mongoose](https://img.shields.io/badge/Mongoose-9.x-880000?style=flat&logo=mongoose&logoColor=white)](https://mongoosejs.com/) | Polymorphic catalog scaling and ACID transactions. |
+| **Queue & Caching** | Redis<br>BullMQ | [![Redis](https://img.shields.io/badge/Redis-7.x-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io/)<br>[![BullMQ](https://img.shields.io/badge/BullMQ-5.x-FF4081?style=flat)](https://bullmq.io/) | Background jobs, distributed rate limiting, edge caching. |
+| **Search Engine** | Typesense | [![Typesense](https://img.shields.io/badge/Typesense-0.25-000000?style=flat&logo=typesense&logoColor=white)](https://typesense.org/) | RAM‑based, typo‑tolerant product search (<50ms). |
+| **Authentication** | JWT<br>bcrypt<br>Google OAuth | [![JWT](https://img.shields.io/badge/JWT-Two--Token-000000?style=flat&logo=jsonwebtokens&logoColor=white)](https://jwt.io/)<br>[![bcrypt](https://img.shields.io/badge/bcrypt-6.x-3C6E71?style=flat)](https://www.npmjs.com/package/bcrypt)<br>[![Google OAuth](https://img.shields.io/badge/Google-OAuth-4285F4?style=flat&logo=google&logoColor=white)](https://developers.google.com/identity/protocols/oauth2) | Stateless two‑token sessions, password hashing, social login. |
+| **Payments** | Razorpay | [![Razorpay](https://img.shields.io/badge/Razorpay-SDK_&_Webhooks-0C0C0C?style=flat&logo=razorpay&logoColor=white)](https://razorpay.com/) | HMAC‑verified, idempotent payment transactions. |
+| **Logistics** | Shiprocket | [![Shiprocket](https://img.shields.io/badge/Shiprocket-3PL-4B9CD3?style=flat)](https://www.shiprocket.in/) | Automated courier dispatch, AWB generation, tracking webhooks. |
+| **Email** | Nodemailer<br>BullMQ<br>MJML | [![Nodemailer](https://img.shields.io/badge/Nodemailer-SMTP-14C3B8?style=flat)](https://nodemailer.com/)<br>[![MJML](https://img.shields.io/badge/MJML-Responsive_Emails-00B2A9?style=flat)](https://mjml.io/) | Asynchronous transactional emails with responsive design. |
+| **Media Pipeline** | Cloudinary<br>Multer | [![Cloudinary](https://img.shields.io/badge/Cloudinary-Image_Streams-3448C5?style=flat&logo=cloudinary&logoColor=white)](https://cloudinary.com/)<br>[![Multer](https://img.shields.io/badge/Multer-Memory_Storage-orange?style=flat)](https://github.com/expressjs/multer) | Memory‑stream uploads, on‑the‑fly compression, Exif stripping. |
+| **Logging & Monitoring** | Winston<br>Morgan | [![Winston](https://img.shields.io/badge/Winston-Daily_Rotation-4F5D95?style=flat)](https://github.com/winstonjs/winston)<br>[![Morgan](https://img.shields.io/badge/Morgan-HTTP_Logger-3C8C40?style=flat)](https://github.com/expressjs/morgan) | Structured JSON logs, daily rotation, HTTP request telemetry. |
+| **Security** | Helmet<br>Rate Limit<br>Mongo Sanitize<br>Zod | [![Helmet](https://img.shields.io/badge/Helmet-Headers-blue?style=flat)](https://helmetjs.github.io/)<br>[![Rate Limit](https://img.shields.io/badge/Rate_Limit-Redis-red?style=flat)](https://github.com/express-rate-limit/rate-limit-redis)<br>[![Zod](https://img.shields.io/badge/Zod-Validation-3068b7?style=flat)](https://zod.dev/) | Defense in depth: HTTP headers, distributed rate limiting, NoSQL injection prevention, runtime validation. |
+| **Documentation** | Markdown<br>Mermaid | [![Markdown](https://img.shields.io/badge/Markdown-Docs-000000?style=flat&logo=markdown&logoColor=white)](https://www.markdownguide.org/)<br>[![Mermaid](https://img.shields.io/badge/Mermaid-Diagrams-FF3670?style=flat&logo=mermaid&logoColor=white)](https://mermaid.js.org/) | Architecture diagrams, runbooks, and API guides. |  
 
 ---
 
-## System Architecture & Complete Folder Structure
+## System Architecture
 
-**Organized by Features (Domain-Driven Design):** The codebase is split into specific, isolated features (like Users, Orders, Products) rather than lumping all controllers together. This makes the system easy to manage and scale.
+The codebase follows **Domain‑Driven Design**: features (Auth, Users, Products, Cart, Orders, etc.) live in their own modules under `src/modules/`. Each module contains controllers, services, DTOs (Zod), models, and interfaces.
 
-**Smart Database Design for Diverse Products:**
-It is impossible to use one single, rigid set of rules for 50 completely different items. A glass bangle needs a "diameter" and a "fragile" shipping warning, while a dress needs a "size" (S, M, L), and unstitched fabric needs a custom "measurement" form. 
+The **polymorphic catalog** uses Mongoose discriminators – all products live in one `Products` collection, but sub‑schemas enforce category‑specific fields (e.g., `bangleSizes`, `cupSizes`, `lengthMeters`).
 
-To solve this, the system utilizes a **Polymorphic Database Strategy** (via Mongoose Discriminators). In simple words:
-1. **The Shared Base:** Every item shares a common foundation (SKU, Name, Price, Images). 
-2. **One Global Box:** All items are stored in one single `Products` collection. This makes global features, like the website's main Search Bar, incredibly fast.
-3. **Custom Individual Rules:** Even though they live in the same collection, the database applies different, strict rules based on the category. The database will reject an order if a Saree tries to use a "Bangle Size", ensuring zero data corruption.  
+For a deep dive, see the [System Overview](./docs/architecture/system-overview.md) which links to every architecture decision record (ADR), module documentation, and security hardening guide.
 
+---
 
-```text
-reshma-core/
-├── .env.example
-├── .github/
-│   ├── PULL_REQUEST_TEMPLATE.md
-│   ├── dependabot.yml
-│   └── workflows/
-│       ├── codeql.yml
-│       └── format-check.yml
-├── .gitignore
-├── CHANGES.md
-├── LICENCE
-├── README.md
-├── SECURITY.md
-├── docs/
-│   ├── api/
-│   │   ├── api-standards.md
-│   │   ├── error-codes.md
-│   │   └── thunder-tests/
-│   │       ├── auth-runbook.md
-│   │       └── product-runbook.md
-│   ├── architecture/
-│   │   ├── auth-architecture.md
-│   │   ├── database-design.md
-│   │   ├── payment-integration.md
-│   │   ├── product-catalog.md
-│   │   ├── security-hardening.md
-│   │   └── system-overview.md
-│   ├── modules/                  # DDD domain specifics
-│   │   ├── auth-module.md
-│   │   ├── cart-module.md
-│   │   ├── notification-module.md
-│   │   ├── order-module.md
-│   │   ├── product-module.md
-│   │   └── user-module.md
-│   └── setup/
-│       ├── environment-variables.md
-│       └── local-development.md
-├── package-lock.json
-├── package.json
-├── src/
-│   ├── app.ts
-│   ├── assets/
-│   │   └── reshma_bangles.jpg
-│   ├── config/
-│   │   ├── cloudinary.ts
-│   │   ├── db.ts
-│   │   ├── env.ts
-│   │   ├── logger.ts
-│   │   ├── razorpay.ts
-│   │   └── redis.ts
-│   ├── db/
-│   │   └── seed.ts
-│   ├── modules/
-│   │   ├── auth/
-│   │   │   ├── auth.controller.ts
-│   │   │   ├── auth.routes.ts
-│   │   │   ├── auth.service.ts
-│   │   │   ├── auth.utils.ts
-│   │   │   └── dtos/
-│   │   │       ├── google.dto.ts
-│   │   │       ├── login.dto.ts
-│   │   │       ├── register.dto.ts
-│   │   │       └── verify-otp.dto.ts
-│   │   ├── cart/
-│   │   │   ├── cart.controller.ts
-│   │   │   ├── cart.model.ts
-│   │   │   ├── cart.route.ts
-│   │   │   ├── cart.service.ts
-│   │   │   ├── dtos/
-│   │   │   │   └── cart.dto.ts
-│   │   │   └── interfaces/
-│   │   │       └── cart.interface.ts
-│   │   ├── dashboard/
-│   │   │   ├── dashboard.controller.ts
-│   │   │   ├── dashboard.routes.ts
-│   │   │   ├── dashboard.service.ts
-│   │   │   ├── dtos/
-│   │   │   │   └── date-range.dto.ts
-│   │   │   └── interface/
-│   │   │       └── dashboard.interface.ts
-│   │   ├── interactions/
-│   │   │   ├── dtos/
-│   │   │   │   └── add-review.dto.ts
-│   │   │   ├── interaction.controller.ts
-│   │   │   ├── interaction.model.ts
-│   │   │   ├── interaction.routes.ts
-│   │   │   ├── interaction.service.ts
-│   │   │   └── interface/
-│   │   │       └── review.interface.ts
-│   │   ├── notifications/
-│   │   │   ├── interface/
-│   │   │   │   ├── email.interface.ts
-│   │   │   │   └── notification.interface.ts
-│   │   │   ├── notification.controller.ts
-│   │   │   ├── notification.model.ts
-│   │   │   ├── notification.routes.ts
-│   │   │   ├── notification.service.ts
-│   │   │   └── templates/
-│   │   │       ├── layout.ts
-│   │   │       ├── order-cancle.ts
-│   │   │       ├── order-placed.ts
-│   │   │       ├── otp-verification.ts
-│   │   │       ├── password-reset.ts
-│   │   │       ├── password-update.ts
-│   │   │       └── welcome.ts
-│   │   ├── orders/
-│   │   │   ├── dtos/
-│   │   │   │   └── order.dto.ts
-│   │   │   ├── interfaces/
-│   │   │   │   └── order.interface.ts
-│   │   │   ├── invoice.generator.ts
-│   │   │   ├── order.admin.controller.ts
-│   │   │   ├── order.model.ts
-│   │   │   ├── order.public.controller.ts
-│   │   │   ├── order.routes.ts
-│   │   │   ├── order.service.ts
-│   │   │   └── payment.utils.ts
-│   │   ├── products/
-│   │   │   ├── controllers/
-│   │   │   │   ├── product.admin.controller.ts
-│   │   │   │   └── product.public.controller.ts
-│   │   │   ├── dtos/
-│   │   │   │   ├── product.admin.dto.ts
-│   │   │   │   └── product.public.dto.ts
-│   │   │   ├── interfaces/
-│   │   │   │   ├── accessory.interface.ts
-│   │   │   │   ├── apparel.interface.ts
-│   │   │   │   ├── bangle.interface.ts
-│   │   │   │   ├── base-product.interface.ts
-│   │   │   │   ├── fabric.interface.ts
-│   │   │   │   ├── index.ts
-│   │   │   │   └── innerwear.interface.ts
-│   │   │   ├── models/
-│   │   │   │   ├── accessory.model.ts
-│   │   │   │   ├── apparel.model.ts
-│   │   │   │   ├── bangle.model.ts
-│   │   │   │   ├── base-product.model.ts
-│   │   │   │   ├── fabric.model.ts
-│   │   │   │   ├── index.ts
-│   │   │   │   └── innerwear.model.ts
-│   │   │   ├── product.routes.ts
-│   │   │   └── product.service.ts
-│   │   ├── returns/
-│   │   │   ├── return.controller.ts
-│   │   │   ├── return.route.ts
-│   │   │   └── return.service.ts
-│   │   └── users/
-│   │       ├── dtos/
-│   │       │   ├── add-address.dto.ts
-│   │       │   └── update-profile.dto.ts
-│   │       ├── interface/
-│   │       │   └── user.interface.ts
-│   │       ├── user.controller.ts
-│   │       ├── user.model.ts
-│   │       ├── user.routes.ts
-│   │       └── user.service.ts
-│   ├── routes/
-│   │   └── index.ts
-│   ├── server.ts
-│   └── shared/
-│       ├── constant/
-│       │   └── http-codes.ts
-│       ├── infrastructure/
-│       │   └── mailer.ts
-│       ├── middlewares/
-│       │   ├── auth.middleware.ts
-│       │   ├── error.middleware.ts
-│       │   ├── http-logger.ts
-│       │   ├── rate-limit.middleware.ts
-│       │   ├── role.middleware.ts
-│       │   ├── upload.middleware.ts
-│       │   └── validate.middleware.ts
-│       ├── queues/
-│       │   ├── email.queue.ts
-│       │   └── email.worker.ts
-│       ├── types/
-│       │   └── express.d.ts
-│       └── utils/
-│           ├── api-response.ts
-│           └── app-error.ts
-└── tsconfig.json
-```
+## Quick Start
 
+### Prerequisites
 
-## Getting Started (Developer Setup)
+- **Node.js** 20.x or higher
+- **npm** (comes with Node)
+- **MongoDB** 6+ (local or Atlas)
+- **Redis** 7+ (local or Docker)
+- (Optional) **Docker** and **Docker Compose** for full stack
 
-**1. Installation** 
+### Installation & Run (npm)
+
 ```bash
+# Clone the repository
 git clone https://github.com/Afzal14786/reshma-core.git
 cd reshma-core
+
+# Install dependencies
 npm install
-``` 
 
-**2. Environment Configuration**   
-Duplicate the example environment file and fill in your credentials.
-
-```bash
+# Create environment file from template
 cp .env.example .env
-```
 
-**3. Run the Development Server**  
-The development server utilizes `nodemon`, `ts-node`, and `tsconfig-paths` for hot-reloading with path aliases.
+# Edit .env – set MONGO_URI, REDIS_URL, etc. (see Environment Variables section)
 
-```bash
+# Build TypeScript
+npm run build
+
+# Seed the database with initial products and roles (optional)
+npm run seed
+
+# Start development server (hot‑reload)
 npm run dev
 ```  
+The API will be available at `http://localhost:5000`.  
+
+### Run with Docker Compose  
+
+The `docker-compose.yml` launches all five services: API, worker, MongoDB, Redis, and Typesense.  
+```bash
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop everything
+docker-compose down
+```  
+Environment variables are already injected for internal service names. The API will be on port 5000.  
+
+---  
+
+## Environment Variables  
+Critical variables (see `.env.example` for the full list):  
+
+| Variable                     | Purpose                               | Example (local)                                      |
+|------------------------------|---------------------------------------|------------------------------------------------------|
+| `PORT`                       | API listening port                    | `5000`                                               |
+| `MONGO_URI`                  | MongoDB connection string             | `mongodb://localhost:27017/reshma-core`              |
+| `REDIS_URL`                  | Redis connection                      | `redis://localhost:6379`                             |
+| `JWT_ACCESS_SECRET`          | Short‑lived access token secret       | 64‑character hex string                              |
+| `JWT_REFRESH_SECRET`         | Refresh token secret                  | 64‑character hex string                              |
+| `RAZORPAY_KEY_ID` / `SECRET` | Payment gateway credentials           | from Razorpay dashboard                              |
+| `TYPESENSE_HOST` / `API_KEY` | Search engine endpoint                | `localhost` / `your-super-secret-key`                |
+| `SMTP_HOST` / `USER` / `PASS`| Email sending (e.g., Gmail app password) | `smtp.gmail.com`, your email, app password         |
+
+For detailed explanations, see [Environment Variables Guide](./docs/setup/environment-variables.md).  
+
+---  
+
+## API Reference  
+All routes are versioned under `/api/v1`. Standard response format:  
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Operation successful",
+  "data": { ... },
+  "timestamp": "2026-05-14T10:00:00.000Z"
+}
+```  
+
+**Main endpoint groups** (see [API Standards](./docs/api/api-standards.md) for full details):  
+| Module          | Base Route        | Description                                                       |
+|-----------------|-------------------|-------------------------------------------------------------------|
+| Auth            | `/auth`           | Register, login, refresh, logout, OTP                             |
+| Users           | `/users`          | Profile, addresses, password update                               |
+| Products        | `/products`       | Catalog (public) + admin CRUD                                     |
+| Cart            | `/cart`           | Add/remove items, merge guest cart                                |
+| Orders          | `/orders`         | Checkout, payment verification, webhooks                          |
+| Returns         | `/returns`        | Initiate return, admin arbitration                                |
+| Interactions    | `/interactions`   | Reviews, comments, voting                                         |
+| Coupons         | `/coupons`        | Create, apply, remove                                             |
+| Wishlist        | `/wishlists`      | Add, move to cart, clear                                          |
+| Notifications   | `/notifications`  | Fetch in‑app alerts, mark read                                    |
+| Search          | `/search`         | Typo‑tolerant product search                                      |
+| Dashboard       | `/dashboard`      | Admin metrics (revenue, top products)                             |
+| Support         | `/support`        | Ticket creation, replies, state management                        |  
+
+Error codes follow REST conventions – see [Error Codes Guide](./docs/api/error-codes.md).  
+
+---  
+
+## Testing Guides  
+Manual runbooks (Thunder Client / Postman) are provided for every module:  
+
+* [Authentication Runbook](./docs/api/thunder-tests/auth-runbook.md)
+* [Product Catalog Runbook](./docs/api/thunder-tests/product-runbook.md)
+* [Cart & Coupon Runbook](./docs/api/thunder-tests/coupon-runbook.md)
+* [Order & Logistics Runbook](./docs/api/thunder-tests/order-runbook.md)
+* [Returns Runbook](./docs/api/thunder-tests/return-runbook.md)
+* [Interactions Runbook](./docs/api/thunder-tests/interaction-runbook.md)
+* [Wishlist Runbook](./docs/api/thunder-tests/wishlist-runbook.md)
+* [Search Runbook](./docs/api/thunder-tests/search-runbook.md)
+* [Dashboard Runbook](./docs/api/thunder-tests/dashboard-runbook.md)
+* [Support Runbook](./docs/api/thunder-tests/support-runbook.md)
+
+Use them to verify functionality after local setup.  
+
+---  
+
+## Documentation Hub  
+
+All internal documentation lives in the `docs/` folder.  
+
+### Architecture & System Design  
+
+* [System Overview](./docs/architecture/system-overview.md) – master blueprint and ADRs
+* [Authentication Architecture](./docs/architecture/auth-architecture.md) – two‑token JWT, OTP flows, Redis blacklist
+* [Database Design & Polymorphism](./docs/architecture/database-design.md) – Mongoose discriminators
+* [Product Catalog Schema](./docs/architecture/product-catalog.md) – mapping Google Sheets to database
+* [Security Hardening](./docs/architecture/security-hardening.md) – Helmet, rate limits, Zod firewalls
+* [Payment Integration (Razorpay)](./docs/architecture/payment-integration.md) – HMAC verification, webhooks
+* [Legal & Tax Compliance (GST)](./docs/architecture/legal-tax-compliance.md) – dynamic Indian tax engine
+* [Edge Cache & Workers](./docs/architecture/edge-cache-and-workers.md) – Redis proxy, BullMQ PDF generation
+* [DevOps & Infrastructure](./docs/architecture/devops-and-infrastructure.md) – horizontal scaling, deep health checks  
+
+### Module Deep Dives  
+
+* [Auth Module](./docs/modules/auth-module.md)
+* [User Module](./docs/modules/user-module.md)
+* [Product Module](./docs/modules/product-module.md)
+* [Cart Module](./docs/modules/cart-module.md)
+* [Order Module](./docs/modules/order-module.md)
+* [Return Module](./docs/modules/return-module.md)
+* [Notification Module](./docs/modules/notification-module.md)
+* [Coupon Module](./docs/modules/coupon-module.md)
+* [Wishlist Module](./docs/modules/wishlist-module.md)
+* [Interaction Module](./docs/modules/interaction-module.md)
+* [Search Module](./docs/modules/search-module.md)
+* [Dashboard Module](./docs/modules/dashboard-module.md)
+* [Support Module](./docs/modules/support-module.md)  
+
+### Setup & Environment  
+
+* [Local Development Setup](./docs/setup/local-development.md)
+* [Environment Variables Guide](./docs/setup/environment-variables.md)  
+
+### Deployment  
+
+The project is ready for production deployment on any cloud platform (AWS ECS, Render, Railway, or a VPS).  
+
+* **Production build** – `npm run build` creates the `dist/` folder.
+* **Start command** – `npm run start` (or `node dist/server.js`).
+* **Docker** – Use the provided `Dockerfile` and `docker-compose.yml`. The multi‑stage build produces a small image with only production dependencies.
+* **CI/CD** – GitHub Actions workflows run CodeQL security scans and Prettier checks on every PR to `main`. Dependabot updates dependencies weekly.
+* **Health check** – `GET /api/v1/health` performs deep pings to MongoDB, Redis, and Typesense – perfect for load balancer liveness probes.
+
+For a detailed guide, see [DevOps & Infrastructure](./docs/architecture/devops-and-infrastructure.md).  
+
+---  
+
+## Contributing  
+
+We welcome contributions that improve security, performance, or add well‑specified features. Please read:  
+
+* [Contributing Guidelines](./CONTRIBUTING.md) – coding standards, pull request workflow, commit conventions
+* [Code of Conduct](./CODE_OF_CONDUCT.md)
+* [Security Policy](./SECURITY.md) – how to report vulnerabilities privately
+
+**Key rules:** no `any` TypeScript, all inputs validated with Zod, JWT authentication required for protected routes, and all code must pass `npm run format` and `npm run build`.  
+
+---  
+
+## Security  
+
+Reshma‑Core implements defense in depth: helmet headers, distributed rate limiting (Redis), NoSQL injection sanitisation (`express‑mongo‑sanitize`), two‑token JWT, and HTTP‑only cookies. See [SECURITY.md](./SECURITY.md) for full details and vulnerability reporting.  
+
+---  
+
+## License  
+
+This project is proprietary. All rights reserved. See [LICENCE](./LICENCE) for terms. You may not copy, modify, or distribute the software without explicit permission from the copyright holder.  
+
+---  
+
+<div align="center">
+
+## Author
+
+**“Building robust, strictly‑typed systems that scale gracefully.”**
+
+</div>
+
+<div align="center">
+
+I am **Md Afzal Ansari**, a Software Developer who bridges high‑level application engineering with systems‑level thinking. I specialise in the **MERN stack** (MongoDB, Express, React, Node.js) and **C++ systems programming**, and I am deeply passionate about:
+
+</div>
+
+<div align="left">
+
+- **Scalable backend architectures** – designing for horizontal scaling, statelessness, and asynchronous processing (BullMQ, Redis).
+- **Type safety & correctness** – enforcing `noImplicitAny`, Zod runtime validation, and exhaustive TypeScript patterns.
+- **Domain‑Driven Design** – structuring code by business features, not technical layers.
+- **Performance & resilience** – edge caching, distributed rate limiting, graceful shutdowns, and dead‑letter queues.
+
+</div>
+
+<div align="center">
+
+I have built this e‑commerce engine from the ground up – integrating polymorphic product catalogs, dynamic Indian GST calculations, two‑token JWT authentication, real‑time search with Typesense, and automated logistics via Shiprocket. Every line of code respects strict security policies (CodeQL, Helmet, NoSQL injection prevention) and a zero‑`any` TypeScript discipline.
+
+Currently based in **India**, I am actively developing production‑grade applications and contributing to open‑source. I believe that clean, well‑tested, and well‑documented code is the foundation of any successful digital business.
+
+### Let’s Connect
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=flat&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/0x4f5a4c/)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/Afzal14786)
+[![Instagram](https://img.shields.io/badge/Instagram-E4405F?style=flat&logo=instagram&logoColor=white)](https://instagram.com/iamafzal.ansari)
+[![Portfolio](https://img.shields.io/badge/Portfolio-2563EB?style=flat&logo=globe&logoColor=white)](https://iamafzal-dev.vercel.app)
+[![Email](https://img.shields.io/badge/Email-D14836?style=flat&logo=gmail&logoColor=white)](mailto:mdafzal14777@gmail.com)
 
 ---
-<div align="center">
-👨‍💻 Meet the Developer  
-</div> 
 
-<div align="center">
+⭐ *If you found this architecture or codebase helpful, please consider giving it a star on GitHub!* ⭐
 
-  **"Building robust, strictly-typed systems that scale gracefully."**
+<br />
 
-  I am **Md Afzal Ansari**, a Software Developer specializing in the MERN stack and C++ systems programming. I am passionate about crafting highly scalable backend architectures, engineering microservices, and solving complex problems with clean, efficient Data Structures and Algorithms. Whether I am architecting e-commerce backends or building systems tools from scratch, I prioritize performance, type safety, and domain-driven design.
-
-  Currently based in India and actively developing production-grade applications.
-
-  ### Let's Connect! 
-
-  [![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=flat&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/0x4f5a4c/)
-  [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/Afzal14786)
-  [![Instagram](https://img.shields.io/badge/Instagram-E4405F?style=flat&logo=instagram&logoColor=white)](https://instagram.com/iamafzal.ansari)
-  [![Portfolio](https://img.shields.io/badge/Portfolio-2563EB?style=flat&logo=globe&logoColor=white)](https://iamafzal-dev.verce.app)
-  [![Email](https://img.shields.io/badge/Email-D14836?style=flat&logo=gmail&logoColor=white)](mailto:mdafzal14777@gmail.com)
-
-</div>  
-
---- 
-
-<div align="center">
-
-  ⭐ *If you found this architecture or codebase helpful, please consider giving it a star on GitHub!* ⭐
-
-  <br>
-
-  `Built with ❤️ and strict TypeScript by Md Afzal Ansari`
+`Built with ❤️ and strict TypeScript by Md Afzal Ansari`
 
 </div>

@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Added: DevOps, Containerization & Repository Governance
+
+This release transitions the Reshma-Core architecture from a local development environment to a production-ready, highly available enterprise system.
+
+**Infrastructure & DevOps (Docker Integration)**
+* Added a multi-stage `Dockerfile` utilizing Alpine Linux to compile TypeScript and securely run the production build under a non-root `node` user.
+* Implemented `docker-compose.yml` for local environment parity, automatically orchestrating the API Gateway, BullMQ Worker, MongoDB, Redis, and Typesense on an isolated bridge network.
+* Added `docker-compose.prod.yml` for AWS deployment, featuring complete air-gapping of databases (no exposed ports) and strict container healthchecks to prevent startup race conditions.
+* Configured `.dockerignore` to strip local secrets, `.git` histories, and unnecessary dependencies from the final image, drastically reducing build size.
+
+**Repository Governance & Open Source Standards**
+* Authored an enterprise-grade `CONTRIBUTING.md` enforcing a strict "Zero `any`" TypeScript policy, Domain-Driven Design adherence, and Conventional Commits.
+* Established a comprehensive `SECURITY.md` detailing the threat model, acceptable use policy, and private vulnerability disclosure pipelines.
+* Added `CODE_OF_CONDUCT.md` enforcing "Egoless Engineering" and strict code review etiquette.
+* Restructured `.github/ISSUE_TEMPLATE/` using YAML forms for Bug Reports, Feature Requests, and Security vulnerabilities to enforce high-quality issue triage.
+* Updated `LICENCE` to include the standard copyright header.
+
+**Documentation & Configuration**
+* Rewrote the master `README.md` to reflect the complete Microservice architecture, DevOps pipeline, and business logic highlights.
+* Sanitized `.env.example` to remove hardcoded cloud keys and provide clear instructions for Docker vs. Local database connection strings.
+* Updated `PULL_REQUEST_TEMPLATE.md` to ensure security scans and Prettier formatting are verified before merge.
+
 ### Added ~ Features
 * **Public Password Recovery Pipeline:** Implemented the complete "Forgot Password" and "Reset Password" flows in the Auth module. Integrates seamlessly with Redis for 15-minute secure token expiry.
 * **Order Shipped Template:** Added a brand new `order-shipped.ts` MJML template featuring the visual timeline tracker and dynamic courier/tracking data.
