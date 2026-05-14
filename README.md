@@ -88,14 +88,296 @@ This backend is built to handle that complexity natively – using a polymorphic
 
 ---
 
-## System Architecture
+## System Architecture & Complete Folder Structure
 
-The codebase follows **Domain‑Driven Design**: features (Auth, Users, Products, Cart, Orders, etc.) live in their own modules under `src/modules/`. Each module contains controllers, services, DTOs (Zod), models, and interfaces.
+Reshma‑Core follows **Domain‑Driven Design:** features (Auth, Users, Products, Cart, Orders, etc.) live in their own modules under `src/modules/`. Each module contains controllers, services, DTOs (Zod), models, and interfaces.  
 
-The **polymorphic catalog** uses Mongoose discriminators – all products live in one `Products` collection, but sub‑schemas enforce category‑specific fields (e.g., `bangleSizes`, `cupSizes`, `lengthMeters`).
+The **polymorphic catalog** uses Mongoose discriminators – all products live in one `Products` collection, but sub‑schemas enforce category‑specific fields (e.g., `bangleSizes`, `lengthMeters`).  
 
-For a deep dive, see the [System Overview](./docs/architecture/system-overview.md) which links to every architecture decision record (ADR), module documentation, and security hardening guide.
+For a deep dive, see the [System Overview](./docs/architecture/system-overview.md) which links to every architecture decision record (ADR), module documentation, and security hardening guide.  
 
+```text
+reshma-core/
+├── .dockerignore
+├── .env.example
+├── .github/
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.yml
+│   │   ├── config.yml
+│   │   └── feature_request.yml
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   ├── dependabot.yml
+│   └── workflows/
+│       ├── codeql.yml
+│       └── format-check.yml
+├── .gitignore
+├── CHANGES.md
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+├── Dockerfile
+├── LICENCE
+├── README.md
+├── SECURITY.md
+├── docker-compose.prod.yml
+├── docker-compose.yml
+├── docs/
+│   ├── api/
+│   │   ├── api-standards.md
+│   │   ├── error-codes.md
+│   │   └── thunder-tests/
+│   │       ├── auth-runbook.md
+│   │       ├── coupon-runbook.md
+│   │       ├── dashboard-runbook.md
+│   │       ├── interaction-runbook.md
+│   │       ├── order-runbook.md
+│   │       ├── product-runbook.md
+│   │       ├── return-runbook.md
+│   │       ├── search-runbook.md
+│   │       ├── support-runbook.md
+│   │       ├── user-runbook.md
+│   │       └── wishlist-runbook.md
+│   ├── architecture/
+│   │   ├── auth-architecture.md
+│   │   ├── database-design.md
+│   │   ├── devops-and-infrastructure.md
+│   │   ├── edge-cache-and-workers.md
+│   │   ├── legal-tax-compliance.md
+│   │   ├── payment-integration.md
+│   │   ├── product-catalog.md
+│   │   ├── security-hardening.md
+│   │   └── system-overview.md
+│   ├── modules/
+│   │   ├── auth-module.md
+│   │   ├── cart-module.md
+│   │   ├── coupon-module.md
+│   │   ├── dashboard-module.md
+│   │   ├── interaction-module.md
+│   │   ├── notification-module.md
+│   │   ├── order-module.md
+│   │   ├── product-module.md
+│   │   ├── return-module.md
+│   │   ├── search-module.md
+│   │   ├── support-module.md
+│   │   ├── user-module.md
+│   │   └── wishlist-module.md
+│   └── setup/
+│       ├── environment-variables.md
+│       └── local-development.md
+├── package-lock.json
+├── package.json
+├── src/
+│   ├── app.ts
+│   ├── assets/
+│   │   ├── app-icon-reshma-boutique.png
+│   │   ├── banner.png
+│   │   └── reshma_bangles.jpg
+│   ├── config/
+│   │   ├── cloudinary.ts
+│   │   ├── db.ts
+│   │   ├── env.ts
+│   │   ├── logger.ts
+│   │   ├── razorpay.ts
+│   │   ├── redis.ts
+│   │   ├── shiprocket.ts
+│   │   └── typesense.ts
+│   ├── db/
+│   │   └── seed.ts
+│   ├── modules/
+│   │   ├── auth/
+│   │   │   ├── auth.controller.ts
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── auth.service.ts
+│   │   │   ├── auth.utils.ts
+│   │   │   └── dtos/
+│   │   │       ├── google.dto.ts
+│   │   │       ├── login.dto.ts
+│   │   │       ├── register.dto.ts
+│   │   │       ├── reset-password.dto.ts
+│   │   │       └── verify-otp.dto.ts
+│   │   ├── cart/
+│   │   │   ├── cart.controller.ts
+│   │   │   ├── cart.model.ts
+│   │   │   ├── cart.route.ts
+│   │   │   ├── cart.service.ts
+│   │   │   ├── dtos/
+│   │   │   │   └── cart.dto.ts
+│   │   │   └── interfaces/
+│   │   │       └── cart.interface.ts
+│   │   ├── coupons/
+│   │   │   ├── coupon.controller.ts
+│   │   │   ├── coupon.model.ts
+│   │   │   ├── coupon.routes.ts
+│   │   │   ├── coupon.service.ts
+│   │   │   ├── dtos/
+│   │   │   │   └── coupon.dto.ts
+│   │   │   └── interfaces/
+│   │   │       └── coupon.interface.ts
+│   │   ├── dashboard/
+│   │   │   ├── dashboard.controller.ts
+│   │   │   ├── dashboard.routes.ts
+│   │   │   ├── dashboard.service.ts
+│   │   │   ├── dtos/
+│   │   │   │   └── date-range.dto.ts
+│   │   │   └── interfaces/
+│   │   │       └── dashboard.interface.ts
+│   │   ├── health/
+│   │   │   ├── health.controller.ts
+│   │   │   └── health.routes.ts
+│   │   ├── interactions/
+│   │   │   ├── dtos/
+│   │   │   │   ├── create-interaction.dto.ts
+│   │   │   │   └── vote-interaction.dto.ts
+│   │   │   ├── interaction.controller.ts
+│   │   │   ├── interaction.model.ts
+│   │   │   ├── interaction.routes.ts
+│   │   │   ├── interaction.service.ts
+│   │   │   └── interfaces/
+│   │   │       └── interaction.interface.ts
+│   │   ├── notifications/
+│   │   │   ├── interface/
+│   │   │   │   ├── email.interface.ts
+│   │   │   │   └── notification.interface.ts
+│   │   │   ├── notification.controller.ts
+│   │   │   ├── notification.model.ts
+│   │   │   ├── notification.routes.ts
+│   │   │   ├── notification.service.ts
+│   │   │   └── templates/
+│   │   │       ├── data-export.ts
+│   │   │       ├── layout.ts
+│   │   │       ├── order-cancel.ts
+│   │   │       ├── order-delivered.ts
+│   │   │       ├── order-placed.ts
+│   │   │       ├── order-shipped.ts
+│   │   │       ├── otp-verification.ts
+│   │   │       ├── password-reset.ts
+│   │   │       ├── password-update.ts
+│   │   │       ├── return-approved.ts
+│   │   │       ├── return-refunded.ts
+│   │   │       ├── return-rejected.ts
+│   │   │       ├── return-requested.ts
+│   │   │       ├── ticket-created.ts
+│   │   │       ├── ticket-replied.ts
+│   │   │       └── welcome.ts
+│   │   ├── orders/
+│   │   │   ├── dtos/
+│   │   │   │   └── order.dto.ts
+│   │   │   ├── interfaces/
+│   │   │   │   └── order.interface.ts
+│   │   │   ├── invoice.generator.ts
+│   │   │   ├── order.admin.controller.ts
+│   │   │   ├── order.model.ts
+│   │   │   ├── order.public.controller.ts
+│   │   │   ├── order.routes.ts
+│   │   │   ├── order.service.ts
+│   │   │   ├── payment.utils.ts
+│   │   │   ├── shiprocket.service.ts
+│   │   │   └── tax.utils.ts
+│   │   ├── products/
+│   │   │   ├── controllers/
+│   │   │   │   ├── product.admin.controller.ts
+│   │   │   │   └── product.public.controller.ts
+│   │   │   ├── dtos/
+│   │   │   │   ├── product.admin.dto.ts
+│   │   │   │   └── product.public.dto.ts
+│   │   │   ├── interfaces/
+│   │   │   │   ├── accessory.interface.ts
+│   │   │   │   ├── apparel.interface.ts
+│   │   │   │   ├── bangle.interface.ts
+│   │   │   │   ├── base-product.interface.ts
+│   │   │   │   ├── fabric.interface.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   └── innerwear.interface.ts
+│   │   │   ├── models/
+│   │   │   │   ├── accessory.model.ts
+│   │   │   │   ├── apparel.model.ts
+│   │   │   │   ├── bangle.model.ts
+│   │   │   │   ├── base-product.model.ts
+│   │   │   │   ├── fabric.model.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   └── innerwear.model.ts
+│   │   │   ├── product.routes.ts
+│   │   │   └── product.service.ts
+│   │   ├── returns/
+│   │   │   ├── dtos/
+│   │   │   │   └── return.dto.ts
+│   │   │   ├── interfaces/
+│   │   │   │   └── return.interface.ts
+│   │   │   ├── return.admin.controller.ts
+│   │   │   ├── return.model.ts
+│   │   │   ├── return.public.controller.ts
+│   │   │   ├── return.route.ts
+│   │   │   └── return.service.ts
+│   │   ├── search/
+│   │   │   ├── dtos/
+│   │   │   │   └── search.dto.ts
+│   │   │   ├── search.controller.ts
+│   │   │   ├── search.routes.ts
+│   │   │   └── search.service.ts
+│   │   ├── support/
+│   │   │   ├── dtos/
+│   │   │   │   └── support.dto.ts
+│   │   │   ├── interfaces/
+│   │   │   │   └── support.interface.ts
+│   │   │   ├── support.admin.controller.ts
+│   │   │   ├── support.model.ts
+│   │   │   ├── support.public.controller.ts
+│   │   │   ├── support.routes.ts
+│   │   │   └── support.service.ts
+│   │   ├── users/
+│   │   │   ├── dtos/
+│   │   │   │   ├── address.dto.ts
+│   │   │   │   ├── security.dto.ts
+│   │   │   │   └── update-profile.dto.ts
+│   │   │   ├── interfaces/
+│   │   │   │   └── user.interface.ts
+│   │   │   ├── user.controller.ts
+│   │   │   ├── user.model.ts
+│   │   │   ├── user.routes.ts
+│   │   │   └── user.service.ts
+│   │   └── wishlists/
+│   │       ├── dtos/
+│   │       │   └── wishlist.dto.ts
+│   │       ├── interfaces/
+│   │       │   └── wishlist.interface.ts
+│   │       ├── wishlist.controller.ts
+│   │       ├── wishlist.model.ts
+│   │       ├── wishlist.routes.ts
+│   │       └── wishlist.service.ts
+│   ├── routes/
+│   │   └── index.ts
+│   ├── server.ts
+│   └── shared/
+│       ├── constant/
+│       │   └── http-codes.ts
+│       ├── cron/
+│       │   └── order-recovery.cron.ts
+│       ├── infrastructure/
+│       │   └── mailer.ts
+│       ├── middlewares/
+│       │   ├── auth.middleware.ts
+│       │   ├── cache.middleware.ts
+│       │   ├── error.middleware.ts
+│       │   ├── http-logger.ts
+│       │   ├── rate-limit.middleware.ts
+│       │   ├── role.middleware.ts
+│       │   ├── upload.middleware.ts
+│       │   └── validate.middleware.ts
+│       ├── queues/
+│       │   ├── email.queue.ts
+│       │   ├── email.worker.ts
+│       │   ├── export.queue.ts
+│       │   ├── export.worker.ts
+│       │   ├── invoice.queue.ts
+│       │   └── invoice.worker.ts
+│       ├── types/
+│       │   └── express.d.ts
+│       └── utils/
+│           ├── api-response.ts
+│           ├── app-error.ts
+│           ├── cache.utils.ts
+│           └── sanitizer.ts
+└── tsconfig.json
+```
 ---
 
 ## Quick Start
