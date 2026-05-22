@@ -153,7 +153,7 @@ Every auth request passes through a security pipeline:
 graph LR
     A[Client Request] --> B[Helmet Headers]
     B --> C[authLimiter]
-    C --> D[Payload Truncator (10kb)]
+    C --> D["Payload Truncator (10kb)"]
     D --> E[Zod Interceptor]
     E --> F((Auth Controller))
 ```  
