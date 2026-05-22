@@ -116,16 +116,16 @@ When logging failed coupon applications or updates, malicious actors can inject 
 
 Attackers may attempt to bypass the `getCoupons` admin filter via query objects in the URL (e.g., `GET /coupons?code[$ne]=INVALID`), attempting to force the database to return the first valid coupon.
 
-* **Mitigation:** The `CouponController` explicitly checks `typeof req.query.code === 'string'`[cite: 9]. It forces the Mongoose query to use strict equality wrappers: `code: { $eq: safeCode }`[cite: 9]. Nested object injection is physically impossible because the Express query parser's object outputs are ignored.  
+* **Mitigation:** The `CouponController` explicitly checks `typeof req.query.code === 'string'`. It forces the Mongoose query to use strict equality wrappers: `code: { $eq: safeCode }`. Nested object injection is physically impossible because the Express query parser's object outputs are ignored.  
 
 ### C. Zod Payload Firewalls (Prototype Pollution & Logic Flaws)  
-The `createCouponSchema` leverages Zod's `superRefine` block to enforce complex, cross-field business logic before the data ever touches the V8 engine heap[cite: 9]:  
+The `createCouponSchema` leverages Zod's `superRefine` block to enforce complex, cross-field business logic before the data ever touches the V8 engine heap:  
 
-1. **Margin Protection Limit:** If an Admin sets `discountType === 'PERCENTAGE'`, Zod mathematically forces them to provide a `maxDiscountAmount` ceiling[cite: 9]. The request throws a 400 error otherwise.  
+1. **Margin Protection Limit:** If an Admin sets `discountType === 'PERCENTAGE'`, Zod mathematically forces them to provide a `maxDiscountAmount` ceiling. The request throws a 400 error otherwise.  
 
-2. Temporal Logic Check: Zod strictly calculates that `expiryDate` must occur chronologically later than `startDate`[cite: 9].  
+2. Temporal Logic Check: Zod strictly calculates that `expiryDate` must occur chronologically later than `startDate`.  
 
-3. Past Date Failsafe: Zod rejects `startDate` inputs that are in the past, allowing only a 5-minute threshold buffer to account for global network latency during API transit[cite: 9].  
+3. Past Date Failsafe: Zod rejects `startDate` inputs that are in the past, allowing only a 5-minute threshold buffer to account for global network latency during API transit.  
 
 ---  
 
@@ -133,17 +133,17 @@ The `createCouponSchema` leverages Zod's `superRefine` block to enforce complex,
 
 ### A. Public Discovery API (Customer Conversion)
 
-Coupons are only effective if users know they exist. The module exposes a Public API (`GET /api/v1/coupons/available`) to dynamically display active promotions to logged-in users [cite: 9].
+Coupons are only effective if users know they exist. The module exposes a Public API (`GET /api/v1/coupons/available`) to dynamically display active promotions to logged-in users .
 
 - **Dynamic Validation Pipeline:** The API accepts an optional `?cartValue=X` query.
 
-- **The `$expr` Operator:** Instead of fetching all coupons and filtering them in Node's memory (which causes heap memory bloat), the service uses MongoDB's highly optimized `$expr` operator to compare fields internally at the database level (`$expr: { $lt: ["$usedCount", "$usageLimit"] }`) [cite: 9].
+- **The `$expr` Operator:** Instead of fetching all coupons and filtering them in Node's memory (which causes heap memory bloat), the service uses MongoDB's highly optimized `$expr` operator to compare fields internally at the database level (`$expr: { $lt: ["$usedCount", "$usageLimit"] }`) .
 
-- **Data Masking (Projection):** The Mongoose `.select()` projection intentionally strips internal metrics like `usedCount` and `usageLimit` from the JSON payload [cite: 9]. Competitors analyzing network traffic cannot see how many times a code has been used.
+- **Data Masking (Projection):** The Mongoose `.select()` projection intentionally strips internal metrics like `usedCount` and `usageLimit` from the JSON payload . Competitors analyzing network traffic cannot see how many times a code has been used.
 
 ### B. Fault Tolerance (`catchAsync`)
 
-Every single controller method is wrapped in a custom `catchAsync` Higher‑Order Function (HOF) [cite: 9]. If the MongoDB cluster times out during a `fetchCoupons` query, the promise rejection is automatically caught and forwarded to the global Error Middleware, preventing the Express server from hanging or crashing [cite: 9].
+Every single controller method is wrapped in a custom `catchAsync` Higher‑Order Function (HOF) . If the MongoDB cluster times out during a `fetchCoupons` query, the promise rejection is automatically caught and forwarded to the global Error Middleware, preventing the Express server from hanging or crashing .
 
 --- 
 
@@ -151,9 +151,9 @@ Every single controller method is wrapped in a custom `catchAsync` Higher‑Orde
 
 To support high-throughput operations (specifically during flash sales where thousands of users are applying coupons to carts simultaneously), the `CouponModel` implements strategic indexing.
 
-- **Compound Index (`{ code: 1, isActive: 1 }`):** Because `validateAndCalculateDiscount` queries by both `code` and `isActive` concurrently, this compound index allows MongoDB to instantly locate the document in memory without executing a full collection scan [cite: 9].
+- **Compound Index (`{ code: 1, isActive: 1 }`):** Because `validateAndCalculateDiscount` queries by both `code` and `isActive` concurrently, this compound index allows MongoDB to instantly locate the document in memory without executing a full collection scan .
 
-- **Unique Trimming:** The `code` field is set to `uppercase: true` and `trim: true` at the schema level [cite: 9]. This prevents user-error inputs like `"  diwali500 "` from failing valid matching logic.  
+- **Unique Trimming:** The `code` field is set to `uppercase: true` and `trim: true` at the schema level . This prevents user-error inputs like `"  diwali500 "` from failing valid matching logic.  
 
 --- 
 ## 7. Global Integration Workflow (The Coupon Lifecycle)
@@ -207,6 +207,28 @@ By treating the Coupon Module strictly as a **Mathematical Authority** rather th
 
 The integration of strict Zod cross-field validation, TOCTOU vulnerability patching, and Webhook-driven scarcity guarantees that this engine will scale flawlessly during high-traffic flash sales without leaking inventory or miscalculating revenue.
 
+---  
+
+## 8. Related Files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/coupons/coupon.controller.ts` | HTTP layer – routes, filtering, admin endpoints. |
+| `src/modules/coupons/coupon.service.ts` | Core logic – five firewalls, discount calculation, atomic scarcity. |
+| `src/modules/coupons/coupon.model.ts` | Mongoose schema, indexes. |
+| `src/modules/coupons/dtos/coupon.dto.ts` | Zod validation with superRefine cross‑field checks. |
+| `src/modules/coupons/coupon.routes.ts` | Route definitions, rate limiting, RBAC. |
+| `src/modules/coupons/interfaces/coupon.interface.ts` | TypeScript interfaces and enums. |  
+
+---  
+
+## See Also
+
+- [Cart Module](./cart-module.md) – applies coupons and recalculates totals.
+- [Order Module](./order-module.md) – final TOCTOU check and atomic scarcity.
+- [Security Hardening](../architecture/security-hardening.md) – CWE mitigations.
+- [Middleware & Validation](../architecture/middleware-and-validation.md) – rate limiting, RBAC.
+
 ---
 
-**Standard Documentation | Reshma-Core Architecture**
+*The Reshma-Core Team*

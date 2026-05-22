@@ -1,7 +1,7 @@
 <div align="center">
 
   # Razorpay Integration Architecture
-  
+
   **The cryptographic handshake engine ensuring secure, fraud-proof financial transactions and atomic stock synchronization.**
 
   [![Razorpay](https://img.shields.io/badge/Razorpay-SDK_Integration-blue?style=flat&logo=razorpay&logoColor=white)](https://razorpay.com/)
@@ -15,15 +15,14 @@
 
 ## Overview
 
-The Reshma platform utilizes a **Non-Trust Frontend Pattern**. The backend never assumes a payment is successful based on a frontend notification; it requires mathematical proof via an HMAC SHA-256 signature verification. This architecture prevents financial spoofing and ensures that stock reservation is perfectly synchronized with actual revenue collection.
+Reshma‑Core uses a **Non‑Trust Frontend Pattern** – the backend never assumes a payment is successful based on a frontend notification. Instead, it requires **mathematical proof** via HMAC‑SHA‑256 signature verification. This prevents financial spoofing and ensures stock reservation is perfectly synchronised with actual revenue collection.
+
+All payment‑related logic resides in the `OrderService` (`order.service.ts`), with helper utilities in `payment.utils.ts`.
 
 ---
 
-## 1. The Checkout Workflow
+## 1. The Checkout Workflow (4‑Step Handshake)
 
-The system follows a 4-step secure handshake to ensure that stock reservation and financial transactions are perfectly synchronized.
-
-### Workflow Visualization
 ```mermaid
 sequenceDiagram
     participant User as Customer (Frontend)
@@ -42,100 +41,141 @@ sequenceDiagram
 
     User->>RZP: Open Payment Modal (UPI/Card)
     RZP-->>User: payment_id & signature
-    
+
     User->>Server: POST /orders/verify-payment
     Server->>Server: Verify HMAC SHA-256 Signature
     Server->>DB: Move Status: PENDING -> PAID
     Server-->>User: 200 OK (Success)
 ```  
-### Protocol Visualization  
 
-1.  **Order Initialization:** Backend generates a Razorpay Order ID to lock the currency and amount.
-2.  **Stock Reservation:** Occurs within an ACID transaction *before* the payment modal opens.
-3.  **Payment Execution:** User interacts directly with Razorpay's secure servers.
-4.  **Cryptographic Verification:** Backend recalculates the signature using the `RAZORPAY_KEY_SECRET` to prove authenticity.  
+**Step details:**  
 
----
+1. **Order initialisation** – Backend creates a Razorpay Order ID, locking the currency and amount.
+2. **Stock reservation** – Within an ACID transaction, stock is atomically decremented using `$inc` + `$gte`.
+3. **Payment execution** – User interacts directly with Razorpay’s secure servers.
+4. **Cryptographic verification** – Backend recalculates the signature using `RAZORPAY_KEY_SECRET`.  
+
+---  
 
 ## 2. Core Security Pillars
 
-### A. HMAC SHA-256 Handshake
-We utilize the native `crypto` module to verify the integrity of the payment data returned by the frontend. This ensures that the `payment_id` was actually issued by Razorpay for our specific `order_id`.
+### A. HMAC‑SHA‑256 Handshake
 
-**Verification Logic:**
+The backend verifies the payment signature using the native `crypto` module:  
+
 ```typescript
 const generatedSignature = crypto
-    .createHmac('sha256', env.RAZORPAY_KEY_SECRET)
-    .update(`${gatewayOrderId}|${gatewayPaymentId}`)
-    .digest('hex');
-
+  .createHmac('sha256', env.RAZORPAY_KEY_SECRET)
+  .update(`${gatewayOrderId}|${gatewayPaymentId}`)
+  .digest('hex');
 const isValid = generatedSignature === gatewaySignature;
 ```  
+This guarantees that the `payment_id` was genuinely issued by Razorpay for our `order_id`.  
 
-### B. Idempotency Guard  
+### B. Idempotency Guard
 
-To prevent Double Fulfillment (e.g., a user refreshing the success page), the `verifyFrontendPayment` service checks the database state:
+If a user refreshes the success page, the `verifyFrontendPayment` service checks the database state:
 
-* If `paymentStatus === 'PAID'`, the system immediately exits and returns the existing record.
-* This prevents duplicate BullMQ notification triggers and redundant database writes. 
+- If `paymentStatus === 'PAID'`, the system immediately returns the existing record.
+- Prevents duplicate BullMQ notifications and redundant database writes.
 
 ### C. Paise Mathematical Constraint
-Floating-point math in JavaScript can lead to rounding errors (e.g., `0.1 + 0.2` becomes `0.30000000000000004`).
 
-* The Industry Standard: All amounts are converted to the smallest currency unit (Paise).
-* Formula: `Math.round(totalAmount * 100)`.
-* An order of ₹500.50 is strictly processed as `50050` paise.  
+All amounts are converted to the smallest currency unit (paise) to avoid floating‑point rounding errors:  
+
+```typescript
+const amountInPaise = Math.round(totalAmount * 100);
+```  
+
+Example: ₹500.50 → 50050 paise.  
 
 ### D. Raw Body Integrity (HMAC Precision)
-Standard JSON parsers mutate incoming strings (e.g., removing whitespace), which irreversibly corrupts HMAC signature verification.
 
-* **The Protocol:** In `app.ts`, the system utilizes the `verify` hook within `express.json()` to capture the byte-for-byte original string from the request buffer.  
+Standard JSON parsing alters the raw request string, breaking HMAC verification. In `app.ts`, the `express.json()` middleware captures the original buffer:  
 
-* **Implementation:** This original string is attached to `req.rawBody` before any middleware can mutate the payload. All webhook verification logic now references `req.rawBody` to guarantee 100% mathematical alignment with Razorpay's hashing algorithm.
+```typescript
+app.use(express.json({
+  limit: '10kb',
+  verify: (req, res, buf) => {
+    if (req.originalUrl.includes('/webhook')) {
+      req.rawBody = buf.toString('utf8');
+    }
+  }
+}));
+```  
 
+All webhook verification logic uses `req.rawBody` instead of `req.body`.  
 
 ---  
 
-## 3. Atomic State Management  
+## 3. Atomic State Management
 
-The integration is tightly coupled with MongoDB Sessions to prevent data corruption during payment failures.
+The integration is tightly coupled with MongoDB ACID sessions:
 
-| Component         | Responsibility                                                          |
-|-------------------|-------------------------------------------------------------------------|
-| Order Service     | Manages the `startSession` and `abortTransaction` logic.                |
-| Product Model     | Handles the `$inc` decrement during reservation.                        |
-| Razorpay Config   | A singleton instance initialized at server boot with validated ENVs.    |
-| Payment Utils     | Pure mathematical functions for signature verification (CodeQL hardened). |  
+| Component | Responsibility |
+|-----------|----------------|
+| `OrderService` | Starts the transaction, reserves stock, creates order, commits/aborts. |
+| `ProductModel` | Handles `$inc` decrement during reservation (with `$gte` firewall). |
+| `RazorpayConfig` | Singleton initialised at server boot with validated environment variables. |
+| `PaymentUtils` | Pure signature verification functions (CodeQL‑hardened). |
 
---- 
+**Transaction boundary:**
 
-## 4. Environment Requirements  
-| Variable                   | Scope    | Security Level                                                      |
-|----------------------------|----------|---------------------------------------------------------------------|
-| `RAZORPAY_KEY_ID`          | Public   | Shared with Frontend.                                               |
-| `RAZORPAY_KEY_SECRET`      | Private  | Strictly Backend. (CodeQL Secret Scanning).                         |
-| `RAZORPAY_WEBHOOK_SECRET`  | Private  | Used for async Server-to-Server pings.                              |  
+- Success → commit → order status `PENDING`, stock locked.
+- Failure → rollback → no side effects.
 
---- 
+---
 
-## 5. Failure Handling 
+## 4. Environment Variables
 
-| Scenario              | System Response                                                                 |
-|-----------------------|---------------------------------------------------------------------------------|
-| Signature Mismatch    | Log Security Alert, return 400 Bad Request, keep order PENDING.                 |
-| Network Timeout       | User can re-trigger verification; Idempotency logic handles duplicate hits.     |
-| Insufficient Stock    | Transaction aborts before hitting Razorpay API; returns 409 Conflict.           |  
+| Variable | Scope | Security Level |
+|----------|-------|----------------|
+| `RAZORPAY_KEY_ID` | Public | Shared with frontend. |
+| `RAZORPAY_KEY_SECRET` | Private | Strictly backend – scanned by CodeQL. |
+| `RAZORPAY_WEBHOOK_SECRET` | Private | Used for server‑to‑server webhook verification. |
 
+---
+
+## 5. Failure Handling
+
+| Scenario | System Response |
+|----------|----------------|
+| Signature mismatch | Log security alert, return `400 Bad Request`, order remains `PENDING`. |
+| Network timeout | User can re‑trigger verification; idempotency handles duplicates. |
+| Insufficient stock | Transaction aborts before Razorpay call; returns `409 Conflict`. |
+
+---
 
 ## 6. Asynchronous Fallback (Webhooks)
 
-To guarantee financial consistency during client-side network failures, the system implements a server-to-server webhook listener.
+To guarantee financial consistency even if the frontend network fails, the system listens for Razorpay webhooks:
 
-### The Webhook Flow
-1. **Trigger:** Razorpay fires an `order.paid` event directly to `/api/v1/orders/webhook`.
-2. **Verification:** The backend intercepts the `x-razorpay-signature` header and mathematically compares it against the `req.rawBody` hashed with the `RAZORPAY_WEBHOOK_SECRET`. This ensures that even if the JSON body is parsed, the cryptographic handshake remains valid based on the original data stream.
-3. **Idempotency Execution:** The system queries the database. If the `orderStatus` is already `PAID` (meaning the frontend successfully completed the handshake earlier), the webhook safely terminates. If it is `PENDING`, the system applies the financial state change and proceeds to fulfillment.  
+- **Trigger** – Razorpay fires an `order.paid` event to `/api/v1/orders/webhook`.
+- **Verification** – The webhook handler compares the `x-razorpay-signature` against a hash of `req.rawBody` using `RAZORPAY_WEBHOOK_SECRET`.
+- **Idempotency** – If the order is already `PAID` (frontend already succeeded), the webhook safely terminates. Otherwise, it applies the financial state change and proceeds to fulfillment.
+- **Local webhook testing** – Use a tool like `ngrok` to expose your local webhook endpoint to the internet. Razorpay’s dashboard allows you to configure a test webhook URL.
+
+---
+
+## 7. Related Files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/orders/order.service.ts` | Checkout, stock reservation, webhook handling. |
+| `src/modules/orders/order.public.controller.ts` | `verify-payment` endpoint. |
+| `src/modules/orders/payment.utils.ts` | HMAC signature verification. |
+| `src/modules/products/product.service.ts` | `reserveStock` method (used by `OrderService`). |
+| `src/app.ts` | Raw body interceptor for webhooks. |
+| `src/config/env.ts` | Razorpay environment variable validation. |  
 
 ---  
 
-**Standard Documentation | Reshma-Core Architecture**
+## Next Steps
+
+- See the [Order Module](../modules/order-module.md) for the complete checkout pipeline.
+- Understand [Background Jobs & Cron](./background-jobs-and-cron.md) for async invoice generation.
+- Read [Security Hardening](./security-hardening.md) for raw body and rate limiting details.  
+
+---  
+
+*The Reshma-Core Team*  

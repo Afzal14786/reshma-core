@@ -1,107 +1,280 @@
-# API Error Codes & Handling Guide
+<div align="center">
 
-## 1. Overview
-The Reshma-Core API utilizes a centralized, fail-safe error handling architecture. No matter where an error occurs—whether it is a Zod validation failure, a MongoDB duplicate key conflict, or an expired JWT—the frontend will **always** receive a predictable JSON payload.
+  # Error Handling & Status Codes
+  
+  **Centralized, fail‑safe error handling – predictable JSON errors for every scenario.**
+
+  [![AppError](https://img.shields.io/badge/AppError-Centralized-3448C5?style=flat)](#)
+  [![Zod](https://img.shields.io/badge/Zod-Validation_Errors-3068b7?style=flat)](#)
+  [![Mongoose](https://img.shields.io/badge/Mongoose-CastError_&_Duplicates-880000?style=flat)](#)
+
+</div>
 
 ---
 
-## 2. Standardized Error Payload
-When an API request fails, it will return an HTTP status code in the `4xx` or `5xx` range, accompanied by this exact JSON structure:
+## 📖 Table of Contents
+
+- [Standard Error Payload](#standard-error-payload)
+- [HTTP Status Code Dictionary](#http-status-code-dictionary)
+- [Validation Errors (Zod)](#validation-errors-zod)
+- [Business Logic Errors (409 Conflict)](#business-logic-errors-409-conflict)
+- [Authentication Errors (401/403)](#authentication-errors-401403)
+- [Rate Limiting Errors (429)](#rate-limiting-errors-429)
+- [Server Errors (500/503)](#server-errors-500503)
+- [Frontend Handling Example (Axios)](#frontend-handling-example-axios)
+- [Backend Developer Guide](#backend-developer-guide)
+
+---
+
+## Standard Error Payload
+
+Every error response follows this exact JSON structure:
 
 ```json
 {
   "success": false,
   "statusCode": 401,
   "message": "Invalid or expired refresh token. Please log in again.",
-  "stack": "Error: ...at AuthService.refreshSession..." // ONLY VISIBLE IN NODE_ENV=development
+  "data": null,
+  "timestamp": "2026-05-22T14:30:00.000Z",
+  "stack": "Error: ...at AuthService.refreshSession..."   // ONLY in development
+}
+```  
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | `boolean` | Always `false` for errors |
+| `statusCode` | `number` | HTTP status code (400, 401, 403, etc.) |
+| `message` | `string` | Frontend‑friendly, human‑readable error description |
+| `data` | `null` | Always `null` for errors |
+| `timestamp` | `string` (ISO 8601) | Server time when error occurred |
+| `stack` | `string` | Development only – never shown in production |
+
+> **Frontend tip:** Use `response.data.success` to determine success/failure. The `message` is safe to display directly in toast notifications.  
+
+---  
+
+## HTTP Status Code Dictionary  
+
+| Code | Name | Common Scenarios | Example message |
+|------|------|------------------|-----------------|
+| 400 | Bad Request | Zod validation fails, malformed JSON, invalid ObjectId | `"Validation Failed: email: Invalid email format"` |
+| 401 | Unauthorized | Missing/expired/invalid access token | `"Invalid or expired token. Please login again."` |
+| 403 | Forbidden | Insufficient role, email not verified, account banned | `"You do not have permission to perform this action"` |
+| 404 | Not Found | Route not found, database document missing | `"Product not found"` |
+| 409 | Conflict | Duplicate key (email, SKU), business rule violation | `"Email already registered. Please login instead."` |
+| 429 | Too Many Requests | Rate limit exceeded (see Rate Limiting) | `"Too many requests from this IP, please try again after 15 minutes"` |
+| 500 | Internal Server Error | Unhandled exception – report to backend team | `"Something went wrong on our side."` |
+| 503 | Service Unavailable | Redis/MongoDB unreachable | `"Service temporarily unavailable. Please try again later."` |  
+
+---  
+
+## Validation Errors (Zod)  
+
+When a request fails Zod validation (e.g., missing field, wrong type), the API returns `400` with a comma‑separated list of failures:  
+
+```json
+{
+  "success": false,
+  "statusCode": 400,
+  "message": "Validation Failed: email: Invalid email format, password: Password must be at least 8 characters",
+  "data": null,
+  "timestamp": "2026-05-22T14:30:05.000Z"
 }
 ```  
 
-**Frontend Implementation Notes:**  
+**Common validation errors per module:**  
+| Module | Typical validation failures |
+|--------|----------------------------|
+| Auth | Invalid email, weak password, missing firstname |
+| Products | Invalid `itemType`, missing polymorphic required fields |
+| Address | Invalid pincode (not 6 digits), missing street |
+| Orders | Negative quantity, invalid address ID |  
 
-* `success`: Will always be `false` for errors. You can use this boolean for simple `if/else` checks in Axios interceptors.
-* `message`: This string is heavily sanitized by the backend to be entirely "Frontend-Friendly." You can safely inject `response.data.message` directly into your React toast notifications or UI error alerts without parsing it further.
-* `stack`: This is strictly stripped out in production environments to prevent sensitive internal directory paths from leaking to the public.  
+> The error message is safe to display directly. No need to parse further.  
 
---- 
+---  
 
-## 3. Standard HTTP Status Code Dictionary  
-The API strictly adheres to RESTful standard status codes. Below is the dictionary of error codes you will encounter and what they mean in the context of Reshma-Core.  
+## Business Logic Errors (409 Conflict)  
 
-**Client Errors (4xx) - The frontend did something wrong** 
-* `400 Bad Request`
-    * **Cause:** The request payload failed Zod schema validation, or the JSON was malformed.
-    * **Example:** Sending a string instead of an integer, or omitting a required email field.
-    * **Message Format:** Comma-separated list of failures (e.g., `"Validation Failed: firstname: First name is required, email: Invalid format"`).  
+These occur when a request violates a business rule or unique constraint.  
 
-* `401 Unauthorized`
-    * **Cause:** Authentication failure. The user is entirely anonymous to the system.  
-    * **Scenarios:** `Missing Authorization`: Bearer token.
-        * The Access Token has expired mathematically.
-        * The Refresh Token cookie is stale, invalid, or was blacklisted during logout.  
+**Examples:**  
 
-* `403 Forbidden`
-    * **Cause:** The user is logged in (mathematically verified token), but they lack the infrastructure permissions to perform the action.
-    * **Scenarios:**
-        * A standard `USER` trying to hit an `/admin` endpoint.
-        * The user's account has `isActive: false` (Banned by an administrator).
-        * The user's account has `isEmailVerified: false` and they are trying to access a protected commerce route.
+| Scenario | `message` |
+|----------|-----------|
+| Duplicate email on registration | `"Email already registered. Please login instead."` |
+| Duplicate SKU on product creation | `"Product with this SKU already exists."` |
+| Order already dispatched | `"This order has already been dispatched. Cannot modify."` |
+| Review already submitted | `"You have already submitted a review for this product."` |  
 
-* `404 Not Found`
-    * **Cause:** The requested resource does not exist.
-    * **Scenarios:**
-        * Hitting an API endpoint that isn't mapped (e.g., `/api/v1/auth/fake-route`).
-        * Requesting a database document that doesn't exist (e.g., `/products/123` where `123` is not a valid ObjectId).  
+> **Frontend action:** Show the message and guide the user (e.g., “Login instead” or “View your existing review”).  
 
-* `409 Conflict`
-    * **Cause:** Database unique constraint violation.
-    * **Example:** Trying to register an account with an email that is already actively verified in the database. 
+---  
 
-* `429 Too Many Requests`
-    * **Cause:** The IP address has exceeded the rate limiter threshold.
-    * **Default Limit:** 100 requests per 15 minutes globally, 10 requests per 15 minutes for Auth routes.  
+## Authentication Errors (401/403)  
 
-**Server Errors (5xx) - The backend did something wrong**  
-* `500 Internal Server Error`
-    * **Cause:** An unhandled exception, syntax error, or completely unexpected failure occurred on the Node.js server.
-    * *Note: If a 500 occurs, it triggers an immediate Winston Logger alert for backend maintainers.*
+| Status | Scenario | Frontend Action |
+|--------|----------|-----------------|
+| 401 | Access token missing or expired | Attempt silent refresh; if fails, redirect to login |
+| 401 | Refresh token blacklisted or expired | Redirect to login (session permanently dead) |
+| 403 | Email not verified | Show verification prompt, resend OTP |
+| 403 | Account banned (`isActive: false`) | Show support contact message |
+| 403 | User trying admin endpoint | Redirect to customer dashboard or show “Access denied” |
 
-* `503 Service Unavailable`
-    * **Cause:** The Node.js server is running, but a critical downstream service is dead.
-    * **Scenarios:** Redis has disconnected, MongoDB is unreachable, or the SMTP server refused connection. 
+> See [**Authentication Guide**](./authentication.md) for token refresh logic.  
 
---- 
+---  
 
-## 4. Backend Developer Guide: Throwing Errors  
-If you are contributing to the backend, you must never use `res.status(400).send(...)`.  
+## Rate Limiting Errors (429)  
 
-All errors must be thrown using the `AppError` utility class. The Global Error Handler (`@shared/middlewares/error.middleware.ts`) will catch it, format it, and dispatch it securely.  
+When a rate limit is exceeded, the API returns `429` with a `Retry-After` header (seconds to wait).  
 
-**Importing**  
+**Response example:**  
+
+```json
+{
+  "success": false,
+  "statusCode": 429,
+  "message": "Too many authentication attempts. Your IP has been temporarily blocked.",
+  "data": null,
+  "timestamp": "2026-05-22T14:30:00.000Z"
+}
+```  
+
+**Headers:**  
+
+```text
+Retry-After: 900
+RateLimit-Limit: 10
+RateLimit-Remaining: 0
+RateLimit-Reset: 1748592000
+```  
+
+**Frontend action:** Wait for `Retry-After` seconds before retrying. Do **not** retry immediately.  
+See [**Rate Limiting Guide**](./rate-limiting.md) for full details.  
+
+---  
+
+## Server Errors (500/503)  
+
+| Status | Meaning | What to do |
+|--------|---------|-------------|
+| 500 | Unhandled exception in backend | Report to backend team with timestamp and request details. Retry later. |
+| 503 | Downstream service (Redis, MongoDB) unreachable | Wait and retry with backoff. If persists, inform support. |  
+
+> In development, the `stack` field is included – **never expose this in production**. The global error handler strips it when `NODE_ENV=production`.  
+
+---  
+
+## Frontend Handling Example (Axios)  
+
+Here is a complete interceptor that handles all error types gracefully.  
+
+```javascript
+import axios from 'axios';
+
+const api = axios.create({ baseURL: process.env.API_URL });
+
+// Response interceptor
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const { response, config } = error;
+    const originalRequest = config;
+
+    // 1. Handle 401 (expired access token)
+    if (response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        const { data } = await axios.post(`${api.defaults.baseURL}/auth/refresh`);
+        // Store new access token (in memory)
+        setAccessToken(data.data.accessToken);
+        originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed – redirect to login
+        clearAccessToken();
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    // 2. Handle 429 (rate limit) – wait and retry
+    if (response?.status === 429) {
+      const retryAfter = response.headers['retry-after'] || 15;
+      await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+      return api(originalRequest);
+    }
+
+    // 3. All other errors – show message to user
+    if (response?.data?.message) {
+      // Display in toast notification
+      showToast(response.data.message, 'error');
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default api; 
+```
+
+---  
+
+## Backend Developer Guide  
+
+If you are contributing to the backend, **never use** `res.status(400).send(...)`. Always throw an `AppError`.   
+
+### Importing  
+
 ```typescript
 import { AppError } from '@shared/utils/app-error';
 import { HTTP_STATUS } from '@shared/constant/http-codes';
 ```  
 
-**Usage in Services/Controllers**  
-If a business rule fails, throw the error directly. The `catchAsync` or `try/catch` block will automatically forward it to the `NextFunction`.  
+### Usage in Services / Controllers  
 
 ```typescript
 // Example: Checking if a user exists
 const user = await User.findById(userId);
-
 if (!user) {
-    // Correct way to throw an error
-    throw new AppError(HTTP_STATUS.NOT_FOUND, 'The requested user could not be found.');
+  throw new AppError(HTTP_STATUS.NOT_FOUND, 'User not found');
 }
 
 if (!user.isActive) {
-    throw new AppError(HTTP_STATUS.FORBIDDEN, 'This account has been deactivated.');
+  throw new AppError(HTTP_STATUS.FORBIDDEN, 'This account has been deactivated.');
 }
-```  
 
-**Architectural Failsafes**  
-*   **Mongoose Duplicate Keys** (`11000`): Automatically intercepted by the global error handler and converted from a 500 crash into a safe `409 Conflict`.
-*   **Mongoose CastErrors:** Automatically intercepted and converted to a `400 Bad Request` (e.g., passing `"abc"` to an endpoint expecting a 24-character hex `ObjectId`).
-*   **JWT Errors:** `JsonWebTokenError` and `TokenExpiredError` are automatically caught and formatted as safe `401 Unauthorized` errors.  
+// Example: Business rule violation
+if (cart.items.length === 0) {
+  throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Cannot checkout with an empty cart');
+}
+``` 
 
+### Automatic Conversions (Global Error Handler)  
+
+The global error handler (`@shared/middlewares/error.middleware.ts`) automatically converts:  
+
+| Raw Error | Converted Status | Message |
+|-----------|------------------|---------|
+| Mongoose CastError (invalid ObjectId) | 400 | `"Invalid ID format"` |
+| Mongoose duplicate key error (code 11000) | 409 | `"Duplicate field value: {field}"` |
+| `JsonWebTokenError` | 401 | `"Invalid token"` |
+| `TokenExpiredError` | 401 | `"Token expired"` |  
+
+> You do not need to catch these manually – they are handled centrally.  
+
+---  
+
+## Related Documentation
+
+- [Authentication Guide](./authentication.md) – 401/403 details and refresh flow.
+- [Rate Limiting Guide](./rate-limiting.md) – 429 headers and backoff strategies.
+- [API README](./README.md) – standard response shapes.  
+
+--- 
+
+<div align="center">
+
+Predictable errors, happy frontend developers – the Reshma‑Core error handling philosophy.
+</div>  

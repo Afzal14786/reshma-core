@@ -1,7 +1,7 @@
 <div align="center">
 
   # Order & Checkout Module
-  
+
   **The high-stakes financial engine managing cart finalization, payment verification, and immutable order records for the Reshma-Core platform.**
 
   [![MongoDB Transactions](https://img.shields.io/badge/MongoDB-ACID_Transactions-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
@@ -16,108 +16,221 @@
 
 ## 1. Overview
 
-The Order Module (`src/modules/orders/`) is the financial source of truth for the Reshma platform. It orchestrates the transition of volatile cart data into immutable financial records. It is engineered with a "Security-First" mindset, utilizing MongoDB sessions for atomic integrity and cryptographic HMAC handshakes to prevent financial fraud.
+The Order Module (`src/modules/orders/`) is the financial source of truth. It transforms volatile cart data into immutable financial records using **MongoDB ACID transactions** and **cryptographic HMAC handshakes** (Razorpay). It handles checkout, payment verification, order state management, PDF invoicing, and logistics (Shiprocket).
+
+All order routes are prefixed with `/api/v1/orders` and protected by rate limiting (`standardLimiter`, `checkoutLimiter`) and authentication (`protect`). Admin endpoints require `restrictTo("ADMIN")`.
 
 ---
 
 ## 2. Core Architectural Pillars
 
 ### ACID-Compliant Transactions
-To guarantee financial integrity, the checkout process is wrapped in a **MongoDB Multi-Document Transaction** (`mongoose.startSession`).
-*   **Atomic Boundary:** Stock deduction, Order document creation, and Cart clearing occur as a single unit of work.
-*   **Auto-Rollback:** If any step fails (e.g., an item goes out of stock at the last millisecond), the entire database state is mathematically rolled back.
+- **Atomic Boundary:** Stock deduction, order creation, cart clearing – all in one MongoDB session.
+- **Auto-Rollback:** If any step fails (e.g., stock insufficient), the entire transaction is rolled back.
+- **Implementation:** `mongoose.startSession()` + `session.startTransaction()` in `OrderService.initializeCheckout`.
 
 ### Historical Immutability & Tax Snapshotting
-Unlike other modules that rely on live references, this module utilizes **Deep-Copy Snapshotting** to guarantee legal compliance for Indian GST audits. At the exact millisecond of purchase, the system captures:
-* **Product Data:** `priceAtPurchase`, `sku`, `name`, `selectedAttributes`, and `imageSnapshot`.
-* **Immutable Tax Data:** `hsnCode`, `taxableValue`, `gstRate`, `cgst`, `sgst`, and `igst`.
-* **Audit Integrity:** Tax laws change and products get deleted. By freezing the exact Central, State, and Integrated tax amounts at the line-item level, the user's historical receipt and the company's financial ledgers remain 100% mathematically accurate forever.
+- **Deep-Copy Snapshotting:** At checkout, we capture `priceAtPurchase`, `sku`, `name`, `selectedAttributes`, `imageSnapshot`, and line‑item tax data (`hsnCode`, `taxableValue`, `gstRate`, `cgst`, `sgst`, `igst`).
+- **Why:** Tax laws or product prices may change later. Frozen data guarantees legal audit compliance.
 
 ### Atomic Stock Reservation
-We utilize a "Find-and-Update" firewall pattern using MongoDB `$inc` and `$gte` operators within the session.
-*   **Race-Condition Defense:** Stock is only deducted if `currentStock >= requestedQuantity`. This prevents "Overselling" during high-traffic flash sales.
+- **MongoDB pattern:** `findOneAndUpdate` with `{ currentStock: { $gte: quantity } }` and `$inc: { currentStock: -quantity }`.
+- **Race‑condition safe:** The atomic update prevents overselling under high concurrency.
 
 ---
 
 ## 3. Financial & Tax Compliance Engine (GST)
 
-The engine has abandoned standard flat-tax calculations to strictly enforce Indian e-commerce tax law via a **Two-Pass Calculation**:
+### Proportional Discounting
+- Coupon discount is distributed across line items based on their weight in the cart.
+- Prevents “refund exploit” – a returned item refunds exactly the discounted amount paid.
 
-* **Proportional Discounting:** If a coupon is applied, the discount is mathematically distributed across all line items based on their weight in the cart. GST is then calculated on this new, lower *Transaction Value*. This prevents margin loss during partial refunds.
-* **Dynamic GST Brackets:** Utilizing the `TaxEngine`, products dynamically resolve their tax brackets. For example, `STITCHED_APPAREL` calculates at 18% GST, but if a coupon drops its transaction value below ₹2,500, the engine automatically shifts the tax bracket to 5%.
-* **State Arbitration (CGST/SGST vs IGST):** The system hardcodes the business origin to **West Bengal**. During checkout, it evaluates the customer's shipping state:
-  * *Intra-State (West Bengal):* Tax is split 50/50 into `cgst` and `sgst`.
-  * *Inter-State (Outside WB):* 100% of the tax is allocated to `igst`.
-* **Logistics Service Tax:** Shipping is free over ₹2000; otherwise, a ₹100 fee applies. The engine legally isolates this by extracting the mandated 18% service tax from the final shipping cost (`shippingTaxableValue` and `shippingTax`).
+### Dynamic GST Brackets
+- `STITCHED_APPAREL` uses 5% if discounted unit price ≤ ₹2500, else 18%.
+- Other profiles have fixed rates (3%, 12%, 18%, etc.) – see `TaxProfile` enum in `tax.utils.ts`.
 
----
+### State Arbitration
+- Business origin: **West Bengal**.
+- **Intra‑state** (WB → WB) → tax split 50/50 into `cgst` and `sgst`.
+- **Inter‑state** (WB → other) → 100% `igst`.
 
-## 4. Lifecycle & Operations
+### Shipping Service Tax
+- Shipping charge (₹100 if subtotal ≤ ₹2000, else ₹0) includes 18% GST, isolated by `TaxEngine.calculateShippingTax`.
 
-### Inventory Defragmentation (Cron Orchestration)
-To prevent "Inventory Leaks" caused by abandoned checkouts, the module relies on an automated background orchestrator (`node-cron`).
-*   **The Problem:** When a user initiates checkout, stock is atomically decremented. If they close their browser without paying, that stock remains locked indefinitely.
-*   **The Solution:** A worker sweeps the `Order` collection every 15 minutes. It isolates documents where `orderStatus` is `PENDING` and the `createdAt` timestamp is older than 30 minutes.
-*   **Atomic Restoration:** For each abandoned order, the worker opens a new transaction, marks the order as `CANCELLED`, and executes an `$inc` operation to return the quantity to the catalog.
-
-### Order State Machine
-The module tracks the progression of an order through strictly defined states:
-*   **Standard Flow:** `PENDING`, `PROCESSING`, `SHIPPED`, `DELIVERED`.
-*   **Exception/RMA Flow:** `CANCELLED`, `RETURN_REQUESTED`, `RETURNED`.
+All tax logic is centralised in `tax.utils.ts` and invoked during checkout (`OrderService.initializeCheckout`).
 
 ---
 
-## 5. Technical Implementations
+## 4. Order Lifecycle & State Machine
 
-### Webhook Cryptographic Verification
-To verify Razorpay server-to-server pings, the system implements a **Raw Body Interceptor**:
-*   **The Challenge:** Standard JSON parsing alters the original payload string, causing HMAC signature mismatches.
-*   **The Fix:** A global `verify` hook in `app.ts` captures the `req.rawBody` as a UTF-8 string specifically for webhook routes.
-*   **Validation:** The `OrderService` uses `crypto.createHmac` to compare the `x-razorpay-signature` against the `rawBody`.  
-
-### Asynchronous PDF Invoice Generation (BullMQ)
-The platform bypasses standard text receipts to produce legally compliant PDF Tax Invoices. However, to protect the single-threaded Node.js event loop from CPU exhaustion during mass checkouts, this process is strictly asynchronous.
-* **Fire-and-Forget Queue:** The `OrderService` instantly completes the checkout and pushes the `orderId` to a Redis Queue.
-* **Background Worker:** The `invoiceWorker` processes the payload in the background, utilizing `PDFKit` to draw a compliant Indian GST Table.
-* **Diskless Streaming:** The worker pipes the raw PDF buffer directly into `cloudinary.uploader.upload_stream`, bypassing the local server disk entirely to prevent storage bloat. The final `invoiceUrl` is then saved back to the Order document.
-
-### Automated Communications Hook
-The module is integrated with the **Notification Engine Facade** for real-time customer updates[cite: 1, 2]:
-*   **Order Placed:** Triggers a BullMQ job for an async confirmation email (with PDF attachment) and an in-app "Bell Icon" alert[cite: 1, 2].
-*   **Order Cancelled:** Automated triggers for both user-initiated and cron-initiated cancellations[cite: 1, 2].
-*   **Order Shipped:** Dispatches shipping details and tracking numbers via async worker[cite: 1, 2].
-
----
-
-## 6. API & Security Firewalls
-
-*   **`checkoutLimiter`**: Extremely strict rate limiting to prevent card-testing bots.
-*   **Taint Chain Severing:** The service layer manually maps `shippingAddress` fields from `req.body` to prevent Object Injection or Mass Assignment.
-*   **`zod.strict()`**: Acts as a physical firewall, dropping NoSQL injection or Prototype Pollution attempts at the boundary.
-
-## 7. Logistics & Fulfillment Engine (Shiprocket)
-
-To bridge the digital transaction with the physical delivery of goods, the Order Module integrates with **Shiprocket**, a Third-Party Logistics (3PL) aggregator. This entirely automates the generation of Airway Bills (AWBs), courier allocation, and package tracking.
-
-### A. The Rolling Auth Manager
-Shiprocket relies on a JWT that expires every 10 days. To prevent the Reshma-Core server from executing an expensive login HTTP request on every single order dispatch, we implemented a **Rolling Auth Manager** (`src/config/shiprocket.ts`).
-* **Caching:** The token is requested once and cached in Redis with an 8-day TTL.
-* **Autonomous Refresh:** On the 8th day, the Redis key expires, gracefully forcing the next dispatch request to seamlessly negotiate a fresh 10-day token.
-
-### B. The Dispatch Orchestrator (`shiprocket.service.ts`)
-The `dispatchOrder` service is a distributed orchestrator. It bridges our ACID-compliant database with the highly volatile Shiprocket API.
-* **Idempotency Firewall:** The service actively checks if `orderStatus === 'SHIPPED'` or if a `trackingNumber` already exists. This physically guarantees an Admin cannot double-click the "Dispatch" button, which would generate two tracking numbers and double-bill the company wallet.
-* **Taint-Severing Boundary:** We do not blindly pass the Mongoose `Order` document to Shiprocket. The service explicitly maps only the required fields into Shiprocket's strict JSON schema, preventing internal data leaks.
-* **Network-First Updates:** MongoDB is *only* updated with the AWB and Shipment ID *after* the entire 3-step Shiprocket handshake (Create -> Generate Label -> Schedule Pickup) resolves successfully.
-
-### C. The Webhook Automation Loop
-Once the courier picks up the physical package, the system relies on server-to-server Webhooks to track its journey.
-1. **The Ping:** When a delivery agent marks a package as "Delivered" on their handheld device, Shiprocket fires a `POST` request to our `/api/v1/orders/shiprocket-webhook` endpoint.
-2. **Cryptographic Validation:** The endpoint is completely unauthenticated (no JWTs). Instead, it relies on a static `x-api-key` header mapped to `SHIPROCKET_WEBHOOK_SECRET` to verify the payload's origin.
-3. **State Machine Sync:** The service translates Shiprocket's micro-statuses into our macro database enums (e.g., converting "RTO ACKNOWLEDGED" to `RETURNED`).
-4. **Asynchronous Notification:** Upon a successful transition to `DELIVERED`, the system triggers the `NotificationService` to queue a final "Order Delivered" email to the customer via BullMQ.  
-
+```mermaid
+graph LR
+    A[PENDING] -->|payment success| B[PROCESSING]
+    B -->|admin dispatch| C[SHIPPED]
+    C -->|webhook delivered| D[DELIVERED]
+    A -->|abandoned (cron)| E[CANCELLED]
+    B -->|admin cancel| E
+    D -->|return initiated| F[RETURN_REQUESTED]
+    F -->|return approved & processed| G[RETURNED]
+```  
+- **Standard flow:** `PENDING` → `PROCESSING` → `SHIPPED` → `DELIVERED`
+- **Exception flow:** `CANCELLED`, `RETURN_REQUESTED`, `RETURNED`
+- **Abandoned order recovery:** Cron job (`order-recovery.cron.ts`) runs every 15 minutes, cancels orders older than 30 minutes, restores stock, and sends cancellation email.  
 
 ---  
 
-**Standard Documentation | Reshma-Core Architecture**
+## 5. Key Workflows (Sequence Diagrams)
+
+### 5.1 Checkout & Payment (Razorpay)  
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant API
+    participant DB as MongoDB (ACID)
+    participant RZP as Razorpay
+
+    User->>API: POST /orders/checkout
+    API->>DB: start session
+    API->>DB: reserve stock (atomic $inc)
+    API->>DB: create order (PENDING)
+    API->>DB: clear cart
+    API->>DB: commit
+    API->>RZP: create order (amount in paise)
+    RZP-->>API: gateway_order_id
+    API-->>User: { order, gateway_order_id }
+
+    User->>RZP: open payment modal
+    RZP-->>User: payment_id, signature
+    User->>API: POST /orders/verify-payment
+    API->>API: verify HMAC signature
+    API->>DB: update order (PAID, PROCESSING)
+    API-->>User: 200 OK
+
+    Note over API,DB: async fallback: Razorpay webhook
+    RZP->>API: POST /webhook (order.paid)
+    API->>API: verify signature (rawBody)
+    API->>DB: idempotent update if still PENDING
+```  
+
+### 5.2 Shiprocket Dispatch  
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant API
+    participant SR as Shiprocket
+    participant DB
+
+    Admin->>API: POST /admin/:id/dispatch (dimensions)
+    API->>DB: find order (check not shipped)
+    API->>SR: get cached token (Redis)
+    SR-->>API: token
+    API->>SR: create ad-hoc order
+    SR-->>API: shiprocket_order_id
+    API->>SR: assign AWB
+    SR-->>API: awb, courier
+    API->>SR: schedule pickup
+    SR-->>API: success
+    API->>DB: update order (SHIPPED, trackingNumber)
+    API-->>Admin: 200 OK
+    API->>BullMQ: send shipping notification
+```  
+
+### 5.3 Webhook & State Sync (Shiprocket)  
+
+```mermaid
+sequenceDiagram
+    participant SR as Shiprocket
+    participant API
+    participant DB
+
+    SR->>API: POST /shiprocket-webhook (x-api-key)
+    API->>API: verify header secret
+    API->>DB: find order by trackingNumber
+    alt status = DELIVERED
+        API->>DB: orderStatus = DELIVERED
+        API->>BullMQ: send delivery email
+    else status = RTO DELIVERED
+        API->>DB: orderStatus = RETURNED
+        API->>DB: atomic stock restock
+    else cancelled
+        API->>DB: orderStatus = CANCELLED
+    end
+    API-->>SR: 200 OK
+```  
+
+---  
+
+## 6. Security & Firewalls
+
+| Threat | Mitigation |
+|--------|------------|
+| Card‑testing bots | `checkoutLimiter` (5 per hour per IP) |
+| NoSQL injection | Zod `.strict()` schemas + explicit `$eq` wrappers |
+| Prototype pollution | `Object.create(null)` for sanitised payloads |
+| IDOR (invoice access) | `Order.findOne({ _id, user: req.user._id })` |
+| TOCTOU on coupons | Coupon re‑validated inside ACID session before payment |
+| Webhook spoofing | HMAC SHA‑256 verification with `RAZORPAY_WEBHOOK_SECRET` |
+| Shiprocket webhook impersonation | Static `x-api-key` header check |
+| Double dispatch | Check `trackingNumber` exists before calling Shiprocket |
+| Shipping unpaid orders | Reject if `paymentStatus !== "PAID"` |  
+
+---  
+
+## 7. Technical Implementations
+
+### Webhook Raw Body Interceptor (`app.ts`)
+
+- Captures `req.rawBody` for HMAC verification before JSON parsing.
+- Used by Razorpay and Shiprocket webhooks.
+
+### Asynchronous PDF Invoice Generation
+
+- **Producer:** `OrderService` enqueues job via `InvoiceQueueManager.enqueueInvoiceGeneration`.
+- **Worker:** `invoice.worker.ts` uses PDFKit to generate invoice, uploads to Cloudinary (buffer stream), saves `invoiceUrl` to order.
+- **Concurrency:** 5 workers, 3 retries with exponential backoff.
+
+### Automated Communications
+
+- `OrderService` triggers `NotificationService` methods for order confirmation, cancellation, shipping, delivery.
+- All notifications are fire‑and‑forget (BullMQ for emails, non‑blocking DB writes for in‑app alerts).
+
+### Abandoned Order Recovery (Cron)
+
+- Runs every 15 minutes (`order-recovery.cron.ts` with Redis distributed lock).
+- Cancels `PENDING` orders older than 30 minutes, restocks inventory, sends cancellation email.
+
+---
+
+## 8. Related Files
+
+| File | Purpose |
+|------|---------|
+| `order.service.ts` | Core checkout, payment verification, webhook processing, cron recovery. |
+| `order.model.ts` | Mongoose schema, pre‑save hook for `orderNumber`. |
+| `order.public.controller.ts` | Customer endpoints (checkout, verify, invoice, my orders). |
+| `order.admin.controller.ts` | Admin endpoints (list, status update, dispatch). |
+| `order.routes.ts` | Route definitions with rate limiting, auth, RBAC, validation. |
+| `order.dto.ts` | Zod schemas for checkout, status update, dispatch. |
+| `order.interface.ts` | TypeScript interfaces (`IOrder`, `IOrderItem`, webhook payloads). |
+| `invoice.generator.ts` | PDFKit invoice generation (GST table, logo fetch, terms). |
+| `tax.utils.ts` | `TaxEngine` – dynamic GST, state arbitration, shipping tax. |
+| `shiprocket.service.ts` | Shiprocket dispatch orchestrator + webhook handler. |
+| `payment.utils.ts` | HMAC signature verification (Razorpay). |
+| `order-recovery.cron.ts` | Cron job with Redis distributed lock. |  
+
+---  
+
+## 9. See Also
+
+- [Cart Module](./cart-module.md) – source of cart data for checkout.
+- [Coupon Module](./coupon-module.md) – discount validation and atomic usage.
+- [Notification Module](./notification-module.md) – email and in‑app alerts.
+- [Background Jobs & Cron](../architecture/background-jobs-and-cron.md) – invoice queue, cron locking.
+- [Logistics & Shipping](../architecture/logistics-and-shipping.md) – Shiprocket integration deep dive.
+- [Security Hardening](../architecture/security-hardening.md) – HMAC, rate limiting, IDOR.
+
+---  
+
+*The Reshma-Core Team*  

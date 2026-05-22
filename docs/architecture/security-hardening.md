@@ -1,12 +1,13 @@
 <div align="center">
 
   # Security Hardening & Protocols
-  
+
   **The Zero-Trust security architecture and defense-in-depth strategies implemented across the Reshma-Core backend.**
 
   [![Helmet](https://img.shields.io/badge/Helmet-HTTP_Headers-blue?style=flat)](#)
-  [![Zod](https://img.shields.io/badge/Zod-Payload_Sanitization-3068b7?style=flat)](#)
+  [![Zod](https://img.shields.io/badge/Zod-Payload_Sanitization-3068b7?style=flat)](https://zod.dev/)
   [![RateLimit](https://img.shields.io/badge/Rate_Limit-Brute_Force_Protection-red?style=flat)](#)
+  [![CodeQL](https://img.shields.io/badge/CodeQL-Security_Scan-1C2C4E?style=flat)](https://codeql.github.com/)
 
 </div>
 
@@ -14,77 +15,146 @@
 
 ## 1. Core Security Philosophy
 
-Reshma-Core operates on a **Zero-Trust** model. We assume every incoming request is potentially hostile, malformed, or attempting to exhaust system resources. 
+Reshma-Core operates on a **Zero-Trust** model. Every incoming request is treated as potentially hostile. Security is enforced in layers:
 
-Security is enforced at multiple layers:
-1. **Network/Transport:** Global rate limiting and HTTP header masking.
-2. **Application Boundary:** Strict payload size limits, raw stream interceptors, and schema validation.
-3. **Session:** Stateless tokens with Redis blacklisting and XSS immunity.
-4. **Data:** Cryptographic HMAC handshakes and strict database projections.
+1. **Network/Transport** – global rate limiting (Redis‑backed), Helmet headers.
+2. **Application Boundary** – payload size limits, raw stream interceptors, Zod validation, NoSQL injection sanitisation.
+3. **Session** – stateless JWTs, Redis blacklist, `HttpOnly` cookies.
+4. **Data** – cryptographic HMAC handshakes, strict database projections, atomic operations.
+
+All security‑critical code is scanned by **CodeQL** on every push and pull request.
 
 ---
 
-## 2. Layer 1: HTTP & Transport Defenses
-
-Before a request even reaches an Express router, it must survive the global middleware gauntlet in `src/app.ts`.
+## 2. Layer 1: HTTP & Transport Defences
 
 ### Helmet.js (Header Protection)
-We utilize Helmet to automatically set secure HTTP headers and strip dangerous ones:
-* `X-Powered-By`: Removed. Attackers cannot fingerprint the server as an Express/Node.js instance.
-* `X-Content-Type-Options: nosniff`: Prevents MIME-sniffing attacks.
-* `X-Frame-Options: DENY`: Mitigates Clickjacking by preventing the API/assets from being embedded in malicious iframes.
+- Removes `X-Powered-By` (prevents fingerprinting).
+- Sets `X-Content-Type-Options: nosniff` (MIME sniffing).
+- Sets `X-Frame-Options: DENY` (clickjacking).
 
-### Distributed Rate Limiting & Bot Protection
-To prevent brute-force attacks and Server-Hopping DDoS attempts, rate limiting is handled globally via `express-rate-limit` backed by **RedisStore**.  
+### Distributed Rate Limiting (`rate-limit.middleware.ts`)
+All rate limiters use a **Redis central store** to synchronise strike counters across multiple containers.
 
-* **Global API Limiter:** 100 requests per 15 minutes per IP.
-* **Auth Limiter:** Strict 10 requests per hour on login/registration routes to prevent credential stuffing.
-* **Checkout Limiter:** Maximum of 5 checkouts per hour to neutralize automated card-testing bots.
-* **Distributed Synchronization:** Because the strike counters are stored in Redis, an IP blocked on Server A is instantaneously blocked on Server B, C, and D.
+| Limiter | Window | Max Requests | Target |
+|---------|--------|--------------|--------|
+| `standardLimiter` | 15 min | 100 | All API routes |
+| `authLimiter` | 1 hour | 10 | `/auth/*` (brute‑force) |
+| `checkoutLimiter` | 1 hour | 5 | `/orders/checkout` (card testing) |
+| `healthLimiter` | 15 min | 3000 | `/health` (local memory, bypasses Redis) |
+
+> **CodeQL CWE-770 (Allocation of Resources Without Limits) mitigated** – each limiter has a unique `requestPropertyName` to prevent double‑counting and is applied before expensive database lookups.
 
 ---
 
 ## 3. Layer 2: Payload & Injection Protection
 
 ### RAM Exhaustion Prevention (OOM)
-Attackers often try to crash Node.js servers by sending massive JSON payloads.
-* **Implementation:** `express.json({ limit: '10kb' })`.
-* **Result:** Any request body exceeding 10 kilobytes is physically dropped before parsing begins.
+- `express.json({ limit: '10kb' })` – any JSON body larger than 10 KB is rejected before parsing.
 
-### Webhook Raw-Stream Interceptor (CodeQL Hardened)
-Standard JSON parsing alters the original payload string, which breaks cryptographic signature validation for services like Razorpay.
-* **Implementation:** We utilize a global `verify` hook in the JSON parser to capture the `req.rawBody`.
-* **Purpose:** This ensures the backend has access to the exact, unparsed UTF-8 string required for 100% accurate HMAC SHA-256 verification.
+### Raw‑Body Interceptor (HMAC Integrity)
+- A global `verify` hook captures the original request buffer as `req.rawBody`.
+- Used by Razorpay and Shiprocket webhooks to verify HMAC signatures without JSON‑parsing corruption.
 
-### Data Sanitization & NoSQL Injection Defense
-The API is physically fortified against Object Injection and NoSQL Operator manipulation using a two-layered defense strategy.
+### NoSQL Injection & Prototype Pollution Defence
 
-* **Route-Level (The Zod Firewall):** Every payload is intercepted by strict Zod schemas utilizing `zod.strict()`. Any undocumented fields injected by an attacker (e.g., `role: "ADMIN"`) are instantly stripped and dropped before reaching the controller. Furthermore, critical modules manually map payload fields to internal objects to sever taint chains and neutralize Mass Assignment vulnerabilities.
-* **App-Level (Global NoSQL Firewall):** As an absolute safety net, `express-mongo-sanitize` is injected at the root `app.ts` level. It recursively scans `req.body`, `req.query`, and `req.params`, aggressively stripping any malicious MongoDB operators (keys starting with `$` or `.`) before they ever touch the Mongoose driver.
+#### Two‑Layer Strategy
 
----
+| Layer | Implementation | Target |
+|-------|----------------|--------|
+| **Route level** | `Sanitizer.sanitize()` inside `validate.middleware.ts` | Strips keys starting with `$` or containing `.`, and removes `__proto__`, `constructor`, `prototype`. |
+| **App level** | `express-mongo-sanitize` (global middleware) | Recursively scans `req.body`, `query`, `params` for malicious operators. |
+
+**From `sanitizer.ts`:**
+```typescript
+export class Sanitizer {
+  private static readonly PROHIBITED_KEYS = ["__proto__", "constructor", "prototype"];
+  public static sanitize<T>(target: T): T {
+    // recursively removes dangerous keys
+  }
+}
+```  
+
+> **Mitigates:** CWE-943 (Improper Neutralization of Special Elements in Data Query Logic) and CWE-1321 (Improperly Controlled Modification of Object Prototype Attributes).  
+
+### Zod Validation Firewall  
+
+Every request payload is validated by a Zod schema (e.g., `RegisterSchema`, `CreateProductSchema`). Undocumented fields are stripped; type mismatches and missing required fields return `400 Bad Request`.  
+
+---  
 
 ## 4. Layer 3: Identity & Session Security
 
 ### XSS & CSRF Immunity
-* **Access Tokens:** Kept strictly in React state memory. They are never saved to `localStorage`, rendering them immune to XSS harvesting.
-* **Refresh Tokens:** Attached as an `HttpOnly`, `Secure`, `SameSite=Strict` cookie, making them invisible to malicious JavaScript.
 
-### Token Hijack Mitigation
-We use a **Redis Blacklist** for logouts and account bans. When a user logs out, their token signature is pushed to Redis with a TTL matching the token's remaining lifespan. The `protect` middleware cross-references this list on every authenticated request.
+- **Access tokens** – stored in frontend memory (React state), never in `localStorage`.
+- **Refresh tokens** – `HttpOnly`, `Secure`, `SameSite=Strict` cookies – invisible to JavaScript.
 
----
+### Token Hijack Mitigation (Redis Blacklist)
 
-## 5. Active & Implemented Hardening (Phase 3 Updates)
+- On logout, the refresh token’s signature is stored in Redis with a TTL equal to its remaining lifespan.
+- The `protect` middleware checks this blacklist on every authenticated request.
 
-The following security measures have been successfully moved from the roadmap to the production codebase:
+### Authentication Middleware (`protect`)
 
-| Feature | Threat Mitigated | Strategy |
-| :--- | :--- | :--- |
-| **Cloudinary File Uploads** | Malicious script execution | Multer strictly filters MIME types; Cloudinary strips Exif data and re-encodes binaries. |
-| **Razorpay Handshakes** | Payment Fraud / Spoofing | Cryptographic verification via `crypto.createHmac` using the captured `rawBody`. |
-| **Order Arbitration** | IDOR (Insecure Direct Object Ref) | Database queries strictly enforce a compound match of `{ _id: orderId, user: req.user._id }`. |
-| **Stock Race Conditions** | Inventory Overselling | Atomic `$inc` operations with `$gte` firewalls within MongoDB ACID sessions. |
+- Extracts JWT from `Authorization` header or signed cookie.
+- Verifies signature with `JWT_ACCESS_SECRET`.
+- Fetches user from DB, checks `isActive`, and attaches user to `req.user`.  
 
----
-*Maintained by Md Afzal Ansari | Core System Architecture*
+---  
+
+## 5. Active Hardening & CodeQL‑Mitigated Patterns
+
+The following have been implemented and verified by CodeQL:
+
+| CWE | Threat | Mitigation | Source File |
+|-----|--------|------------|-------------|
+| CWE-117 | Log injection (`\r\n` in logs) | `safeLog()` strips control characters before Winston. | `sanitizer.ts` (used in `product.service.ts`, `cart.service.ts`, etc.) |
+| CWE-400 | Memory exhaustion (pagination) | Hard cap on `limit` (e.g., `max(50)` for products, `max(100)` for search). | `product.public.dto.ts`, `search.dto.ts` |
+| CWE-770 | No rate limiting | Distributed limiters with Redis. | `rate-limit.middleware.ts` |
+| CWE-943 | NoSQL operator injection | `Sanitizer.sanitize()` + explicit `$eq` wrappers. | `validate.middleware.ts`, `sanitizer.ts` |
+| CWE-1321 | Prototype pollution | Stripping of `__proto__`, `constructor`, `prototype` keys. | `sanitizer.ts` |
+| CWE-807 | Authentication bypass | Use of signed cookies (`req.signedCookies`) for JWT. | `auth.middleware.ts` |
+| CWE-250 | Uncontrolled data used in path traversal | Not applicable (no file system operations). | – |  
+
+---  
+
+## 6. Security Summary Table
+
+| Layer | Defences |
+|-------|----------|
+| HTTP | Helmet, CORS (explicit origins), TLS 1.3 (enforced by reverse proxy) |
+| Transport | Rate limiting (Redis), payload truncation (10 KB) |
+| Validation | Zod schemas, `Sanitizer.sanitize()`, `express-mongo-sanitize` |
+| Session | Stateless JWTs, HttpOnly refresh cookies, Redis blacklist |
+| Cryptography | bcrypt (passwords), HMAC‑SHA256 (webhooks), `crypto.randomInt` (OTPs) |
+| Error handling | `AppError` with `isOperational` flag, no stack traces in production |
+| Logging | Winston with daily rotation, PII‑free HTTP logging (Morgan) |
+| Audit | CodeQL SAST, Dependabot (weekly), branch protection |  
+
+---  
+
+## 7. Related Files
+
+| File | Purpose |
+|------|---------|
+| `src/shared/middlewares/rate-limit.middleware.ts` | Distributed rate limiters |
+| `src/shared/middlewares/validate.middleware.ts` | Zod validation + sanitisation |
+| `src/shared/utils/sanitizer.ts` | NoSQL injection & prototype pollution cleaner |
+| `src/shared/middlewares/auth.middleware.ts` | JWT verification (`protect`) |
+| `src/shared/middlewares/error.middleware.ts` | Global error handler |
+| `src/shared/utils/app-error.ts` | Custom error class with `isOperational` |
+| `src/config/cloudinary.ts` | Secure image uploads (MIME filter, WebP) |
+| `src/shared/middlewares/upload.middleware.ts` | File size limits, MIME validation |  
+
+---  
+
+## Next Steps
+
+- Read [Middleware & Validation](./middleware-and-validation.md) for the complete request pipeline.
+- Understand [Authentication Architecture](./auth-architecture.md) for two‑token session details.
+- Review [Background Jobs & Cron](./background-jobs-and-cron.md) for `safeLog()` usage in workers.  
+
+---  
+
+*The Reshma-Core Team*  

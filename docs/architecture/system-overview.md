@@ -1,4 +1,3 @@
-<!-- Full‑width banner -->
 <img src="../../src/assets/banner.png" alt="Reshma Bangles & Boutique - API Core" style="width: 100%; display: block; margin: 0;" />
 <br/>
 
@@ -18,102 +17,105 @@
 
 ## 1. Core Architectural Philosophy
 
-Reshma-Core is built to scale gracefully while handling highly diverse e-commerce requirements[cite: 2]. The backend enforces the following technical standards:
+Reshma-Core is built to scale gracefully while handling highly diverse e-commerce requirements. The backend enforces the following technical standards:
 
-1. **Domain-Driven Design (DDD):** Code is logically grouped by business feature (Users, Auth, Products) rather than technical layers (Controllers, Models).
+1. **Domain-Driven Design (DDD):** Code is logically grouped by business feature (Users, Auth, Products) rather than technical layers.
 2. **Strict Type Safety:** Zod enforces runtime payload validation at the Controller boundary, while strict TypeScript ensures compile-time safety.
-3. **Fail-Fast Initialization:** The system refuses to boot if critical environment variables (like JWT secrets or MongoDB URIs) are missing or malformed.
-4. **Polymorphic Database Strategy:** Utilizing Mongoose Discriminators, disparate items (e.g., Glass Bangles and Unstitched Fabrics) share a common `Products` collection while enforcing strictly unique validation rules.
+3. **Fail-Fast Initialization:** The system refuses to boot if critical environment variables are missing or malformed.
+4. **Polymorphic Database Strategy:** Using Mongoose discriminators, disparate items (e.g., Glass Bangles and Unstitched Fabrics) share a common `Products` collection while enforcing strictly unique validation rules.
 
 ---
 
 ## 2. Master Documentation Index
 
-Use the links below to navigate the internal documentation of the Reshma-Core system. 
+Use the links below to navigate the internal documentation of the Reshma-Core system.
 
 ### Architecture Diagrams & Security
 High-level system design, security protocols, and database schemas.
-* **[Authentication & Security Architecture](./auth-architecture.md)** *(Two-Token JWT, Google OAuth, OTP Flows)*
-* **[Database Design Strategy](./database-design.md)** *(Polymorphic Schema Mapping & ADRs)*
-* **[Product Catalog Schema](./product-catalog.md)** *(Google Sheet Data to Database Mapping)*
-* **[Security Hardening Guide](./security-hardening.md)** *(Helmet, Rate Limiting, Zod Payload Firewalls)*
-* **[Payment Integration Architecture](./payment-integration.md)** *(HMAC-SHA256 Cryptographic Handshakes, ACID Transaction Integrity, and Idempotency Guards)* 
-* **[Legal & Tax Compliance](./legal-tax-compliance.md)** *(Dynamic Indian GST Engine, State Arbitration, Proportional Discounting)*
-* **[Edge Cache & Async Workers](./edge-cache-and-workers.md)** *(Thundering Herd Defense, Proxy Caching, BullMQ Background Processing)*
-* **[DevOps & Cloud Infrastructure](./devops-and-infrastructure.md)** *(Horizontal Scaling, Redis Rate Limiting, Deep Liveness Probes)*
+
+* **[Authentication & Security Architecture](./auth-architecture.md)** – Two‑token JWT, Google OAuth, OTP flows.
+* **[Database Design & Polymorphic Catalog](./database-design.md)** – Single‑collection polymorphism, discriminators, indexes.
+* **[Product Catalog Schema](./product-catalog.md)** – Field‑by‑field mapping for bangles, apparel, fabrics, etc.
+* **[Security Hardening](./security-hardening.md)** – Helmet, rate limiting, Zod firewalls, CodeQL mitigations.
+* **[Middleware & Validation](./middleware-and-validation.md)** – Request lifecycle, sanitisation, distributed rate limiting.
+* **[Payment Integration (Razorpay)](./payment-integration.md)** – HMAC‑SHA256, ACID transactions, webhooks.
+* **[Legal & Tax Compliance](./legal-tax-compliance.md)** – Dynamic Indian GST, proportional discounting, DPDP/GDPR.
+* **[Edge Cache](./edge-cache.md)** – Redis proxy pattern, cache invalidation, thundering herd protection.
+* **[Background Jobs & Cron](./background-jobs-and-cron.md)** – BullMQ queues, email/invoice/export workers, Redis distributed locks.
+* **[Logistics & Shipping](./logistics-and-shipping.md)** – Shiprocket integration, rolling JWT, webhook state machine.
+* **[Media & Storage](./media-and-storage.md)** – Cloudinary memory‑stream uploads, orphan cleanup.
+* **[DevOps & Infrastructure](./devops-and-infrastructure.md)** – Horizontal scaling, graceful shutdown, Docker, logging.
 
 ### Domain Modules
-Deep dives into the specific business logic, DTOs, and services for each core feature.
-* **[User Module](../modules/user-module.md)** *(Identity, RBAC, Password Hashing)*
-* **[Authentication Module](../modules/auth-module.md)** *(Login, Registration, Token Issuance)*
-* **[Notification Engine](../modules/notification-module.md)** *(BullMQ Background Workers, SMTP, In-App Alerts)*
-* **[Product Module](../modules/product-module.md)** *(Catalog Engine, Cloudinary Rollbacks, Discriminators)*
-* **[Cart Module](../modules/cart-module.md)** *(Dynamic Pricing, Attribute Hashing, Guest Merging)*
-* **[Return Module](../modules/return-module.md)** *(RMA State Machine, Razorpay Refunds, Atomic Restocks)*  
-* **[Interaction Module](../modules/interaction-module.md)** *(Threaded Comments, Async Aggregation, Verified Purchases)*
-* **[Coupon Module](../modules/coupon-module.md)** *(Temporal Firewalls, Cart Auto-Recalculation, TOCTOU Defense)*
-* **[Wishlist Module](../modules/wishlist-module.md)** *(Lazy Initialization, Atomic Arrays, Move-to-Cart Pipeline)*
-* **[Order Module](../modules/order-module.md)** *(Atomic Checkout, Payment Webhooks, Shiprocket 3PL Dispatch, Delivery Automation)*
-* **[Search Module](../modules/search-module.md)** *(Typesense RAM Cluster, Eventual Consistency, Faceted Discovery)*
-* **[Dashboard Module](../modules/dashboard-module.md)** *(MongoDB $facet aggregations, Financial Reporting, Inventory Alerts)* 
-* **[Support Module](../modules/support-module.md)** *(Polymorphic ticketing, Threaded Conversations, Privacy Anonymization)*
+Deep dives into specific business logic, DTOs, and services.
+
+* **[User Module](../modules/user-module.md)** – Identity, RBAC, password hashing, address book.
+* **[Authentication Module](../modules/auth-module.md)** – Login, registration, token issuance.
+* **[Notification Engine](../modules/notification-module.md)** – BullMQ workers, SMTP, in‑app alerts.
+* **[Product Module](../modules/product-module.md)** – Catalog engine, Cloudinary rollbacks, discriminators.
+* **[Cart Module](../modules/cart-module.md)** – Dynamic pricing, attribute hashing, guest merging.
+* **[Order Module](../modules/order-module.md)** – Atomic checkout, payment webhooks, Shiprocket dispatch.
+* **[Return Module](../modules/return-module.md)** – RMA state machine, Razorpay refunds, atomic restocks.
+* **[Interaction Module](../modules/interaction-module.md)** – Threaded comments, async aggregation, verified purchases.
+* **[Coupon Module](../modules/coupon-module.md)** – Temporal firewalls, cart auto‑recalculation, TOCTOU defence.
+* **[Wishlist Module](../modules/wishlist-module.md)** – Lazy initialisation, atomic arrays, move‑to‑cart pipeline.
+* **[Search Module](../modules/search-module.md)** – Typesense RAM cluster, eventual consistency, faceted discovery.
+* **[Dashboard Module](../modules/dashboard-module.md)** – MongoDB `$facet` aggregations, financial reporting.
+* **[Support Module](../modules/support-module.md)** – Polymorphic ticketing, threaded conversations, privacy anonymisation.
+* **[Health Module](../modules/health-module.md)** – Deep liveness probes, dependency checks.
 
 ### API Standards & Testing
-Rules for RESTful communication and Postman/Thunder Client testing protocols.
+Rules for RESTful communication and manual runbooks.
 
-* **[API Design Standards](../api/api-standards.md)** *(Frontend integration & payload shapes)*
-* **[Global Error Codes](../api/error-codes.md)** *(Standardized HTTP responses & error handling)*
-* **[Auth Runbook](../api/thunder-tests/auth-runbook.md)** *(Manual integration testing guide)*
-* **[Catalog Runbook](../api/thunder-tests/product-runbook.md)** *(Polymorphic creation and image uploads)*
-* **[Coupon Runbook](../api/thunder-tests/coupon-runbook.md)** *(Discount logic and cart hooks)*
-* **[Interaction Runbook](../api/thunder-tests/interaction-runbook.md)** *(Reviews, threaded comments, and voting)*
-* **[Return Runbook](../api/thunder-tests/return-runbook.md)** *(RMA arbitration and refund processing)*
-* **[Wishlist Runbook](../api/thunder-tests/wishlist-runbook.md)** *(Lazy initialization and cart transfers)*
-* **[Order & Logistics Runbook](../api/thunder-tests/order-runbook.md)** *(Checkout, Shiprocket Dispatch, and Webhook Simulation)*
-* **[Search Runbook](../api/thunder-tests/search-runbook.md)** *(Typo-tolerance, pagination, and filter simulations)*
-* **[Dashboard Runbook](../api/thunder-tests/dashboard-runbook.md)** *(Admin metric fetching and date-range validation)*
-* **[Support Runbook](../api/thunder-tests/support-runbook.md)** *(Ticket state machines and Cloudinary attachments)*
+* **[API Design Standards](../api/api-standards.md)** – Frontend integration & payload shapes.
+* **[Global Error Codes](../api/error-codes.md)** – Standardised HTTP responses.
+* **[Auth Runbook](../api/thunder-tests/auth-runbook.md)** – Manual integration testing.
+* **[Product Runbook](../api/thunder-tests/product-runbook.md)** – Polymorphic creation and image uploads.
+* *(Other runbooks are available under `docs/api/thunder-tests/`)*
 
 ### Setup & Deployment
-Runbooks for getting the server running locally or deploying to production.
-* **[Local Development Setup](../setup/local-development.md)** *(Node, Mongo, Redis Boot Guide)*[cite: 2]
-* **[Environment Variables Guide](../setup/environment-variables.md)** *(Zod Validation & .env maps)*[cite: 2]
+Guides for local development and production.
+
+* **[Local Development Setup](../getting-started/local-development.md)** – Node, MongoDB, Redis boot guide.
+* **[Environment Variables Guide](../getting-started/environment-variables.md)** – Zod validation & `.env` mapping.
+* **[Database Seeding](../getting-started/database-seeding.md)** – Generating 500 realistic products.
 
 ---
 
 ## 3. Implementation Roadmap
 
-The development of Reshma-Core is divided into four major epics. 
+The development of Reshma-Core is divided into five major phases (all completed).
 
 ### Phase 1: The Foundation (Completed)
-- [x] Environment validation & Fail-Fast server boot.
-- [x] Global Error Handling & Zod Interceptors.
-- [x] User Domain Schema & RBAC integration.
-- [x] Two-Token Authentication (JWT + HttpOnly Cookies).
-- [x] Google OAuth (Client-Side Token Flow) Integration.
-- [x] Background Notification Engine (BullMQ + Redis).
+- [x] Environment validation & fail‑fast server boot.
+- [x] Global error handling & Zod interceptors.
+- [x] User domain schema & RBAC.
+- [x] Two‑token authentication (JWT + HttpOnly cookies).
+- [x] Google OAuth (client‑side token flow).
+- [x] Background notification engine (BullMQ + Redis).
 
 ### Phase 2: The Core Catalog Engine (Completed)
-- [x] Base `Product` schema implementation.
-- [x] Mongoose Discriminators for custom categories (Bangles, Apparel, Fabrics).
-- [x] Cloudinary integration for product image pipelines (Memory Buffers & Rollbacks).
-- [x] Category & Inventory tracking modules.
+- [x] Base `Product` schema.
+- [x] Mongoose discriminators for bangles, apparel, fabrics, etc.
+- [x] Cloudinary image pipeline (memory buffers & rollbacks).
+- [x] Category & inventory tracking.
 
 ### Phase 3: The Transaction Pipeline (Completed)
-- [x] Cart management (Syncing local state with DB).
-- [x] Dynamic Checkout Math Engine (GST, shipping fees).
-- [x] Razorpay Payment Gateway integration.
-- [x] Order generation & status Webhooks.
+- [x] Cart management (guest merge, live pricing).
+- [x] Dynamic checkout math (GST, shipping).
+- [x] Razorpay payment gateway integration.
+- [x] Order generation & status webhooks.
 
 ### Phase 4: Operations & Analytics (Completed)
-- [x] Return Arbitration Engine (Phase 8 Implementation).
-- [x] Interaction Engine (Phase 9 Implementation).
-- [x] Admin Dashboard aggregations (Sales volume, top-selling categories).  
+- [x] Return arbitration engine.
+- [x] Interaction engine (reviews, comments, voting).
+- [x] Admin dashboard aggregations (sales, top products).
 
 ### Phase 5: Production Hardening & Scalability (Completed)
-- [x] Epic 1: Legal & Financial Compliance (Dynamic Line-Item GST, Immutable Snapshots).
-- [x] Epic 2: The Edge Cache & Workers (Redis Proxy Shield, BullMQ PDF Generation).
-- [x] Epic 3: DevOps & Infrastructure (Distributed Rate Limiting, Deep Health Checks, Global NoSQL Defense).
+- [x] Legal & financial compliance (line‑item GST, immutable snapshots).
+- [x] Edge cache & workers (Redis proxy, BullMQ PDF generation).
+- [x] DevOps & infrastructure (distributed rate limiting, deep health checks, NoSQL defence).
 
 ---
-*Maintained by Md Afzal Ansari | Core System Architecture*
+
+*Maintained by Md Afzal Ansari | The Reshma-Core Team*  

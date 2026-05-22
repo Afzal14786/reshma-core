@@ -1,7 +1,7 @@
 <div align="center">
 
   # Authentication Module
-  
+
   **The highly secure, stateless perimeter defending the Reshma-Core platform. Manages identity verification, session persistence, and cryptographic token issuance.**
 
   [![JWT](https://img.shields.io/badge/JWT-Two--Token_Architecture-000000?style=flat&logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
@@ -14,67 +14,94 @@
 
 ## Overview
 
-The Auth Module (`src/modules/auth/`) dictates how users enter and maintain their session within the system. It is completely decoupled from the `User` model's schema definitions, focusing entirely on **behavior, cryptographic validation, and session state**. 
+The Auth Module (`src/modules/auth/`) dictates how users enter and maintain their session. It is completely decoupled from the `User` model, focusing on **behaviour, cryptographic validation, and session state**.
 
-It implements a strict OWASP-compliant Two-Token architecture to natively neutralize Cross-Site Scripting (XSS) and Cross-Site Request Forgery (CSRF) attack vectors.
+It implements a strict OWASP‑compliant two‑token architecture to neutralise XSS and CSRF attacks. All routes are prefixed with `/api/v1/auth` and protected by a dedicated `authLimiter` (10 requests per hour per IP).
 
 ---
 
 ## Architectural Layers
 
-The module strictly adheres to the Separation of Concerns principle, isolating HTTP transport logic from business execution.
+The module adheres to Separation of Concerns, isolating HTTP transport from business logic.
 
-### 1. Data Transfer Objects (DTOs)
-Located in `src/modules/auth/dtos/`. Powered by Zod, these schemas act as the first line of defense.
-* **Responsibilities**: Input sanitization (e.g., `.toLowerCase().trim()`), password strength enforcement via RegEx, and stripping out undocumented payload fields before they reach the controller.
-
-### 2. The Presentation Layer (`auth.controller.ts`)
-* **Responsibilities**: Receives sanitized `req.body`, delegates execution to the `AuthService`, injects the generated Access Tokens into the JSON response payload, and affixes Refresh Tokens to the `res.cookie` object.
-
-### 3. The Domain Layer (`auth.service.ts`)
-* **Responsibilities**: Database state mutations, Redis cache interactions (OTP storage and JWT blacklisting), and async handoffs to the `NotificationService` (BullMQ).
-
-### 4. Cryptographic Utils (`auth.utils.ts`)
-* **Responsibilities**: Centralized logic for signing JWTs and configuring `HttpOnly`, `Secure`, and `SameSite` flags for session cookies.
+| Layer | File(s) | Responsibility |
+|-------|---------|----------------|
+| **DTOs** | `dtos/*.dto.ts` (e.g., `register.dto.ts`, `login.dto.ts`) | Zod schemas – input sanitisation, password strength, legal consent (`acceptPrivacyPolicy`). |
+| **Controller** | `auth.controller.ts` | HTTP boundary – receives validated payloads, calls service, issues tokens, sets `HttpOnly` cookies. |
+| **Service** | `auth.service.ts` | Core logic – OTP generation, Redis interactions (caching & blacklist), Google OAuth verification, async notifications. |
+| **Utils** | `auth.utils.ts` | JWT signing, cookie configuration (sameSite, secure, httpOnly). |
 
 ---
 
 ## API Endpoint Specifications
 
-All routes are prefixed with `/api/v1/auth` and protected globally by the `authLimiter` to prevent brute-force attacks.
+All endpoints are rate‑limited by `authLimiter` (10 requests/hour/IP).
 
-| Method | Endpoint | Access | Purpose & Flow |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/register` | Public | **Initiation:** Creates an `isEmailVerified: false` user, generates a 6-digit OTP, caches it in Redis (10m TTL), and queues the verification email. |
-| `POST` | `/verify-otp` | Public | **Activation:** Validates the OTP against Redis. Upon success, deletes the OTP (Replay Protection), activates the user, triggers the Welcome email, and issues the Two-Token session. |
-| `POST` | `/login` | Public | **Authentication:** Verifies email/password. Enforces `isEmailVerified` and `isActive` gatekeepers before issuing the Two-Token session. |
-| `GET` | `/refresh` | Public | **Session Renewal:** Silently accepts the `HttpOnly` refresh cookie. Validates user database state and returns a fresh 15-minute Access Token. |
-| `GET` | `/logout` | Protected | **Termination:** Extracts the refresh token, writes its signature to the Redis Blacklist, and drops the client-side cookie. |
+| Method | Endpoint | Access | Purpose |
+|--------|----------|--------|---------|
+| `POST` | `/register` | Public | Creates user with `isEmailVerified: false`, generates OTP (Redis TTL 10 min), queues email. |
+| `POST` | `/verify-otp` | Public | Validates OTP, deletes it (replay protection), activates user, issues two‑token session. |
+| `POST` | `/login` | Public | Verifies credentials, checks `isEmailVerified` & `isActive`, issues session, updates `lastLogin`. |
+| `GET` | `/refresh` | Public | Accepts `HttpOnly` refresh cookie, returns fresh access token. |
+| `GET` | `/logout` | Protected | Blacklists refresh token in Redis, clears cookie. |
+| `POST` | `/google` | Public | Verifies Google `idToken`, auto‑verifies email, merges unverified local accounts, issues native session. |
+| `POST` | `/forgot-password` | Public | Sends password reset link (token stored in Redis, 15 min TTL). |
+| `POST` | `/reset-password` | Public | Validates token, updates password (bcrypt hashed), deletes token. |
 
 ---
 
 ## Core Business Logic Highlights
 
-### 1. Safe Collision Recovery (UX Optimization)
-If a user registers but abandons the OTP screen, their account exists in a "limbo" state. If they attempt to register again (perhaps fixing a typo in their password), the `registerLocal` service detects the unverified collision. Instead of throwing a `409 Conflict`, it safely overwrites their credentials and issues a fresh OTP, preventing user frustration.
+### 1. Safe Collision Recovery (UX)
+If a user registers but never verifies their OTP, their account remains in a “limbo” state. If they register again with the same email, the system **overwrites** their credentials (name, password, phone) and issues a fresh OTP – no `409 Conflict`. Prevents user frustration.
 
 ### 2. Redis State Management
-Redis is utilized for two distinct, highly-volatile state requirements:
-* **OTP Caching (`SETEX otp:email 600`)**: OTPs automatically self-destruct after 10 minutes.
-* **Token Blacklisting (`SETEX blacklist:token {ttl}`)**: Because JWTs are stateless, they cannot be destroyed on the server. On logout, the token's signature is pushed to Redis with a TTL exactly matching its remaining valid lifespan. The `protect` middleware checks this list on every request.
 
-### 3. Two-Token Pipeline Implementation
-The system explicitly avoids `localStorage` for session persistence.
-* **Access Token**: Short-lived (`15m`). Stored in React application memory. Destroyed on hard refresh.
-* **Refresh Token**: Long-lived (`7d`). Affixed as an `HttpOnly` cookie. Invisible to JavaScript, preventing exfiltration via XSS payloads.
+| Purpose | Redis Command | TTL |
+|---------|---------------|-----|
+| OTP caching | `SETEX otp:email 600 <otp>` | 10 minutes |
+| Token blacklist | `SETEX blacklist:token <remainingTTL> "revoked"` | Matches JWT expiry |
+| Password reset token | `SETEX pwd_reset:<hash> 900 <userId>` | 15 minutes |
+
+### 3. Two‑Token Pipeline
+
+| Token | Lifespan | Storage | Purpose |
+|-------|----------|---------|---------|
+| **Access Token** | 15 min | Frontend memory (React state) | Authorises API requests. Destroyed on refresh. |
+| **Refresh Token** | 7 days | `HttpOnly`, `Secure`, `SameSite=Strict` cookie | Silent token renewal. Invisible to JavaScript – immune to XSS. |
 
 ---
 
 ## Security Dependencies
 
-* **Bcrypt**: Used inside the `User` model to verify password hashes requested by `AuthService.loginLocal`.
-* **Node Crypto**: Uses `crypto.randomInt(100000, 999999)` for OTP generation, ensuring mathematically unpredictable, cryptographically secure values (unlike `Math.random()`).
-* **Express Rate Limit**: The dedicated `authLimiter` restricts the number of login/register attempts per IP address to neutralize dictionary and credential-stuffing attacks.
+- **`bcrypt`** – password hashing and verification.
+- **`crypto.randomInt`** – cryptographically secure OTP generation (not `Math.random`).
+- **`express-rate-limit`** – `authLimiter` distributed with Redis store.
+- **`google-auth-library`** – verification of Google `idToken`.
 
 ---
-**Standard Documentation | Reshma-Core Architecture**
+
+## Related Files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/auth/auth.controller.ts` | HTTP layer. |
+| `src/modules/auth/auth.service.ts` | Business logic. |
+| `src/modules/auth/auth.routes.ts` | Route definitions, middleware stacking. |
+| `src/modules/auth/auth.utils.ts` | Token signing, cookie management. |
+| `src/modules/auth/dtos/*.dto.ts` | Zod validation schemas. |
+| `src/shared/middlewares/auth.middleware.ts` | `protect` – JWT verification & user loading. |
+| `src/shared/middlewares/rate-limit.middleware.ts` | Distributed rate limiting (`authLimiter`). |
+
+---
+
+## See Also
+
+- [Authentication Architecture (Deep Dive)](../architecture/auth-architecture.md)
+- [Middleware & Validation](../architecture/middleware-and-validation.md)
+- [User Module](./user-module.md)
+- [Notification Module](./notification-module.md)
+
+---
+
+*The Reshma‑Core Team*

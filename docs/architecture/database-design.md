@@ -15,89 +15,191 @@
 
 In a traditional SQL database, handling completely different item types (like Glass Bangles versus Unstitched Fabrics) requires complex JOIN tables or the Entity-Attribute-Value pattern. Both approaches severely degrade read performance as the catalog grows.
 
-Reshma-Core utilizes **Mongoose Discriminators**, which is a Polymorphic NoSQL pattern. All products, regardless of their category, live inside one single `Products` collection. This allows global text searches, universal pagination, and unified category filtering to operate in milliseconds. 
+Reshma-Core utilizes **Mongoose Discriminators**, a polymorphic NoSQL pattern. All products, regardless of category, live inside one single `products` collection. This allows global text searches, universal pagination, and unified category filtering to operate in milliseconds.
 
-However, at the application layer, Mongoose strictly enforces unique validation schemas based on the `itemType` discriminator key. The database will physically reject a query if an Apparel item attempts to save a Bangle-specific property.
+At the application layer, Mongoose enforces unique validation schemas based on the `itemType` discriminator key. The database will physically reject a query if an Apparel item attempts to save a Bangle‑specific property.
 
 ---
 
 ## 1.1 Architecture Decision Record: Why Polymorphism?
 
-Before settling on Mongoose Discriminators, we evaluated two other common e-commerce database patterns. Here is why we rejected them and chose our current path. This context is critical for new developers to understand why we do not split collections.
+Before settling on Mongoose Discriminators, we evaluated two other common e‑commerce database patterns.
 
 **Rejected Alternative 1: Multiple Collections**
-* **The Idea:** Create a separate MongoDB collection for each category (`Apparel`, `Bangles`, `Fabrics`).
-* **Why it fails:** If a customer searches the website for the color "Red", the backend would have to query all three collections simultaneously, wait for the results, and stitch the pagination together in the Node.js memory. This is incredibly slow and scales terribly as new categories are added.
+- **Idea:** Create a separate collection for each category (`Apparel`, `Bangles`, `Fabrics`).
+- **Why it fails:** A customer search for the colour "Red" would require querying multiple collections, merging pagination in Node.js memory – slow and non‑scalable.
 
-**Rejected Alternative 2: The EAV Pattern (Entity-Attribute-Value)**
-* **The Idea:** Maintain one `Products` collection, but use a generic array for custom fields, such as `attributes: [{ key: 'size', value: 'XL' }]`.
-* **Why it fails:** We lose strict type-safety and validation. The database cannot prevent a developer or admin from accidentally inserting `{ key: 'bangleSize', value: '34C' }` into a Saree. Furthermore, indexing an array of dynamic objects for fast searching is highly inefficient in MongoDB.
+**Rejected Alternative 2: The EAV Pattern (Entity‑Attribute‑Value)**
+- **Idea:** Store custom fields in a generic array (`attributes: [{ key: 'size', value: 'XL' }]`).
+- **Why it fails:** No type safety; the database cannot prevent storing a bangle size on a saree. Indexing dynamic keys is inefficient.
 
 **The Winning Solution: Single Collection Polymorphism**
-* By using Mongoose Discriminators, all items live in one collection. This allows global `db.products.find({ tags: "Red" })` text searches to execute instantly.
-* At the same time, Mongoose enforces strict, category-specific validation at the application layer, giving us the read speed of NoSQL with the data strictness of SQL.
+- **How it works:** All items live in one collection, discriminated by `itemType`. Mongoose applies the correct sub‑schema at the application layer.
+- **Benefits:** Lightning‑fast global searches, strict per‑type validation, easy addition of new types without schema changes.
 
 ---
 
 ## 2. Base Product Schema
 
-This is the foundation. Every single item sold on the platform must contain these fields in order to function within the global cart and checkout system.  
+Every product – regardless of type – includes these fields. They are defined in `base-product.model.ts` and `base-product.interface.ts`.
 
-| Field | Type | Rules | Why this exists |
+| Field | Type | Rules | Description |
 | :--- | :--- | :--- | :--- |
-| `itemType` | String | Required | **The Discriminator Key.** Tells Mongoose which sub-schema rules to apply (`BANGLE`, `APPAREL`, `FABRIC`). |
-| `sku` | String | Required, Unique | Stock Keeping Unit. The exact physical identifier used in the warehouse. |
-| `name` | String | Required, Trimmed | The display title of the product. |
-| `description` | String | Required | Rich text or markdown description for the frontend. |
-| `basePrice` | Number | Required, `min: 0` | The raw price before GST or shipping calculations. |
-| `discount` | Number | Default: `0`, `max: 100` | Percentage discount applied to the item. |
-| `stockCount` | Number | Required, `min: 0` | Current inventory level. Critical for preventing overselling. |
-| `images` | [String] | Required | Array of secure Cloudinary URLs. |
-| `tags` | [String] | Indexed | Searchable keywords to power the search bar without needing external search engines. |
-| `isActive` | Boolean | Default: `true` | Soft-delete flag. We never hard-delete products because it would break historical order receipts. |
+| `itemType` | String (enum) | Required | Discriminator key: `"BANGLE"`, `"APPAREL"`, `"FABRIC"`, `"INNERWEAR"`, `"ACCESSORY"` |
+| `sku` | String | Required, unique, uppercase, trimmed | Stock Keeping Unit (warehouse barcode). |
+| `name` | String | Required, trimmed | Display title. |
+| `mainCategory` | String (enum) | Required | One of: `Sarees`, `Apparel`, `Accessories`, `Innerwear`, `Bangles` |
+| `subCategory` | String | Required, trimmed | e.g., “Handloom”, “Kurti”, “Glass Bangles” |
+| `material` | String | Required, trimmed | Material composition. |
+| `sellingUnit` | String (enum) | Required | `Single Piece`, `Meter`, `Set`, `Pair`, `Dozen`, `Pack` |
+| `colors` | String[] | Optional, default `[]` | Array of colour names. |
+| `basePrice` | Number | Required, min 0 | Raw price before discount and taxes. |
+| `discount` | Number | Default 0, min 0, max 100 | Percentage discount. |
+| `currentStock` | Number | Required, min 0 | Current inventory level. |
+| `weightGrams` | Number | Required, min 0 | Physical weight – used for shipping calculations. |
+| `isFragile` | Boolean | Required | If `true`, returns require photographic evidence. |
+| `images` | String[] | Required, min 1 | Cloudinary URLs (auto‑cleaned on delete). |
+| `hsnCode` | String | Required, 4‑8 digits | HSN code for Indian GST. |
+| `taxProfile` | String (enum) | Required | One of the `TaxProfile` values (e.g., `IMITATION_JEWELLERY`, `STITCHED_APPAREL`). |
+| `ratingsMetadata` | Object | Auto‑managed | Aggregated reviews: `averageRating`, `totalReviews`, `ratingDistribution` (1‑5 stars). |
+| `tags` | String[] | Optional, default `[]` | Search keywords. |
+| `isActive` | Boolean | Default `true` | Soft‑delete flag – never hard‑delete products to preserve historical orders. |
+| `createdAt` / `updatedAt` | Date | Auto | Timestamps. |
+
+> **Note:** The `description` field is **not** part of the base interface (it is present in the seeding script but not enforced in the model). Product descriptions are handled via a separate `details` field or not stored in the database.
 
 ---
 
-## 3. Discriminator Sub-Schemas
+## 3. Discriminator Sub‑Schemas
 
-These schemas inherit the Base Schema and add their own strictly validated, category-specific fields. This prevents data corruption.
+Each product type adds its own fields. These are defined in separate model files (e.g., `bangle.model.ts`, `apparel.model.ts`) and inherit the base schema.
 
-### A. The Bangle Schema (`itemType: 'BANGLE'`)
-* **Why it exists:** Bangles have unique sizing systems and shipping risks that apparel does not share.  
+### 3.1 Bangle Schema (`itemType: "BANGLE"`)
 
-| Field | Type | Rules | Why this exists |
-| :--- | :--- | :--- | :--- |
-| `diameter` | Enum | `['2/2', '2/4', '2/6', '2/8']` | Traditional Indian bangle sizing metrics. |
-| `material` | Enum | `['GLASS', 'METAL', 'LAC']` | Material composition for filtering. |
-| `isFragile` | Boolean | Required | **Critical for returns.** If true, the system forces the user to upload Cloudinary photographic proof of damage before allowing a return request. |
-| `packSize` | Number | Default: `12` | Bangles are rarely sold individually, requiring dynamic unit pricing displays. |
+**Used for:** Glass, metal, lac bangles.
 
-### B. The Apparel Schema (`itemType: 'APPAREL'`)
-* **Why it exists:** Readymade garments rely on standard alphabetic or numeric sizing charts.  
+| Field | Type | Rules | Notes |
+|-------|------|-------|-------|
+| `bangleSizes` | String[] | Required, at least one, enum: `"2.2"`, `"2.4"`, `"2.6"`, `"2.8"` | Traditional Indian bangle diameters. |
+| `packSize` | Number | Default 12, min 1 | Often sold by the dozen. |
 
-| Field | Type | Rules | Why this exists |
-| :--- | :--- | :--- | :--- |
-| `size` | Enum | `['XS', 'S', 'M', 'L', 'XL', 'XXL']` | Standard readymade sizing for stock management. |
-| `fabricType` | String | Required | Material type for search filtering (e.g., "Georgette", "Cotton"). |
-| `careInstructions` | String | Optional | Wash care details rendered on the product page. |
+**Example (from `bangle.model.ts`):**
+```typescript
+bangleSizes: { type: [String], required: true, enum: ["2.2","2.4","2.6","2.8"] },
+packSize: { type: Number, default: 12, min: 1 }
+```  
 
-### C. The Fabric Schema (`itemType: 'FABRIC'`)
-* **Why it exists:** Unstitched materials are sold by length, not by standard sizes.  
+### 3.2 Apparel Schema (`itemType: "APPAREL"`)
 
-| Field | Type | Rules | Why this exists |
-| :--- | :--- | :--- | :--- |
-| `lengthMeters` | Number | Required | Indicates the raw material length provided to the customer. |
-| `allowCustomTailoring`| Boolean | Default: `false` | If true, the frontend checkout flow intercepts the order and renders a custom measurement input form. |
+**Used for:** Sarees, kurtis, suits, lehengas, readymade garments.
+
+| Field | Type | Rules | Notes |
+|-------|------|-------|-------|
+| `sizes` | `String[]` | Required, at least one, enum: `"XS"`, `"S"`, `"M"`, `"L"`, `"XL"`, `"XXL"`, `"Free Size"`, `"34"`, `"36"`, `"38"`, `"40"` | Supports both letter and numeric sizes. |
+| `customTailoring` | `Boolean` | Default `false` | If true, checkout collects custom measurements. |
+| `careInstructions` | `String` | Optional, trimmed | Wash care details. |  
+
+### 3.3 Fabric Schema (`itemType: "FABRIC"`)
+
+**Used for:** Unstitched fabric sold by length.
+
+| Field | Type | Rules | Notes |
+|-------|------|-------|-------|
+| `lengthMeters` | `Number` | Required, min 0.1 | Length in metres. |
+| `customTailoring` | `Boolean` | Default `true` | Unstitched fabric usually requires tailoring. |
 
 ---
+
+### 3.4 Innerwear Schema (`itemType: "INNERWEAR"`)
+
+**Used for:** Bras, panties, shapewear.  
+**Hygiene policy:** Non‑returnable – enforced at schema level.
+
+| Field | Type | Rules | Notes |
+|-------|------|-------|-------|
+| `cupSizes` | `String[]` | Required, at least one, enum: `"32B"`, `"34B"`, `"36C"`, `"34C"`, `"36D"` | Common Indian bra sizes. |
+| `isReturnable` | `Boolean` | Forced `false` (`set: () => false`) | Cannot be overridden. |
+
+---
+
+### 3.5 Accessory Schema (`itemType: "ACCESSORY"`)
+
+**Used for:** Jewellery, bags, bindis, hair accessories.
+
+| Field | Type | Rules | Notes |
+|-------|------|-------|-------|
+| `sizeDetails` | `String` | Required, trimmed | Free‑text size description (e.g., “Adjustable”, “One Size”). |  
+
+---  
 
 ## 4. Indexing & Performance Strategy
 
-To ensure the catalog scales to tens of thousands of items without search degradation, we enforce the following indexes at the MongoDB layer.
+To ensure the catalog scales to tens of thousands of items, the following indexes are created at the MongoDB layer (see `base-product.model.ts`):  
 
-* **Compound Index 1 (Catalog Browsing):** `{ isActive: 1, itemType: 1, createdAt: -1 }` 
-  * *Why:* When a user clicks "View All Bangles", the database filters by active items, then by bangles, and sorts by newest. This index covers that exact query, preventing full-collection scans.
-* **Text Index (Global Search):** `{ name: "text", description: "text", tags: "text" }` 
-  * *Why:* Enables extremely fast keyword lookups directly in the database. This saves the infrastructure cost and maintenance burden of deploying an ElasticSearch cluster for a startup.
-* **Unique Index (Inventory):** `{ sku: 1 }` 
-  * *Why:* Acts as a final database-level firewall to prevent two products from ever sharing the same warehouse barcode.
+```javascript
+// Text search index – global search bar (name, tags, subCategory)
+BaseProductSchema.index({ name: "text", tags: "text", subCategory: "text" });
+
+// Compound index for filtered listing – active → type → category → newest
+BaseProductSchema.index({
+  isActive: 1,
+  itemType: 1,
+  mainCategory: 1,
+  createdAt: -1,
+});
+
+// Unique index on SKU – prevents duplicate warehouse identifiers
+BaseProductSchema.index({ sku: 1 }, { unique: true });
+```  
+- The **text index** enables fast keyword searches without an external search engine (though Typesense is also used for typo‑tolerant search).
+- The **compound index** covers common queries like “show all active bangles, newest first” and prevents full collection scans.
+- The **unique index on SKU** acts as a database‑level firewall.
+
+---  
+
+## 5. Automatic Cloudinary Cleanup
+
+When a product is **hard‑deleted** (using `findOneAndDelete`), a Mongoose `pre('findOneAndDelete')` hook runs. It retrieves the document, extracts the `images` array, and calls `deleteFromCloudinary()` for each URL. This prevents orphaned images from incurring costs.
+
+> **Soft deletion** (`isActive = false`) does **not** delete images – the product remains in the database for historical order integrity.  
+
+---  
+
+## 6. Zod Validation (Admin DTO)
+
+The `CreateProductSchema` in `product.admin.dto.ts` uses a **Zod discriminated union** to enforce the correct fields based on `itemType`. For example:  
+
+```typescript
+const BangleSchema = BaseProductSchema.extend({
+  itemType: z.literal("BANGLE"),
+  bangleSizes: z.array(z.enum(["2.2","2.4","2.6","2.8"])).min(1),
+  packSize: z.number().int().min(1).default(12),
+});
+```  
+
+If an admin tries to create a bangle with `cupSizes` (an innerwear field), Zod rejects the request with `400 Bad Request`. This is the **first firewall** before the database.  
+
+---  
+
+## 7. Related Files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/products/interfaces/base-product.interface.ts` | TypeScript interface for base product. |
+| `src/modules/products/models/base-product.model.ts` | Mongoose schema, indexes, pre‑delete hook. |
+| `src/modules/products/interfaces/*.ts` | Discriminator interfaces. |
+| `src/modules/products/models/*.model.ts` | Discriminator models. |
+| `src/modules/products/dtos/product.admin.dto.ts` | Zod validation for admin creation/update. |
+| `src/modules/orders/tax.utils.ts` | TaxProfile enum. |  
+
+---  
+
+## Next Steps
+
+- Explore the [Product Catalog Schema](./product-catalog.md) for detailed field‑by‑field mapping and examples.
+- Understand the [Product Module](../modules/product-module.md) for CRUD operations and Cloudinary integration.
+- See the [Tax Engine](./legal-tax-compliance.md) for how `hsnCode` and `taxProfile` are used.  
+
+---  
+
+*The Reshma-Core Team*
