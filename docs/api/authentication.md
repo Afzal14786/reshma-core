@@ -6,7 +6,7 @@
 
   [![JWT](https://img.shields.io/badge/JWT-Access_&_Refresh-000000?style=flat&logo=jsonwebtokens&logoColor=white)](#)
   [![Cookies](https://img.shields.io/badge/Cookies-HttpOnly_Secure-FF6B6B?style=flat)](#)
-  [![Redis](https://img.shields.io/badge/Redis-Blacklist- DC382D?style=flat&logo=redis&logoColor=white)](#)
+  [![Redis](https://img.shields.io/badge/Redis-Blacklist-DC382D?style=flat&logo=redis&logoColor=white)](#)
 
 </div>
 
