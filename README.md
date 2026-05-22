@@ -108,8 +108,8 @@ reshma-core/
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   ├── dependabot.yml
 │   └── workflows/
-│       ├── codeql.yml
-│       └── format-check.yml
+│       ├── format-check.yml
+│       └── security-ci.yml
 ├── .gitignore
 ├── CHANGES.md
 ├── CODE_OF_CONDUCT.md
@@ -121,11 +121,30 @@ reshma-core/
 ├── docker-compose.prod.yml
 ├── docker-compose.yml
 ├── docs/
+│   ├── README.md
 │   ├── api/
-│   │   ├── api-standards.md
+│   │   ├── README.md
+│   │   ├── authentication.md
 │   │   ├── error-codes.md
+│   │   ├── modules/
+│   │   │   ├── auth.md
+│   │   │   ├── cart.md
+│   │   │   ├── coupons.md
+│   │   │   ├── dashboard.md
+│   │   │   ├── health.md
+│   │   │   ├── interactions.md
+│   │   │   ├── notifications.md
+│   │   │   ├── orders.md
+│   │   │   ├── products.md
+│   │   │   ├── returns.md
+│   │   │   ├── search.md
+│   │   │   ├── support.md
+│   │   │   ├── users.md
+│   │   │   └── wishlist.md
+│   │   ├── rate-limiting.md
 │   │   └── thunder-tests/
 │   │       ├── auth-runbook.md
+│   │       ├── cart-runbook.md
 │   │       ├── coupon-runbook.md
 │   │       ├── dashboard-runbook.md
 │   │       ├── interaction-runbook.md
@@ -137,32 +156,48 @@ reshma-core/
 │   │       ├── user-runbook.md
 │   │       └── wishlist-runbook.md
 │   ├── architecture/
+│   │   ├── README.md
 │   │   ├── auth-architecture.md
+│   │   ├── background-jobs-and-cron.md
 │   │   ├── database-design.md
 │   │   ├── devops-and-infrastructure.md
-│   │   ├── edge-cache-and-workers.md
+│   │   ├── edge-cache.md
 │   │   ├── legal-tax-compliance.md
+│   │   ├── logistics-and-shipping.md
+│   │   ├── media-and-storage.md
+│   │   ├── middleware-and-validation.md
 │   │   ├── payment-integration.md
 │   │   ├── product-catalog.md
 │   │   ├── security-hardening.md
 │   │   └── system-overview.md
-│   ├── modules/
-│   │   ├── auth-module.md
-│   │   ├── cart-module.md
-│   │   ├── coupon-module.md
-│   │   ├── dashboard-module.md
-│   │   ├── interaction-module.md
-│   │   ├── notification-module.md
-│   │   ├── order-module.md
-│   │   ├── product-module.md
-│   │   ├── return-module.md
-│   │   ├── search-module.md
-│   │   ├── support-module.md
-│   │   ├── user-module.md
-│   │   └── wishlist-module.md
-│   └── setup/
-│       ├── environment-variables.md
-│       └── local-development.md
+│   ├── deployment/
+│   │   ├── README.md
+│   │   ├── ci-cd.md
+│   │   ├── docker-compose.md
+│   │   └── production-checklist.md
+│   ├── getting-started/
+│   │   ├── README.md
+│   │   ├── database-seeding.md
+│   │   ├── docker-setup.md
+│   │   ├── environment-variables.md
+│   │   └── local-development.md
+│   ├── glossary.md
+│   └── modules/
+│       ├── README.md
+│       ├── auth-module.md
+│       ├── cart-module.md
+│       ├── coupon-module.md
+│       ├── dashboard-module.md
+│       ├── health-module.md
+│       ├── interaction-module.md
+│       ├── notification-module.md
+│       ├── order-module.md
+│       ├── product-module.md
+│       ├── return-module.md
+│       ├── search-module.md
+│       ├── support-module.md
+│       ├── user-module.md
+│       └── wishlist-module.md
 ├── package-lock.json
 ├── package.json
 ├── src/
