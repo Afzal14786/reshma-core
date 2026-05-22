@@ -14,21 +14,24 @@
 ---
 
 ## Overview
-Reshma-Core utilizes a highly secure, stateless **Two-Token Architecture** combined with a robust **OTP (One-Time Password) Verification Flow**. 
 
-This system is designed to adhere to strict OWASP security standards. It actively mitigates Cross-Site Scripting (XSS), Cross-Site Request Forgery (CSRF), brute-force attacks, and session replay attacks while maintaining a frictionless and seamless user experience.
+Reshma-Core uses a **stateless two‑token architecture** combined with an **OTP verification flow**. It adheres to OWASP standards, mitigating XSS, CSRF, brute‑force attacks, and session replay while maintaining a seamless user experience.
+
+All authentication routes are prefixed with `/api/v1/auth` and protected by a dedicated `authLimiter` (10 requests per hour per IP) to prevent brute‑force and credential stuffing.
 
 ---
 
-## 1. The Two-Token Security Model
-To secure API communications, we strictly prohibit the storage of access tokens in `localStorage` or `sessionStorage` due to severe XSS vulnerabilities. Instead, the session is split across two distinct token types, creating an impenetrable boundary between the application state and the browser cache.
+## 1. The Two‑Token Security Model
+
+We **do not** store access tokens in `localStorage` or `sessionStorage`. Instead, the session is split:
 
 | Token Type | Lifespan | Storage Mechanism | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Access Token** | 15 Minutes | Frontend Memory (React Context/Zustand) | Attached as a `Bearer` header to authenticate standard API requests. Destroyed instantly upon page refresh. |
-| **Refresh Token**| 7 Days | `HttpOnly`, `Secure`, `SameSite=Strict` Cookie | Used silently by the frontend to request a new Access Token. Completely invisible to malicious JavaScript injections. |
+| **Access Token** | 15 minutes | Frontend memory (React state / Zustand) | Attached as `Authorization: Bearer <token>` for API requests. Destroyed on page refresh. |
+| **Refresh Token** | 7 days | `HttpOnly`, `Secure`, `SameSite=Strict` cookie | Used silently to obtain a new access token. Invisible to JavaScript – immune to XSS. |
 
-### Token Architecture Flow
+### Token Flow
+
 ```mermaid
 graph TD
     A[Client Application] -->|1. Sends Credentials| B(Auth Controller)
@@ -37,20 +40,17 @@ graph TD
     C -->|4. Refresh Token| E[Set-Cookie Header]
     D -->|Stored in| F((React Memory))
     E -->|Stored in| G((Browser Cookie Vault))
-```
-
----
+```  
+---  
 
 ## 2. Core Workflows
 
 ### A. Registration & OTP Flow
-We utilize a Two-Step asynchronous registration process to prevent database bloat from botnets, ensure data integrity, and keep the main Express thread unblocked.
 
-1. **Initiation:** The user submits registration details. A document is created in MongoDB with the `isEmailVerified` flag set strictly to `false`.
-2. **OTP Generation:** A cryptographically secure 6-digit OTP is generated via Node's native `crypto.randomInt()`. 
-3. **Caching:** The OTP is cached in **Redis** with a strict 10-minute Time-To-Live (TTL).
-4. **Asynchronous Dispatch:** The OTP payload is pushed to the `email-queue` (BullMQ). This allows the HTTP response to return to the client in milliseconds, while a background worker executes the heavy SMTP handshake.
-5. **Safe Collision Recovery:** If an unverified user registers again (e.g., recovering from a typo or abandoned session), the system safely overwrites their previous document and issues a new OTP. This prevents frustrating `409 Conflict` errors for genuine users.
+1. User submits registration details → user created with `isEmailVerified: false`.
+2. 6‑digit OTP generated via `crypto.randomInt()` and stored in Redis with 10‑minute TTL.
+3. OTP email job pushed to BullMQ (async).
+4. **Safe collision recovery:** If an unverified user registers again, we overwrite credentials and issue a fresh OTP (no `409 Conflict`).  
 
 ```mermaid
 sequenceDiagram
@@ -66,17 +66,13 @@ sequenceDiagram
     AuthAPI->>Redis: SETEX otp:email 600
     AuthAPI->>BullMQ: Push OTP to Email Queue
     AuthAPI-->>Client: 201 Created (Message only, no tokens)
-```
+```  
 
-### B. Verification Flow
-The Verification Flow is the gateway to account activation. It includes strict Replay Attack prevention.
+### B. OTP Verification
 
-1. User submits the received OTP.
-2. The system queries Redis. If the OTP is invalid or expired, it rejects the request.
-3. **Replay Mitigation:** The instant the OTP is validated, the Redis key is deleted (`DEL otp:email`). It can never be used twice.
-4. The user's MongoDB document is updated to `isEmailVerified: true`.
-5. The `NotificationService` triggers the Welcome Sequence (firing both an email and a persistent in-app DB alert).
-6. The system issues the initial Two-Token session.
+- User submits OTP → validated against Redis.
+- **Replay attack prevention:** Redis key is deleted immediately after successful verification.
+- User marked `isEmailVerified: true`, welcome sequence triggered, two‑token session issued.  
 
 ```mermaid
 sequenceDiagram
@@ -91,47 +87,25 @@ sequenceDiagram
     AuthAPI->>Redis: DEL otp:email (Prevent Replay)
     AuthAPI->>MongoDB: Update isEmailVerified = true
     AuthAPI-->>Client: 200 OK (Access JSON + Refresh Cookie)
-```
+```  
 
-### C. Standard Login Flow
-1. User submits credentials. The Zod Interceptor guarantees payload shape and sanitizes inputs (e.g., lowercasing emails).
-2. The `AuthService` queries MongoDB, explicitly selecting the hidden `password` field.
-3. `bcrypt.compare()` verifies the hash.
-4. **Gatekeeper Enforcement:** The system checks two boolean flags:
-   - `isActive: true` (Admin ban check)
-   - `isEmailVerified: true` (Onboarding check)
-5. Telemetry is updated (`lastLogin` timestamp), and the Two-Token session is issued.
+### C. Login
 
-### D. Silent Token Refresh Flow
-To balance extreme security (15-minute access tokens) with seamless UX, the system utilizes a silent refresh mechanism.
+- Credentials validated; password field is explicitly selected (`+password`).
+- Gatekeepers check `isEmailVerified` and `isActive`.
+- `lastLogin` timestamp updated; two‑token session issued.
 
-1. The frontend API interceptor (e.g., Axios) detects a `401 Unauthorized` or notes the token expiration.
-2. The frontend halts the queued requests and hits `GET /api/v1/auth/refresh`.
-3. The browser automatically attaches the `HttpOnly` Refresh Cookie.
-4. The server cryptographically verifies the Refresh Token and checks the database to ensure the user hasn't been banned since their last login.
-5. A fresh 15-minute Access Token is returned, and the frontend resumes its queued requests.
+### D. Silent Token Refresh
 
-```mermaid
-sequenceDiagram
-    participant Frontend
-    participant Server
-    
-    Frontend->>Server: GET /api/v1/data (Bearer Expired_Token)
-    Server-->>Frontend: 401 Unauthorized
-    Frontend->>Server: GET /api/v1/auth/refresh (Sends HttpOnly Cookie)
-    Server->>Server: Verify Refresh Token & User Status
-    Server-->>Frontend: 200 OK { newAccessToken }
-    Frontend->>Server: GET /api/v1/data (Bearer New_Token)
-    Server-->>Frontend: 200 OK (Data)
-```
+- Frontend interceptor detects `401` → calls `GET /auth/refresh`.
+- Browser automatically sends HttpOnly refresh cookie.
+- Server verifies token, checks user still exists and is active, returns a new access token.
 
-### E. Secure Logout Flow
-Because JWTs are fundamentally stateless, they cannot be "deleted" from the server. Logout requires a hybrid approach.
+### E. Logout & Redis Blacklisting
 
-1. The server extracts the active Refresh Token from the incoming request cookie.
-2. **Redis Blacklisting:** The token's signature is pushed to a Redis Blacklist. The TTL of this Redis entry perfectly matches the remaining natural lifespan of the JWT to prevent memory bloat.
-3. The server sets an immediate expiration on the client's `HttpOnly` cookie, forcing the browser to destroy it.
-4. Future requests using the blacklisted token are caught by the `protect` middleware, which cross-references Redis.
+- Refresh token extracted from cookie.
+- Token signature added to Redis blacklist with TTL equal to its remaining lifespan.
+- Cookie cleared on client.  
 
 ```mermaid
 sequenceDiagram
@@ -143,16 +117,15 @@ sequenceDiagram
     AuthAPI->>AuthAPI: Calculate remaining JWT TTL
     AuthAPI->>Redis: SETEX blacklist:token {TTL}
     AuthAPI-->>Client: Clear-Cookie Header & 200 OK
-```
+```  
 
-### F. Google OAuth Flow (Client-Side)
-To maintain our strict stateless JWT architecture and avoid server memory session bloat (common with Passport.js), Reshma-Core utilizes the modern Client-Side Token Flow for Google authentication.
+### F. Google OAuth (Client‑Side Flow)
 
-1. **Client Interaction:** The React frontend handles the Google OAuth popup and receives a Google `idToken`.
-2. **Cryptographic Verification:** The frontend POSTs this `idToken` to our backend. The `AuthService` mathematically verifies the cryptographic signature directly against Google's public keys using the official `google-auth-library`.
-3. **Safe Account Merging:** - If the user already exists as a `LOCAL` user but never verified their email via OTP, Google's login acts as absolute proof of email ownership. The system seamlessly auto-verifies them.
-   - If the user does not exist, a new account is onboarded instantly without a password (relying entirely on Google as the identity provider).
-4. **Session Hand-off:** Google's token is immediately discarded, and the system issues our native Two-Token session (Access & Refresh), completely avoiding vendor lock-in.
+- Frontend obtains Google `idToken` and sends it to `POST /auth/google`.
+- Backend cryptographically verifies the token using `google-auth-library`.
+- If user exists (local, unverified), email is auto‑verified.
+- If user does not exist, a new account is created with `authProvider: "GOOGLE"`.
+- Native two‑token session is issued (Google token discarded).  
 
 ```mermaid
 sequenceDiagram
@@ -168,36 +141,81 @@ sequenceDiagram
     Google-->>AuthAPI: Valid (Returns payload: email, name)
     AuthAPI->>MongoDB: Upsert user (Auto-verify if needed)
     AuthAPI-->>Client: 200 OK (Native Access JSON + Refresh Cookie)
-```
+```  
 
----
+---  
 
-## 3. Defense Mechanisms & Request Interceptors
+## 3. Defense Mechanisms & Request Interceptors  
 
-Every request must survive a gauntlet of security middlewares before reaching the presentation layer (`AuthController`).
+Every auth request passes through a security pipeline:  
 
 ```mermaid
 graph LR
     A[Client Request] --> B[Helmet Headers]
-    B --> C[Rate Limiter]
-    C --> D[Payload Truncator]
+    B --> C[authLimiter]
+    C --> D[Payload Truncator (10kb)]
     D --> E[Zod Interceptor]
     E --> F((Auth Controller))
-```
+```  
 
-* **Helmet:** Secures the Express app by setting essential HTTP headers. Defends against MIME sniffing, Clickjacking, and disables the `X-Powered-By` fingerprint.
-* **Tiered Rate Limiting (Redis-Backed):**
-  * `standardLimiter`: Applied globally to prevent basic DDoS attempts.
-  * `authLimiter`: A highly restrictive limit applied exclusively to `/auth` endpoints to neutralize credential stuffing and brute-force password cracking.
-* **Payload Truncation:** `express.json({ limit: '10kb' })` physically drops requests with massive payloads, preventing memory exhaustion (OOM) attacks.
-* **Zod Validation Interceptor:** Acts as an absolute firewall. It strictly parses the `req.body` against predefined schemas. If an attacker injects arbitrary fields (e.g., `role: "ADMIN"` or `isEmailVerified: true` during registration), Zod strips them out, guaranteeing the Controller receives 100% sanitized data.
+- **Helmet** – sets secure HTTP headers, removes `X-Powered-By`.
+- **Rate limiting** – `authLimiter`: 10 requests per hour per IP.
+- **Payload truncation** – `express.json({ limit: '10kb' })` prevents OOM attacks.
+- **Zod validation** – strict schemas (e.g., `RegisterSchema`, `LoginSchema`) sanitise inputs and strip undocumented fields.  
 
----
+---  
 
-## 4. Environment Variables Required
-The authentication module relies on the strict presence of these environment variables defined in `src/config/env.ts`. The server will intentionally crash on boot if these are misconfigured, utilizing a "Fail-Fast" architecture.
+## 4. HTTP Status Codes (Authentication)
 
-* `JWT_ACCESS_SECRET` / `JWT_ACCESS_EXPIRES_IN` (e.g., `15m`)
-* `JWT_REFRESH_SECRET` / `JWT_REFRESH_EXPIRES_IN` (e.g., `7d`)
-* `REDIS_URL` (For caching OTPs and Blacklists)
-* `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (For OAuth integrations)
+The module uses standard codes from `src/shared/constant/http-codes.ts`:
+
+| Status | Constant | Typical Scenario |
+|--------|----------|------------------|
+| 200 | `OK` | Login success, token refresh, OTP verification. |
+| 201 | `CREATED` | Registration initiated (user created). |
+| 400 | `BAD_REQUEST` | Validation failure (Zod), expired/invalid OTP. |
+| 401 | `UNAUTHORIZED` | Missing/expired access token, invalid credentials. |
+| 403 | `FORBIDDEN` | Email not verified, account deactivated. |
+| 409 | `CONFLICT` | Verified email already exists (registration). |
+| 429 | `TOO_MANY_REQUESTS` | Rate limit exceeded (10 per hour). |  
+
+---  
+
+## 5. Environment Variables
+
+The following variables are required (validated by `env.ts`):
+
+| Variable | Example | Description |
+|----------|---------|-------------|
+| `JWT_ACCESS_SECRET` | 64‑char hex | Secret for signing access tokens. |
+| `JWT_ACCESS_EXPIRES_IN` | `15m` | Access token lifespan. |
+| `JWT_REFRESH_SECRET` | 64‑char hex | Secret for signing refresh tokens. |
+| `JWT_REFRESH_EXPIRES_IN` | `7d` | Refresh token lifespan. |
+| `REDIS_URL` | `redis://localhost:6379` | Used for OTP storage and blacklist. |
+| `GOOGLE_CLIENT_ID` | `xxx.apps.googleusercontent.com` | Google OAuth client ID. |  
+
+---  
+
+## 6. Related Files
+
+| File | Purpose |
+|------|---------|
+| `auth.controller.ts` | HTTP boundary – receives validated payloads, issues tokens, sets cookies. |
+| `auth.service.ts` | Core business logic – OTP generation, Redis interactions, Google verification. |
+| `auth.routes.ts` | Route definitions – applies rate limiter, validation, and authentication. |
+| `auth.utils.ts` | Token signing and cookie management. |
+| `dtos/*.dto.ts` | Zod schemas for registration, login, OTP verification, etc. |
+| `protect (auth.middleware.ts)` | JWT verification and user loading (used on protected routes). |
+| `../middlewares/rate-limit.middleware.ts` | Distributed rate limiting with Redis. |  
+
+---  
+
+## Next Steps
+
+- See [Middleware & Validation](./middleware-and-validation.md) for a detailed breakdown of the request pipeline.
+- Explore the [Notification Module](../modules/notification-module.md) for email queue handling.
+- Read the [Environment Variables](../getting-started/environment-variables.md) Guide for full configuration.  
+
+--- 
+
+*The Reshma-Core Team*  
