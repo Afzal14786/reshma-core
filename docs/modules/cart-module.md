@@ -1,7 +1,7 @@
 <div align="center">
 
   # Cart Module Architecture
-  
+
   **The volatile, write‑heavy pre‑checkout sandbox bridging anonymous browsing to authenticated payment pipelines for the Reshma‑Core platform.**
 
   [![MongoDB](https://img.shields.io/badge/MongoDB-Atomic_Updates-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
@@ -14,64 +14,95 @@
 ---
 
 ## Overview
-The Cart Module serves as the highly volatile, write-heavy pre-checkout sandbox for Reshma-Core[cite: 2]. Unlike the Product catalog (which is read-heavy), the Cart must actively defend against race conditions, out-of-stock anomalies, and malicious mathematical payloads (e.g., negative quantities)[cite: 2].
 
-This module bridges the gap between the Anonymous Frontend User and the Authenticated Checkout Pipeline[cite: 2].
+The Cart Module serves as the volatile, write‑heavy pre‑checkout sandbox. Unlike the read‑heavy product catalog, the cart actively defends against race conditions, out‑of‑stock anomalies, and malicious mathematical payloads (e.g., negative quantities).
+
+It bridges the gap between anonymous frontend users (cart stored in `localStorage`) and the authenticated checkout pipeline. All backend `/cart` routes are protected by JWT; guest carts are merged upon login.
+
+---
 
 ## Architectural Decision Records (ADRs)
 
-### 1. Zero-Price Persistence
-**Context:** Storing product prices directly inside the Cart document creates stale data if the Admin updates the catalog price while the item is sitting in a user's cart[cite: 2].
-**Decision:** We strictly store ONLY the `productId` and `quantity`[cite: 2]. 
-**Consequence:** The `cartTotal` and `weightGrams` are calculated dynamically at runtime via Mongoose `.populate()`[cite: 2]. The user is guaranteed to always see the live, millisecond-accurate price[cite: 2].
+### 1. Zero‑Price Persistence
+- **Context:** Storing product prices inside the Cart document creates stale data if an admin updates the catalog price while the item is in a cart.
+- **Decision:** Store only `productId` and `quantity`.
+- **Consequence:** Prices are calculated at runtime via Mongoose `.populate()`. The user always sees live, millisecond‑accurate prices.
 
-### 2. The Self-Healing Mechanism
-**Context:** If a user adds an item to their cart, and the Admin subsequently deletes or deactivates (`isActive: false`) that product, fetching the cart will crash or display ghost items[cite: 2].
-**Decision:** The `CartService.getCart()` method implements a self-healing loop[cite: 2]. 
-**Consequence:** Upon fetch, the service scans populated items[cite: 2]. If an item returns `null` or `isActive: false`, the service silently drops the item, recalculates totals, and saves the healed cart to MongoDB[cite: 2].
+### 2. Self‑Healing Mechanism
+- **Context:** If an admin deactivates (`isActive: false`) or deletes a product, fetching the cart would crash or show ghost items.
+- **Decision:** `CartService.getCart()` scans populated items and silently drops those that are `null` or `isActive: false`.
+- **Consequence:** The cart is always clean, and the healed cart is saved back to MongoDB.
 
 ### 3. Deterministic Variant Hashing
-**Context:** The catalog is polymorphic. A user might add `{ size: 'M', color: 'Red' }` and later add `{ color: 'Red', size: 'M' }`. The database should treat these as the same item[cite: 2].
-**Decision:** We implemented `generateItemSignature()`, a cryptographic-style hashing method that sorts attribute keys alphabetically before joining them[cite: 2].
-**Consequence:** Prevents cart bloat and ensures mathematically identical variants merge flawlessly[cite: 2].
+- **Context:** Polymorphic products allow custom attributes (e.g., `{ size: 'M', color: 'Red' }`). Adding the same variant in different orders should not create duplicate line items.
+- **Decision:** `generateItemSignature()` sorts attribute keys alphabetically and concatenates them with the product ID.
+- **Consequence:** Prevents cart bloat; identical variants merge flawlessly.
 
-### 4. The Guest-to-User Merge Flow
-**Context:** Industry standards dictate that users should not be forced to log in simply to browse and add items to a cart[cite: 2].
-**Decision:** 1. The frontend manages anonymous carts in `localStorage`[cite: 2]. 2. All backend `/cart` routes are strictly protected by JWT auth[cite: 2]. 3. Upon login, the frontend fires a one-time sync to `POST /api/v1/cart/merge`[cite: 2].
-**Consequence:** The database is protected from millions of abandoned anonymous bot carts[cite: 2]. The backend gracefully merges local items into the official cart, capping quantities based on stock[cite: 2].  
+### 4. Guest‑to‑User Merge Flow
+- **Context:** Users should not be forced to log in before browsing and adding items.
+- **Decision:**  
+  - Frontend manages anonymous carts in `localStorage`.  
+  - Backend `/cart` routes require JWT (no anonymous database carts).  
+  - On login, frontend calls `POST /cart/merge` to sync.
+- **Consequence:** Database protected from millions of abandoned bot carts; merge caps quantities by live stock.
 
 ### 5. Strict Type Satisfaction (Mongoose 9 / TypeScript 6)
-**Context:** When working within MongoDB sessions, Mongoose requires `.create()` to be passed as an array. This causes TypeScript's `exactOptionalPropertyTypes` to flag potential `undefined` array assignments, threatening compilation.
-**Decision:** We utilize strict intermediate assignments and exact type-casting:
+- **Context:** Mongoose `.create()` inside transactions expects an array, triggering `exactOptionalPropertyTypes` warnings.
+- **Decision:** Use intermediate assignment and explicit check:
 ```typescript
   const newCarts = await Cart.create([{ user: safeUserId, items: [] }], { session });
-  
   const createdCart = newCarts[0];
-  
-  if (!createdCart) throw new AppError(HTTP_STATUS.INTERNAL_SERVER_ERROR, "Cart initialization failed.");
-  cart = createdCart
+  if (!createdCart) throw new AppError(...);
 ```  
 
-**Consequence:** The compiler retains absolute certainty of the internal Mongoose Document properties (like `__v`), ensuring 100% type safety during highly volatile cart mutations.
+- **Consequence:** Compiler retains full type information; no runtime surprises.  
 
+## The Two‑Pass Financial Engine (Dynamic GST)
 
+`CartService` generates dynamic tax calculations before checkout, complying with Indian GST (tax on Transaction Value, not MRP). The algorithm runs three passes:
 
-## The Two-Pass Financial Engine (Dynamic GST Compliance)
-The `CartService` is responsible for generating dynamic, ephemeral tax calculations before checkout. To comply with Indian GST laws (which dictate that tax is calculated on the *Transaction Value* rather than the MRP), the cart abandons flat subtotals and executes a strict multi-pass algorithm:
+| Pass | Operation |
+|------|-----------|
+| 1 – Aggregation | Computes raw subtotal, total weight, fragile flags. |
+| 2 – Proportional Taxation & Discounting | Distributes coupon discount across line items based on weight; passes discounted unit price to `TaxEngine` to resolve GST brackets (e.g., stitched apparel shifts from 18% to 5% if discounted price ≤ ₹2,500). Injects `financials` object per item for frontend transparency. |
+| 3 – Logistics | Applies free‑shipping threshold (> ₹2,000), extracts 18% inclusive GST from shipping charge. |  
 
-* **Pass 1 (Aggregation):** Computes the raw subtotal, total weight, and identifies fragile items.
-* **Pass 2 (Proportional Taxation & Discounting):** 1. Distributes the active `discountAmount` (from coupons) mathematically across all line items based on their weight in the cart. This prevents the "refund exploit" if a user returns a partially discounted item.
-    2. Passes the newly discounted unit price into the `TaxEngine` to legally determine the GST bracket (e.g., resolving the Indian tax rule where stitched apparel dropping below ₹2,500 physically shifts from 18% to 5% GST).
-    3. Injects a granular `financials` object inside every item array for complete frontend UI transparency.
-* **Pass 3 (Logistics):** Evaluates free-shipping thresholds and extracts the mandated 18% logistics service tax from the final shipping cost.
+---  
 
 ## Security & Validation Firewalls
 
-All inbound payloads are intercepted by strict Zod Data Transfer Objects (`cart.dto.ts`)[cite: 2]:
-* **NoSQL Injection:** `productId` is regex-validated to guarantee a strict 24-character MongoDB Hex string[cite: 2].
-* **Negative Math Exploit:** `quantity` is strictly typed as an integer with `.min(1)`, preventing subtotal manipulation[cite: 2].
-* **Type Strictness:** `selectedAttributes` utilizes a strict `Record<string, AttributeValue>` to prevent deep-nested object injection[cite: 2].
-* **Rate Limiting:** (New) `standardLimiter` is applied before authentication to neutralize DoS vectors before expensive DB lookups[cite: 2].
+All inbound payloads are intercepted by strict Zod DTOs (`cart.dto.ts`):
+
+| Threat | Mitigation |
+|--------|------------|
+| NoSQL injection | `productId` regex‑validated as 24‑character hex string. |
+| Negative quantity exploit | `quantity` must be integer ≥ 1, capped at 10 per item. |
+| Prototype pollution | `selectedAttributes` uses `Record<string, AttributeValue>`; a reconstruction function strips `__proto__`, `constructor`, `prototype`. |
+| DoS (expensive lookups) | `standardLimiter` applied before authentication. |
 
 ---
-**Standard Documentation | Reshma-Core Architecture**
+
+## Related Files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/cart/cart.controller.ts` | HTTP layer, `catchAsync` wrapper. |
+| `src/modules/cart/cart.service.ts` | Core logic – ACID transactions, self‑healing, tax calculation, coupon integration. |
+| `src/modules/cart/cart.model.ts` | Mongoose schemas (`Cart` + `CartItem`). |
+| `src/modules/cart/cart.interface.ts` | TypeScript interfaces (`ICartItem`, `ICart`). |
+| `src/modules/cart/cart.routes.ts` | Route definitions with rate limiting, auth, and validation. |
+| `src/modules/cart/dtos/cart.dto.ts` | Zod schemas for add, update, merge, remove. |  
+
+---  
+
+## See Also
+
+- [Database Design – Base Product Schema](../architecture/database-design.md#2-base-product-schema)
+- [Order Module](./order-module.md) (checkout pipeline)
+- [Coupon Module](./order-module.md) (discount validation)
+- [Tax & GST Engine](../architecture/legal-tax-compliance.md)
+- [Product Module](./product-module.md)
+
+---  
+
+*The Reshma-Core Team*  

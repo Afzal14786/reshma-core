@@ -1,7 +1,7 @@
 <div align="center">
 
   # Product Domain Module
-  
+
   **The polymorphic catalog engine powering CRUD operations, category‑specific validation, and Cloudinary image management for the Reshma‑Core platform.**
 
   [![MongoDB](https://img.shields.io/badge/MongoDB-Atomic_Stock-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
@@ -14,83 +14,171 @@
 ---
 
 ## 1. Overview
-The Product module is the core catalog engine of Reshma-Core. It is responsible for handling the CRUD operations of our polymorphic inventory, validating complex category-specific payloads, and managing the Cloudinary image pipeline.
+
+The Product Module (`src/modules/products/`) is the core catalog engine. It handles CRUD operations for the polymorphic inventory, validates category‑specific payloads using Zod discriminated unions, and manages the Cloudinary image pipeline (memory‑stream uploads, automatic rollback on failure). It also synchronises product data to Typesense for fast search.
 
 **Base Route:** `/api/v1/products`
 
 ---
 
 ## 2. Controller Architecture & API Endpoints
-To avoid massive, unmaintainable files and strictly enforce security boundaries, the presentation layer is split by Actor (Admin vs. Public).
 
-### Public Controller (Customer Facing)
-Heavily optimized for read-heavy operations, utilizing MongoDB compound indexes, text search, and `.lean()` execution to strip Mongoose hydration overhead.
-* **`GET /`** - Fetch all products. Supports pagination (`?page=1&limit=20`), filtering (`?itemType=BANGLE`), and global text search (`?q=red`).
-* **`GET /:id`** - Fetch a single product by ObjectId.
+The presentation layer is split into two controllers to enforce security boundaries and keep files maintainable.
 
-### Admin Controller (Internal Operations)
-Requires a valid Two-Token session AND the user must have the `ADMIN` role.
-* **`POST /`** - Create a new product. Accepts `multipart/form-data` for image uploads.
-* **`PATCH /:id`** - Partially update product details.
-* **`DELETE /:id`** - Soft-delete a product (`isActive: false`). *We never hard-delete products to preserve historical order receipts.*
+### Public Controller (`PublicProductController`)
+
+Optimised for read‑heavy traffic. Uses MongoDB compound indexes, text search, and `.lean()` to strip Mongoose hydration overhead.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Fetch paginated catalog. Supports `page`, `limit`, `itemType`, `mainCategory`, `subCategory`, and full‑text search (`q`). |
+| `GET` | `/:id` | Fetch a single product by ObjectId. |
+
+Both routes are wrapped in `cacheMiddleware(300)` (5‑minute TTL) and protected by `standardLimiter`.
+
+### Admin Controller (`AdminProductController`)
+
+Requires a valid JWT and the `ADMIN` role (enforced by `protect` + `restrictTo("ADMIN")`).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/` | Create a new product (multipart/form‑data, up to 5 images). |
+| `PATCH` | `/:id` | Partially update product fields. |
+| `DELETE` | `/:id` | Soft‑delete a product (`isActive: false`). Hard deletion never occurs to preserve historical orders. |
+
+After each mutation, a **fire‑and‑forget** cache invalidation (`CacheManager.invalidateCachePattern`) clears the Redis edge cache.
 
 ---
 
 ## 3. Zod Validation Strategy (Discriminated Unions)
 
-Because the API accepts multiple types of products at the same `POST /` endpoint, the Zod payload firewall must be incredibly smart. Instead of a standard `z.object()`, the Admin DTO utilizes **Zod Discriminated Unions** (`z.discriminatedUnion`). 
+The admin creation endpoint uses `z.discriminatedUnion` to enforce the correct fields based on `itemType`. Defined in `product.admin.dto.ts`.
 
-**How it works:**
-1. Zod inspects the `itemType` string in the incoming `req.body`.
-2. If `itemType === 'BANGLE'`, Zod dynamically switches to the Bangle validation rules and guarantees the payload contains `bangleSizes`.
-3. If an attacker tries to send `cupSizes` while `itemType === 'BANGLE'`, Zod instantly strips the invalid data and throws a `400 Bad Request`.
-4. **Tax Inheritance:** Regardless of the `itemType`, the `BaseProductSchema` strictly forces the Admin to include a legally valid Indian `hsnCode` and `taxProfile`. If an Admin tries to create a Saree without defining its GST bracket, Zod drops the payload.
+```typescript
+export const CreateProductSchema = z.object({
+  body: z.discriminatedUnion("itemType", [
+    BangleSchema,
+    ApparelSchema,
+    FabricSchema,
+    InnerwearSchema,
+    AccessorySchema,
+  ]),
+});
+```  
+
+### How it protects the system:  
+
+- If `itemType === "BANGLE"`, Zod requires `bangleSizes` and forbids `cupSizes`.
+- If `itemType === "APPAREL"`, Zod requires `sizes` and forbids `bangleSizes`.
+- All types must include `hsnCode` and `taxProfile` (legal GST requirement).
+
+Invalid requests are rejected with `400 Bad Request` before reaching the service layer.  
+
+---  
+
+## 4. Business Logic & Service Layer (`product.service.ts`)
+
+The service layer isolates database operations and handles distributed transactions. Below is the **product creation flow** with Cloudinary rollback.  
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant API
+    participant Cloudinary
+    participant MongoDB
+    participant Typesense
+
+    Admin->>API: POST /products (multipart/form-data)
+    API->>API: Zod validated payload
+    API->>Cloudinary: upload images concurrently (Promise.all)
+    Cloudinary-->>API: image URLs
+    API->>MongoDB: create product (ACID)
+    alt DB success
+        MongoDB-->>API: product document
+        API->>Typesense: sync (fire-and-forget)
+        API-->>Admin: 201 Created
+    else DB failure (e.g., duplicate SKU)
+        MongoDB-->>API: error
+        API->>Cloudinary: rollback – delete uploaded images
+        API-->>Admin: 400/409 error
+    end
+```  
+
+### Key service methods:  
+
+| Method | Description |
+|--------|-------------|
+| `createProduct` | Uploads images to Cloudinary, saves product, rolls back images on DB failure. |
+| `updateProduct` | Partially updates product, syncs changes to Typesense (if `isActive` toggled). |
+| `softDeleteProduct` | Sets `isActive: false`, removes from Typesense index. |
+| `getProducts` | Paginated, filtered catalog with text search. |
+| `reserveStock` | Atomic `$inc` with `$gte` – used during checkout to prevent overselling. |  
+
+---  
+
+## 5. Legal Tax Compliance (Indian GST)
+
+Every product stores:
+
+- `hsnCode` – 4‑8 digit numeric string (e.g., `"7117"` for imitation jewellery).
+- `taxProfile` – enum used by the `TaxEngine` (e.g., `"STITCHED_APPAREL"`, `"UNSTITCHED_FABRIC"`).
+
+The tax engine dynamically resolves the GST rate based on the transaction value (post‑discount). For `STITCHED_APPAREL`, the rate changes from 18% to 5% if the discounted price falls below ₹2,500.
 
 ---
 
-## 4. Business Logic & Services (`product.service.ts`)
-
-The Service layer isolates the database operations from the HTTP controllers and handles distributed transactions.
-
-**Key Service Methods & Failsafes:**
-* **`createProduct`:** 
-  1. Uploads memory buffers to Cloudinary concurrently via `Promise.all`.
-  2. Saves the polymorphic document to MongoDB.
-  3. **Cloudinary Rollback:** If MongoDB fails (e.g., Duplicate SKU constraint), the service automatically catches the error and deletes the newly uploaded images from Cloudinary to prevent orphaned asset storage bloat.
-
-* **`reserveStock`:** Utilizes MongoDB's atomic `$inc` combined with a `$gte` query firewall. This prevents Race Conditions if multiple users attempt to purchase the final inventory item at the exact same millisecond.  
-
-* **`syncToSearchEngine`:** Executes an asynchronous upsert to the Typesense RAM cluster immediately following a successful MongoDB commit. It utilizes a **Resilience Pattern** where any network or service failure triggers an automatic push to a background retry queue rather than failing the primary transaction. 
-
-## 5. Legal Tax Compliance Engine (Indian GST)
-
-To survive Indian tax audits, the Product Catalog cannot rely on simple "Flat 18%" mathematical multipliers at checkout. Instead, the Catalog natively integrates with the platform's GST Engine.
-
-**The Base Schema Upgrades:**
-Every product, regardless of its polymorphic type, is legally required to hold two tax attributes at the MongoDB layer:
-* **`hsnCode`**: A 4-8 digit string mapping the product to its Harmonized System of Nomenclature chapter.
-* **`taxProfile`**: A strict Enum mapping the product to dynamic checkout math. 
-
-**Supported Tax Profiles:**
-* `IMITATION_JEWELLERY` (3%)
-* `LAC_JEWELLERY` (0%)
-* `UNSTITCHED_FABRIC` (5%)
-* `FOOTWEAR` (12%)
-* `GENERAL_ACCESSORY` (18%)
-* `STITCHED_APPAREL` (Dynamic: 5% or 18% based on the final post-coupon checkout price).
-
 ## 6. Edge Cache & Performance Shielding
 
-The public-facing catalog is designed to survive "Thundering Herd" traffic spikes (e.g., thousands of users hitting the homepage during a flash sale) without crashing the MongoDB cluster.
+| Feature | Implementation | Benefit |
+|---------|----------------|---------|
+| **Redis edge cache** | `cacheMiddleware(300)` on all GET routes. | Serves JSON from RAM (~2ms) for 5 minutes. 10,000 concurrent users → only 1 MongoDB query. |
+| **Cache invalidation** | `CacheManager.invalidateCachePattern` fired after admin mutations. | Ensures public catalog sees fresh data immediately. |
+| **Typesense DLQ** | Failed syncs go to `search-sync-queue` (BullMQ) with 10 attempts, exponential backoff (5s, 10s, 20s…). | Guarantees eventual consistency without blocking primary DB transaction. |
 
-* **Public Read Shielding:** All `GET /api/v1/products` routes are wrapped in `cacheMiddleware(300)`. This forces responses to be served directly from Redis RAM (~2ms) for 5 minutes. 10,000 users refreshing the homepage will only result in 1 actual MongoDB query.
-* **Admin Mutation Invalidation:** To prevent customers from seeing stale prices after an Admin edits the catalog, all Admin mutation routes (`POST`, `PATCH`, `DELETE`) trigger a **Fire-and-Forget** `CacheManager.invalidateCachePattern('/api/v1/products')` command. This instantly purges the Redis RAM in the background without slowing down the Admin's API response time.
+---
 
-* **Search Synchronization Resilience (Typesense DLQ)** The system implements an Eventual Consistency protocol to ensure the search engine never desyncs from the primary database, even during network outages.  
+## 7. Security & Validation Firewalls
 
-  * **Resilience Mechanism:** All outbound synchronization requests (Upsert/Delete) are wrapped in a failsafe block.
-  * **The Dead Letter Queue (DLQ):** If a connection to Typesense fails, the product payload is pushed to the `search-sync-queue` via BullMQ.
-  * **Exponential Backoff:** The queue is configured for **10 attempts** with an **exponential backoff strategy** (starting at 5 seconds). This guarantees that "Ghost Products" are eliminated once the search cluster recovers.
+| Threat | Mitigation |
+|--------|------------|
+| **NoSQL injection** | Zod schemas + `Sanitizer.sanitize()` strips `$` and `.` keys. |
+| **Prototype pollution** | `Sanitizer.PROHIBITED_KEYS` removes `__proto__`, `constructor`, `prototype`. |
+| **Mass assignment** | Zod schemas only allow documented fields; extra fields are stripped. |
+| **Malicious image uploads** | Multer MIME filter (only JPEG/PNG/WebP), 10MB limit, Cloudinary re‑encodes. |
+| **DoS (public catalog)** | `standardLimiter` (100 req/15 min) + edge cache. |
+| **Admin RBAC** | `restrictTo("ADMIN")` on all write endpoints. |  
+
 ---  
 
-**Standard Documentation | Reshma-Core Architecture**
+## 8. Related Files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/products/product.admin.controller.ts` | Admin CRUD, cache invalidation. |
+| `src/modules/products/product.public.controller.ts` | Public listing and detail. |
+| `src/modules/products/product.service.ts` | Core logic – creation, update, stock reservation, search sync. |
+| `src/modules/products/models/base-product.model.ts` | Mongoose base schema, indexes, pre‑delete hook. |
+| `src/modules/products/models/*.model.ts` | Discriminator models (bangle, apparel, fabric, innerwear, accessory). |
+| `src/modules/products/interfaces/*.ts` | TypeScript interfaces for base and discriminators. |
+| `src/modules/products/dtos/product.admin.dto.ts` | Zod discriminated union for creation/update. |
+| `src/modules/products/dtos/product.public.dto.ts` | Query validation (pagination, filters). |
+| `src/shared/middlewares/cache.middleware.ts` | Redis edge cache. |
+| `src/shared/middlewares/upload.middleware.ts` | Multer memory storage, file filter. |
+| `src/config/cloudinary.ts` | Upload/delete utilities. |
+| `src/shared/queues/export.queue.ts` (search sync) | Dead‑letter queue for Typesense retries. |  
+
+---  
+
+## 9. See Also
+
+- [Database Design – Polymorphic Catalog](../architecture/database-design.md#database-design--polymorphic-catalog)
+- [Product Catalog Schema (Field Mapping)](../architecture/product-catalog.md)
+- [Cart Module](./cart-module.md) – uses live product prices.
+- [Order Module](./order-module.md) – uses `reserveStock` during checkout.
+- [Tax & GST Engine](../architecture/legal-tax-compliance.md)
+- [Security Hardening](../architecture/legal-tax-compliance.md) – sanitisation and rate limiting.
+- [Edge Cache & Workers](../architecture/edge-cache.md)  
+
+---  
+
+*The Reshma-Core Team*  

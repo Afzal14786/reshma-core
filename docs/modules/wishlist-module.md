@@ -2,161 +2,284 @@
 
   # Wishlist Module Architecture
   
-  **The read-optimized, concurrency-safe sandbox for deferred purchase intent and customer retention.**
+  **The read‑optimized, concurrency‑safe sandbox for deferred purchase intent and customer retention.**
 
   [![MongoDB](https://img.shields.io/badge/MongoDB-Atomic_Operators-47A248?style=flat&logo=mongodb&logoColor=white)](#)
   [![Mongoose](https://img.shields.io/badge/Mongoose-Lazy_Initialization-880000?style=flat&logo=mongoose&logoColor=white)](#)
   [![Zod](https://img.shields.io/badge/Zod-Payload_Firewalls-3068b7?style=flat)](#)
+  [![BullMQ](https://img.shields.io/badge/BullMQ-Not_Used-FF6B6B?style=flat)](#)
 
 </div>
 
+---
+
 ## 1. Executive Summary & Domain Boundaries
 
-The Wishlist Module (`src/modules/wishlists/`) handles deferred purchase intent. Unlike a Cart—which is highly volatile and tightly coupled to checkout math—a Wishlist acts as persistent, long-term storage. Because users treat wishlists as indefinite bookmarks, this module is engineered strictly for **Read Optimization** and **Data Hygiene**. 
+The Wishlist Module (`src/modules/wishlists/`) handles **deferred purchase intent**. Unlike a Cart—which is highly volatile and tightly coupled to checkout math—a Wishlist acts as persistent, long‑term storage. Because users treat wishlists as indefinite bookmarks, this module is engineered strictly for **Read Optimization**, **Data Hygiene**, and **Atomic Concurrency Control**.
 
 **Base Route:** `/api/v1/wishlists`
 
-## 2. Database Architecture & BSON Optimization
+**Key architectural decisions:**
 
-A naive approach to wishlists is embedding an array of `ObjectId` strings directly on the `User` document. We explicitly rejected this to protect the Node.js memory heap. If a user bookmarks 500 items, dragging that array into memory during every login or profile update creates severe BSON bloat.
-
-### A. The Dedicated Collection
-We implemented a dedicated `Wishlist` collection enforcing a strict One-to-One relationship with the User via a `unique: true` database index. This ensures wishlist queries are isolated from core identity operations.
-
-### B. Sub-Document Optimization (`_id: false`)
-Within the `items` array, MongoDB natively generates a unique 24-character hex `_id` for every sub-document. For a wishlist, this is wasted disk space. We explicitly set `{ _id: false }` on the `WishlistItemSchema`. We query and mutate items relying entirely on the referenced `product` ObjectId, significantly reducing the overall RAM footprint of the collection.
-
-### C. Zero-Price Persistence
-Prices and inventory fluctuate. The Wishlist schema intentionally omits pricing or `isActive` status. It stores only the `product` ID and an `addedAt` timestamp[cite: 9].  
-
-The service layer dynamically injects the live state via Mongoose `.populate()` at runtime[cite: 9].
+| Decision | Implementation | Consequence |
+|----------|----------------|--------------|
+| **Dedicated collection** | `Wishlist` model with `user: { unique: true }` | Queries isolated from `User` document; no profile bloat. |
+| **Sub‑document `_id: false`** | `WishlistItemSchema` disables automatic `_id` generation | Saves disk space and RAM for large wishlists. |
+| **Zero‑price persistence** | Stores only `product` ObjectId + `addedAt` timestamp | Live prices/inventory fetched via `.populate()` at read time. |
+| **Atomic `$push` with idempotency guard** | `updateOne({ "items.product": { $ne: productId } }, { $push })` | Prevents duplicates even without frontend debouncing. |
+| **Self‑healing read cycle** | `getWishlist` filters out inactive products and purges them via `$pull` | Users never see ghost items; database stays clean. |
+| **Lazy initialization + E11000 catcher** | Create only on first add; catch duplicate key race | Zero waste for inactive users; handles concurrent first writes. |
 
 ---
 
-## 3. Concurrency & The "Lost Update" Problem
+## 2. API Endpoints (All Private, require JWT)
 
-Handling rapid, concurrent mutations in Node.js (which runs on a single-threaded event loop) requires delegating lock management to the MongoDB C++ storage engine. We **completely bypass** Mongoose's `.save()` method for item additions to avoid Race Conditions[cite: 9].
+All routes are prefixed with `/api/v1/wishlists` and protected by `standardLimiter` + `protect` middleware.
 
-### The Threat Vector
-If a user rapidly taps "Add to Wishlist" on two different products across two browser tabs, Node.js might pull the document into memory twice simultaneously. If both threads call `.save()`, the slower thread overwrites the database, permanently deleting the first item (The "Lost Update" Problem).
+| Method | Route | Description | Validation |
+|--------|-------|-------------|-------------|
+| `GET` | `/` | Fetch user’s wishlist (self‑healing) | – |
+| `POST` | `/add` | Add product to wishlist | `AddWishlistItemSchema` |
+| `DELETE` | `/item/:productId` | Remove a specific product | `RemoveWishlistItemSchema` (params) |
+| `POST` | `/move-to-cart/:productId` | Transfer item to cart (atomic cross‑module) | `MoveToCartSchema` (params + body) |
+| `DELETE` | `/clear` | Empty entire wishlist | – |
 
-### The Atomic Solution
-The `addItem` service method relies exclusively on MongoDB Atomic Operators[cite: 9]:
-
-1. **Idempotency Firewall:** The `$push` operation is explicitly guarded by a query parameter: `"items.product": { $ne: safeProductId }`[cite: 9].  
-
-    This physically prevents MongoDB from inserting duplicate products, even if the frontend fails to debounce user clicks[cite: 9].
-
-2. **Atomic Execution:** `Wishlist.updateOne({ ... }, { $push: ... })` executes entirely within the database engine[cite: 9], ensuring absolute mathematical consistency without requiring heavy multi-document ACID transactions.
+> **Note:** All payloads are validated with Zod `.strict()`, rejecting any extra fields.
 
 ---
 
-## 4. Initialization & State Management Workflows
+## 3. Database Architecture & BSON Optimization
 
-### A. Lazy Initialization & The E11000 Catcher
-Creating a blank wishlist for every user at registration wastes database capacity. Instead, the module uses **Lazy Initialization**[cite: 9].  
+### 3.1 Dedicated Collection (Not Embedded in User)
 
-When `addItem` is called, it checks if a wishlist exists[cite: 9].  
+A naive approach would embed a `wishlist` array directly on the `User` document. We explicitly rejected this because a user could bookmark hundreds of products, dragging massive BSON objects into memory during every login or profile update.
 
-If not, it attempts to create one[cite: 9].  
+**Solution:** A separate `Wishlist` collection with a `unique: true` index on `user` guarantees a one‑to‑one relationship and isolates wishlist queries from core identity operations.
 
-However, to handle the edge case of concurrent initializations, the creation block is wrapped in a `try/catch` specifically targeting MongoDB Error `11000` (Duplicate Key)[cite: 9].  
+### 3.2 Sub‑document Optimization (`_id: false`)
 
-If a parallel thread already created the document a millisecond prior, the service gracefully catches the error and proceeds to the `$push` execution[cite: 9].
+MongoDB automatically generates a 24‑byte `_id` for every sub‑document in an array. For a wishlist, this is wasted disk space and RAM. The schema explicitly disables it:
 
-### B. The Self-Healing Read Cycle
-E-commerce catalogs change. Admins delete products or toggle `isActive: false`. 
-When `getWishlist` is invoked, it populates the items[cite: 9].  
+```typescript
+const WishlistItemSchema = new Schema(
+  { product: { type: Schema.Types.ObjectId, ref: "BaseProduct", required: true }, addedAt: { type: Date, default: Date.now } },
+  { _id: false }   // ← prevents bloat
+);
+```  
 
-The service iterates through the array and identifies "Ghost Items" (products that return `null` or `isActive: false`)[cite: 9].  
+### 3.3 Zero‑Price Persistence  
 
-It collects these dead ObjectIds and fires an asynchronous, atomic `$pull` command to silently purge them from the database[cite: 9].  
+Prices, discounts, and `isActive` status change daily. Storing them in the wishlist would cause stale data. The schema stores **only** the `product` ID and an `addedAt` timestamp. Live data is injected at read time via Mongoose `.populate()`.  
 
-The user is returned a mathematically clean array without experiencing application crashes.
+---  
 
----
+## 4. Concurrency & The "Lost Update" Problem
 
-## 5. Inter-Domain Communication: Move to Cart
+### 4.1 The Threat Vector
 
-Bridging the Wishlist and the Cart is the most delicate operation in this module. The Wishlist must transfer the item without exposing the business to inventory vulnerabilities (like bypassing stock limits).
+If a user rapidly taps "Add to Wishlist" on two different products across two browser tabs, Node.js might pull the same wishlist document into memory twice. If both threads call `.save()`, the slower thread overwrites the database, permanently deleting the first item – the classic **Lost Update** problem.
 
-* **The Setup:** The user triggers `POST /move-to-cart/:productId` and provides their `selectedAttributes` (e.g., Size, Color)[cite: 9].
-* **The Handoff:** The `WishlistService` intentionally refuses to execute cart logic. It directly calls `CartService.addItem(safeUserId, payload)`[cite: 9].
-* **ACID Assurance:** `CartService` operates within a strict MongoDB `startSession()` transaction. It checks live stock, reserves the inventory, and recalculates promotional coupons.
-* **The Cleanup:** If (and only if) the `CartService` resolves successfully, the `WishlistService` executes an atomic `$pull` to surgically remove the item from the wishlist[cite: 9]. If the cart rejects the item (e.g., Out of Stock), the execution throws an `AppError`, preserving the item safely in the user's wishlist[cite: 9].
+### 4.2 The Atomic Solution
 
----
+The `addItem` method **never** uses `.save()`. Instead, it relies on MongoDB atomic update operators:  
 
-## 6. Visual Workflow (Move To Cart Lifecycle)
+```typescript
+await Wishlist.updateOne(
+  {
+    user: { $eq: safeUserId },
+    "items.product": { $ne: safeProductId }   // ← idempotency guard
+  },
+  { $push: { items: { product: new Types.ObjectId(safeProductId) } } }
+);
+```  
+
+- **Idempotency Firewall:** The query condition "items.product": { $ne: safeProductId } prevents MongoDB from inserting a duplicate, even if the frontend fails to debounce clicks.
+- **Atomic Execution:** The entire updateOne runs inside the database engine – no race conditions.  
+
+---  
+
+## 5. Initialization & State Management
+
+### 5.1 Lazy Initialization + E11000 Catcher
+
+Creating a blank wishlist for every user at registration wastes capacity. Instead, the module creates the wishlist **only** when the user adds their first item.
+
+However, two concurrent `addItem` requests could both see “no wishlist exists” and both attempt to create one. The second would hit a **duplicate key error (E11000)**. The service gracefully handles this:  
+
+```typescript
+try {
+  await Wishlist.create([{ user: safeUserId, items: [] }]);
+} catch (err: unknown) {
+  const mongoError = err as { code?: number };
+  if (mongoError.code !== 11000) throw err;   // ignore duplicate key
+}
+```  
+
+If a parallel thread already created the document, the error is swallowed and execution proceeds to the atomic $push.  
+
+### 5.2 Self‑Healing Read Cycle
+
+When `getWishlist` is called:
+
+1. It populates the `items.product` field with live product data.
+2. It iterates through the array, identifying “ghost items” (products that are `null`, deleted, or `isActive: false`).
+3. It collects their ObjectIds and fires an **atomic** `$pull` to silently purge them from the database.
+4. The user receives a mathematically clean array without ever seeing broken references.  
+
+```typescript
+if (deadProductIds.length > 0) {
+  await Wishlist.updateOne(
+    { user: { $eq: safeUserId } },
+    { $pull: { items: { product: { $in: deadProductIds } } } }
+  );
+}
+```  
+
+---  
+
+## 6. Inter‑Domain Communication: Move to Cart
+
+The most delicate operation is transferring an item from the wishlist to the cart. This must guarantee that inventory limits are respected and that the item is **not** removed from the wishlist if the cart operation fails.
+
+### Sequence Diagram  
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User
-    participant WishlistController
+    participant Controller
     participant WishlistService
     participant CartService
     participant MongoDB
 
-    User->>WishlistController: POST /move-to-cart/:productId (Size: M)
-    WishlistController->>WishlistService: moveToCart(userId, productId, payload)
+    User->>Controller: POST /move-to-cart/:productId (quantity, selectedAttributes)
+    Controller->>WishlistService: moveToCart(userId, productId, payload)
     
-    %% Verification Phase
-    WishlistService->>MongoDB: findOne(Wishlist)
-    MongoDB-->>WishlistService: Returns Document
-    WishlistService->>WishlistService: Verify item exists in array
-
-    %% Cross-Module Handoff
-    Note over WishlistService, CartService: Cross-Module Delegation
-    WishlistService->>CartService: CartService.addItem(userId, payload)
-    
-    %% Cart ACID Transaction
-    rect rgb(30, 30, 30)
-        Note right of CartService: Cart ACID Session
-        CartService->>MongoDB: Check Product Stock
-        MongoDB-->>CartService: Stock = 5
-        CartService->>MongoDB: Atomic Cart $push
-        CartService->>CartService: Recalculate Coupons
-        CartService-->>WishlistService: Success (Returns updated Cart)
+    rect rgb(30,30,30)
+        Note over WishlistService,MongoDB: 1. Verification
+        WishlistService->>MongoDB: find wishlist for user
+        MongoDB-->>WishlistService: wishlist document
+        WishlistService->>WishlistService: verify item exists
     end
 
-    %% Wishlist Cleanup
-    Note over WishlistService, MongoDB: Atomic Cleanup
-    WishlistService->>MongoDB: updateOne({ $pull: { items: { product: productId } } })
-    WishlistService-->>WishlistController: Returns healed Wishlist
-    WishlistController-->>User: 200 OK (Item Moved)
+    rect rgb(40,40,40)
+        Note over WishlistService,CartService: 2. Cross‑module handoff
+        WishlistService->>CartService: CartService.addItem(userId, payload)
+        CartService->>MongoDB: start transaction, check stock
+        MongoDB-->>CartService: stock available
+        CartService->>MongoDB: atomic cart $push, commit
+        CartService-->>WishlistService: success (updated cart)
+    end
+
+    rect rgb(30,30,30)
+        Note over WishlistService,MongoDB: 3. Atomic cleanup
+        WishlistService->>MongoDB: updateOne({ $pull: { items: { product: productId } } })
+        MongoDB-->>WishlistService: acknowledged
+    end
+
+    WishlistService-->>Controller: fresh wishlist
+    Controller-->>User: 200 OK (item moved)
 ```  
 
---- 
+**Critical guarantee:** If `CartService.addItem` fails (e.g., out of stock, invalid attributes), it throws an `AppError`. The wishlist `$pull` is **never** executed, leaving the item safely in the wishlist.  
+
+---  
 
 ## 7. Security & OWASP Hardening
 
-The Wishlist module sits behind multiple layers of strict validation to prevent malicious exploitation [cite: 9].
+The Wishlist module sits behind multiple layers of strict validation and operational guards.
 
-### A. CWE-400: Uncontrolled Resource Consumption (Memory Exhaustion)
+### A. CWE‑400: Uncontrolled Resource Consumption (Memory Exhaustion)
 
-To prevent bad actors from overloading the database and crashing the Node.js V8 heap during `.populate()` execution, the `addItem` service implements a hard capacity firewall [cite: 9].  
+To prevent a malicious user from filling their wishlist with thousands of items (which would bloat the database and crash the Node.js heap during `.populate()`), the `addItem` service implements a **hard capacity firewall**:  
 
-If `wishlist.items.length >= 100`, the API instantly rejects the request with a `400 Bad Request` [cite: 9].
+```typescript
+if (existingWishlist.items.length >= 100) {
+  throw new AppError(HTTP_STATUS.BAD_REQUEST, "Wishlist capacity limit (100) reached.");
+}
+```  
 
-### B. CWE-943: NoSQL Operator Injection
+### B. CWE‑943: NoSQL Operator Injection  
+All incoming `productId` parameters are validated against a strict regex in `wishlist.dto.ts`:  
+```typescript
+const objectIdValidator = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid Product ID format");
+```  
 
-The `wishlist.dto.ts` applies the `objectIdValidator` to every incoming parameter [cite: 9].  
+This makes it mathematically impossible for an attacker to pass a MongoDB operator object (e.g., `{ "$ne": null }`) through the URL or request body.  
 
-By strictly forcing the `productId` to match the regex `/^[0-9a-fA-F]{24}$/`, we make it mathematically impossible for an attacker to pass a MongoDB query object (e.g., `{ "$ne": null }`) through the URL or Body [cite: 9].
+### C. CWE‑117: Improper Output Neutralization (Log Injection)  
 
-### C. CWE-117: Improper Output Neutralization (Log Injection)
+Every user‑controlled input (userId, productId) passed to the logger is sanitized with:  
 
-All user-controlled inputs (User IDs, Product IDs) are funneled through the `safeLog()` private utility before reaching the Winston logger [cite: 9].  
+```typescript
+private static safeLog(message: string): string {
+  return message.replace(/[\r\n]/g, "");
+}
+```  
 
-This `.replace(/[\r\n]/g, "")` operation strips carriage returns, preventing attackers from forging fake, multiline log entries to obscure their activity [cite: 9].
+This strips carriage returns and line feeds, preventing attackers from forging fake multi‑line log entries.  
 
-### D. CWE-1321: Improperly Controlled Modification of Object Prototype Attributes
+### D. CWE‑1321: Prototype Pollution  
 
-The `AddWishlistItemSchema` and `MoveToCartSchema` invoke Zod's `.strict()` method [cite: 9].  
+All Zod schemas use `.strict()`, which rejects any request containing undocumented keys. This neutralises prototype pollution attempts that try to inject `__proto__` or `constructor` properties.  
 
-Any request containing undocumented keys is physically dropped before the Express Controller executes, entirely neutralizing Prototype Pollution attempts [cite: 9].
+---  
 
----
+## 8. File Structure Reference
 
-**Standard Documentation | Reshma-Core Architecture**
+| File | Responsibility |
+|------|----------------|
+| `wishlist.routes.ts` | Route definitions with `standardLimiter`, `protect`, `validate` |
+| `wishlist.controller.ts` | HTTP boundary; wraps methods with `catchAsync`; calls service |
+| `wishlist.service.ts` | Core logic: add (atomic), remove, clear, moveToCart, self‑healing read, DPDP deletion |
+| `wishlist.model.ts` | Mongoose schemas (`WishlistItemSchema` with `_id: false`, `WishlistSchema` with unique user index) |
+| `wishlist.interface.ts` | TypeScript interfaces (`IWishlistItem`, `IWishlist`) |
+| `wishlist.dto.ts` | Zod schemas: `objectIdValidator`, `AddWishlistItemSchema`, `RemoveWishlistItemSchema`, `MoveToCartSchema` |
+
+### Related external modules
+
+- `src/modules/cart/cart.service.ts` – consumed by `moveToCart`
+- `src/modules/products/models/base-product.model.ts` – populated for live product data
+- `src/shared/middlewares/rate-limit.middleware.ts` – `standardLimiter`
+- `src/shared/middlewares/auth.middleware.ts` – `protect`  
+
+---  
+
+## 9. DPDP / GDPR Integration
+
+When a user exercises their Right to be Forgotten (account deletion), the `UserService.deleteAccount` saga calls `WishlistService.deleteUserWishlist` within the same ACID transaction. This permanently removes the entire wishlist document, ensuring no orphaned data remains.  
+
+```typescript
+public static async deleteUserWishlist(userId: string, session: mongoose.ClientSession) {
+  return await Wishlist.deleteOne({ user: { $eq: safeUserId } }, { session });
+}
+```  
+
+---  
+
+## 10. Summary of Operational Guarantees
+
+| Concern | Guarantee |
+|---------|------------|
+| **Duplicate items** | Atomic `$push` with `$ne` guard prevents duplicates at database level. |
+| **Lost updates** | No `.save()` – only atomic `updateOne` and `findOneAndUpdate`. |
+| **Concurrent first write** | `E11000` catcher handles duplicate key gracefully. |
+| **Ghost/deleted products** | Self‑healing read purges them automatically. |
+| **Inventory integrity on move‑to‑cart** | Cart transaction must succeed before wishlist `$pull`; otherwise item stays. |
+| **Wishlist bloat** | Hard cap at 100 items. |
+| **NoSQL injection** | Zod `objectIdValidator` regex rejects operators. |
+| **Log injection** | `safeLog` strips CR/LF. |   
+
+---  
+
+## See Also
+
+- [Cart Module](./cart-module.md) – cross‑module handoff for `moveToCart`.
+- [Product Module](./product-module.md) – `BaseProduct` population and `isActive` flag.
+- [User Module](./user-module.md) – account deletion saga that calls `deleteUserWishlist`.
+- [Security Hardening](../architecture/security-hardening.md) – rate limiting, validation, and OWASP controls.
+- [Database Design](../architecture/database-design.md) – embedded vs. referenced decisions.  
+
+--- 
+
+*The Reshma-Core Team*  

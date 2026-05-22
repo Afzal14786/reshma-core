@@ -1,12 +1,13 @@
 <div align="center">
 
   # Notification & Queue Engine
-  
+
   **The central nervous system of Reshma-Core. A hybrid Facade architecture managing persistent In-App alerts (MongoDB) and asynchronous transactional emails (BullMQ/Redis).**
 
   [![BullMQ](https://img.shields.io/badge/BullMQ-Background_Workers-FF4081?style=flat)](https://bullmq.io/)
   [![Redis](https://img.shields.io/badge/Redis-Message_Broker-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io/)
   [![Nodemailer](https://img.shields.io/badge/Nodemailer-SMTP_Transport-14C3B8?style=flat)](https://nodemailer.com/)
+  [![MJML](https://img.shields.io/badge/MJML-Responsive_Templates-00B2A9?style=flat)](https://mjml.io/)
 
 </div>
 
@@ -14,18 +15,16 @@
 
 ## Overview
 
-The Notification Module (`src/modules/notifications/`) utilizes the **Facade Design Pattern** to completely decouple business logic from messaging infrastructure. It handles two distinct notification streams:
-1. **In-App Notifications:** Persistent alerts saved to MongoDB, displayed in the user's dashboard (e.g., "Welcome to Reshma Bangles" or "Security Alert").
-2. **Email Notifications:** Asynchronous background jobs pushed to a Redis queue, constructed via strictly-typed HTML templates, and dispatched via SMTP.
+The Notification Module uses the **Facade Design Pattern** to decouple business logic from messaging infrastructure. It handles two streams:
+
+1. **In-App Notifications** – persistent alerts stored in MongoDB, displayed in the user’s dashboard (bell icon).
+2. **Email Notifications** – asynchronous background jobs (BullMQ/Redis) that compile HTML templates (MJML) and dispatch via SMTP.
+
+All email templates are strictly typed using **TypeScript discriminated unions**, ensuring compile‑time safety. In‑app notifications are written to MongoDB in a **fire‑and‑forget** manner to avoid blocking the HTTP response.
 
 ---
 
 ## Architectural Flow & Performance Optimization
-
-The module acts as a traffic router. When an event occurs in the system (e.g., a user changes their password), the origin service calls the `NotificationService`. 
-
-**Performance Note (Fire-and-Forget):** 
-While pushing to Redis is sub-millisecond, writing to a MongoDB cluster can cause latency spikes. To prevent notification dispatch from bottlenecking the main HTTP response, all `Notification.create()` DB writes intentionally omit the `await` keyword. They are offloaded to the Node.js background event loop with a `.catch()` block, guaranteeing that the HTTP response returns to the client instantly.  
 
 ```mermaid
 graph TD
@@ -41,89 +40,139 @@ graph TD
     I[React Frontend] -->|GET /notifications| H
 ```  
 
+**Performance note:**  
+
+- Pushing to Redis (BullMQ) is sub‑millisecond.
+- Writing to MongoDB can cause latency spikes, so `Notification.create()` calls **omit** `await` and use `.catch()` for error logging. The HTTP response returns instantly.  
+
+---  
+
 ## Core Components
 
 ### 1. The Facade Layer (`notification.service.ts`)
 
-The unified entry point for the entire application. It contains highly specific trigger methods that abstract away the payload structures.
+Central entry point for the whole application. Provides specific trigger methods that abstract payload structures.
 
-- `sendOtpEmail(to, firstname, otp)`: Dispatches an OTP to the email queue.
+**Key methods:**
 
-- `triggerWelcome(...)`: Hybrid Method. Dispatches a welcome email to BullMQ and triggers an asynchronous In-App dashboard alert.
+- `sendOtpEmail()` – queues OTP email.
+- `triggerWelcome()` – hybrid: BullMQ email + async in‑app notification.
+- `sendPasswordUpdateConfirmation()` – security alert email + in‑app.
+- `sendOrderConfirmationNotification()` – order confirmation email + in‑app.
+- `sendOrderCancelledNotification()` – cancellation email with reason.
+- `sendOrderShippedNotification()` – tracking email + in‑app.
+- `sendOrderDeliveredNotification()` – delivery email + in‑app.
+- `sendReturnRequested/Approved/Rejected/RefundedNotification()` – return lifecycle emails + in‑app.
+- `sendTicketCreatedNotification()` / `sendTicketReplyNotification()` – support ticket emails + in‑app.
+- `sendDataExportEmail()` – DPDP/GDPR data export (attached JSON file).
 
-- `sendPasswordUpdateConfirmation(...)`: Dispatches a security alert email and In-App notification after a password change.
+**Fire‑and‑forget pattern for in‑app notifications:**  
 
-- `sendOrderConfirmationNotification(...)`: (New) Dispatches the `ORDER_CONFIRMATION` job with `orderNumber` and `totalAmount`, while creating a persistent "Order Confirmed" alert in the user's bell icon.
-
-- `sendOrderCancelledNotification(...)`: (New) Dispatches a cancellation alert with the specific reason (e.g., Payment Timeout), ensuring the user is informed of inventory restoration.
-
-- `sendOrderShippedNotification(...)`: Dispatches strictly-typed HTML emails to BullMQ containing `trackingNumber` and `courierName`.  
-- `sendTicketCreatedNotification(...)`: Dispatches an alert confirming receipt of a support request.
-- `sendTicketReplyNotification(...)`: Dispatches an email containing a 100-character preview of an Admin's reply to keep the customer engaged.
-
+```typescript
+Notification.create({ recipientId, type, title, message, link })
+  .catch(err => logger.error(`In-app notification failed: ${err.message}`));
+```  
 
 ### 2. The Presentation Layer (`notification.controller.ts`)
 
-Unlike other controllers, this HTTP layer only handles the retrieval and management of In-App Notifications. It never dispatches emails.
+Only handles **in‑app notifications** (bell icon). Never dispatches emails.
 
-- **Pagination:** Parses `page` and `limit` to handle long notification histories.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/notifications` | `GET` | Paginated, unread notifications for the authenticated user. |
+| `/api/v1/notifications/:id/read` | `PATCH` | Marks a notification as read (IDOR‑protected). |
 
-- **Security:** Guarantees data integrity by enforcing `req.user._id` ownership before fetching or updating a notification.
+### 3. The Compiler & Strict Payload Validation (`compileEmailTemplate`)
 
-### 3. The Compiler & Strict Payload Validation
+- Uses **TypeScript discriminated unions** (`EmailJobPayload`). Each job type has its own required data fields.
+- The `switch` statement is **exhaustive**: if a new `EmailJobType` is added but not handled, the TypeScript compiler will error (using the `never` type).
+- All templates are MJML‑based, compiled to HTML with dark mode support and responsive design.
 
-A strictly-typed utility (`compileEmailTemplate`) used exclusively by the background worker to transform raw Queue JSON into HTML.
+**Exhaustiveness example**
 
-- **Discriminated Unions:** The `EmailJobPayload` utilizes strict TS unions. For example, if a `PROFILE_UPDATE` job is dispatched, the compiler enforces that `changedField` and `time` variables must exist.
-
-- **Order Snapshots:** Updated to handle `orderNumber` and `totalAmount` for professional, human-readable confirmation emails [cite: 1, 2].
-
-- **Strict Exhaustiveness:** Utilizes TypeScript's `never` type. If a new `EmailJobType` is added but missing from the `switch` statement, the application will refuse to compile.
+```typescript
+switch (payload.type) {
+  case "OTP_VERIFICATION": return { subject, html: await otpVerificationTemplate(...) };
+  // ... other cases
+  default:
+    const _exhaustiveCheck: never = payload;
+    throw new Error(`Unhandled email type: ${payload.type}`);
+}
+```  
 
 ---  
+
+## Background Queue Architecture (BullMQ)
+
+### Producers
+
+| Queue | Purpose | File |
+|-------|---------|------|
+| Email Queue | All transactional emails | `email.queue.ts` |
+| Data Export Queue | DPDP/GDPR takeout | `export.queue.ts` |
+| Invoice Queue | PDF generation | `invoice.queue.ts` |
+| Search Sync Queue | Typesense eventual consistency | `product.service.ts` |
+
+### Consumers (Workers)
+
+| Worker | Purpose | Concurrency | Retry |
+|--------|---------|-------------|-------|
+| `email.worker.ts` | Compiles MJML, sends via Nodemailer | N/A (BullMQ default) | 3 attempts, exponential backoff |
+| `export.worker.ts` | Fetches user data, creates JSON, emails | 5 | 3 attempts |
+| `invoice.worker.ts` | Generates PDF, uploads to Cloudinary | 5 | 3 attempts (exponential) |
+| Search sync (DLQ) | Retries failed Typesense ops | N/A | 10 attempts, exponential backoff |  
+
+**Security:** All workers use `safeLog()` to strip `\r\n` from logs (CWE‑117 mitigation).  
+
+---  
+
+## Security & Compliance
+
+| Concern | Mitigation |
+|---------|-------------|
+| IDOR (Insecure Direct Object Reference) | `Notification.findOneAndUpdate({ _id, recipientId: userId })` ensures ownership. |
+| Log injection (CWE‑117) | `safeLog()` strips control characters before Winston logging. |
+| DPDP/GDPR Right to Access | Asynchronous data export (`export.worker.ts`) – email with JSON attachment. |
+| DPDP/GDPR Right to be Forgotten | Account deletion triggers `deleteUserCart`, `deleteUserWishlist` and anonymises orders. |
+| Rate limiting | `standardLimiter` applied before authentication on `/notifications` routes. |
+| Template integrity | MJML compilation errors are caught; fallback plain HTML prevents outage. |
+
+---
 
 ## REST API Specifications (In-App Alerts)
 
-Endpoints exposed to the React frontend to manage the user's bell-icon dashboard.
-
-| Method | Endpoint                               | Access    | Purpose & Flow                                                                                   |
-|--------|----------------------------------------|-----------|--------------------------------------------------------------------------------------------------|
-| GET    | `/api/v1/notifications`                | Protected | Fetches paginated, unread notifications belonging strictly to the authenticated `req.user`.     |
-| PATCH  | `/api/v1/notifications/:id/read`       | Protected | Marks a specific notification as `isRead: true`. Enforces ownership verification to prevent IDOR attacks. |
-
---- 
-
-## Background Queue Architecture (BullMQ) 
-The system utilizes multiple specialized queues to ensure asynchronous resilience and prevent blocking the main Node.js event loop.
-
-### 1. The Producer
-
-Pushes strictly-typed payloads to Redis. These payloads contain only primitive data (strings, numbers) necessary for the job, keeping the Redis memory footprint small.  
-
-  * **Email Queue (`email.queue.ts`)**: Produces `EmailJobPayload` for all transactional communications.
-  * **Search Sync Queue (product.service.ts)**: Manages failed search engine indexing. If Typesense is unreachable, the system pushes an `UPSERT` or `DELETE` action here with a 10-attempt exponential backoff strategy to prevent "Ghost Products."
-
-### 2. The Consumer (Workers)
-
-Background processes initialized in `server.ts` that constantly listen to their respective Redis queues.
-
-  * **Email Worker (`email.worker.ts`)**: * Extracts payload and passes it to `NotificationService.compileEmailTemplate()`.
-  * Injects output into `nodemailer` for SMTP delivery.
-  * **Retry Logic:** Implements automatic exponential backoff for temporary SMTP connection drops.
-
-* **Search Worker:** *(Strategic Implementation)* Consumes synchronization jobs to maintain eventual consistency between MongoDB and the Typesense RAM cluster.
----  
-
-## Security & Reliability Dependencies
-
-- **IDOR Protection:** The `markAsRead` query explicitly requires both the notification `_id` AND the `recipientId: req.user._id` .
-
-- **Winston Telemetry:** Every job queued and alert triggered is logged via Winston to maintain an audit trail for delayed email investigations .
-
-- **Express Rate Limiting:** Applied globally to prevent spamming the notification fetch endpoint .
-
-- **Template Integrity:** Corrected naming conventions (e.g., `order-cancel.ts`) ensure the compiler never hits file-not-found errors .
+| Method | Endpoint | Access | Description |
+|--------|----------|--------|-------------|
+| `GET` | `/api/v1/notifications` | Protected | Paginated, unread notifications (newest first). Supports `?page=1&limit=10`. |
+| `PATCH` | `/api/v1/notifications/:notificationId/read` | Protected | Marks a single notification as read. Verifies `recipientId` matches `req.user._id`. |  
 
 ---  
 
-**Standard Documentation | Reshma-Core Architecture**
+## Related Files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/notifications/notification.controller.ts` | HTTP layer (in‑app only). |
+| `src/modules/notifications/notification.service.ts` | Facade – dispatches emails and in‑app alerts. |
+| `src/modules/notifications/notification.model.ts` | Mongoose schema for in‑app notifications. |
+| `src/modules/notifications/interface/email.interface.ts` | Discriminated union types for email jobs. |
+| `src/shared/queues/email.queue.ts` | BullMQ producer. |
+| `src/shared/queues/email.worker.ts` | BullMQ consumer – compiles HTML, sends SMTP. |
+| `src/shared/queues/export.queue.ts` & `export.worker.ts` | Data portability. |
+| `src/modules/notifications/templates/*.ts` | MJML email templates (welcome, OTP, order, return, support, etc.). |
+| `src/modules/notifications/templates/layout.ts` | Base MJML layout with dark mode, social links, footer. |  
+
+---  
+
+## See Also
+
+- [Background Jobs & Cron](../architecture/background-jobs-and-cron.md) – detailed queue and worker architecture.
+- [Order Module](./order-module.md) – triggers order‑related notifications.
+- [User Module](./user-module.md) – triggers security alerts and data export.
+- [Return Module](./return-module.md) – triggers return lifecycle emails.
+- [Support Module](./support-module.md) – triggers ticket‑related alerts.
+- [Security Hardening](../architecture/security-hardening.md) – CWE‑117 and IDOR mitigations.
+
+---  
+
+*The Reshma-Core Team*  
