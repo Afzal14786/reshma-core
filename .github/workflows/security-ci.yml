@@ -1,0 +1,32 @@
+name: "CI & Basic Security Scan"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  analyze:
+    name: Build & Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Run NPM Audit (Vulnerability Scan)
+      # This will fail the pipeline if High or Critical vulnerabilities are found
+      run: npm audit --audit-level=high
+
+    - name: Verify TypeScript Compilation
+      run: npm run build
