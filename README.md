@@ -164,7 +164,7 @@ Critical variables (see `.env.example` for the full list):
 | `TYPESENSE_HOST` / `API_KEY` | Search engine endpoint                | `localhost` / `your-super-secret-key`                |
 | `SMTP_HOST` / `USER` / `PASS`| Email sending (e.g., Gmail app password) | `smtp.gmail.com`, your email, app password         |
 
-For detailed explanations, see [Environment Variables Guide](./docs/setup/environment-variables.md).  
+For detailed explanations, see [Environment Variables Guide](./docs/getting-started/environment-variables.md).  
 
 ---  
 
@@ -181,7 +181,8 @@ All routes are versioned under `/api/v1`. Standard response format:
 }
 ```  
 
-**Main endpoint groups** (see [API Standards](./docs/api/api-standards.md) for full details):  
+**Main endpoint groups** (see [API Standards](./docs/api/README.md) for full details):  
+
 | Module          | Base Route        | Description                                                       |
 |-----------------|-------------------|-------------------------------------------------------------------|
 | Auth            | `/auth`           | Register, login, refresh, logout, OTP                             |
@@ -254,18 +255,26 @@ All internal documentation lives in the `docs/` folder.
 
 ### Setup & Environment  
 
-* [Local Development Setup](./docs/setup/local-development.md)
-* [Environment Variables Guide](./docs/setup/environment-variables.md)  
+* [Local Development Setup](./docs/getting-started/local-development.md)
+* [Environment Variables Guide](./docs/getting-started/environment-variables.md)
+* [Database Seeding](./docs/getting-started/database-seeding.md)
+* [Docker Setup](./docs/getting-started/docker-setup.md)  
+
+### API Reference & Testing  
+
+* [API Overview](./docs/api/README.md) – base URLs, response shapes, rate limits
+* [Authentication Guide](./docs/api/authentication.md) – detailed token flow 
+* [Error Handling Guide](./docs/api/error-codes.md) – status codes, error shapes
+* [Rate Limiting Guide](./docs/api/rate-limiting.md) – global and route‑specific limits
+* [Testing Runbooks](./docs/api/thunder-tests/) – manual Thunder Client tests for each module
 
 ### Deployment  
 
 The project is ready for production deployment on any cloud platform (AWS ECS, Render, Railway, or a VPS).  
 
-* **Production build** – `npm run build` creates the `dist/` folder.
-* **Start command** – `npm run start` (or `node dist/server.js`).
-* **Docker** – Use the provided `Dockerfile` and `docker-compose.yml`. The multi‑stage build produces a small image with only production dependencies.
-* **CI/CD** – GitHub Actions workflows run CodeQL security scans and Prettier checks on every PR to `main`. Dependabot updates dependencies weekly.
-* **Health check** – `GET /api/v1/health` performs deep pings to MongoDB, Redis, and Typesense – perfect for load balancer liveness probes.
+* [Production Checklist](./docs/deployment/production-checklist.md) – pre‑flight verification
+* [Docker Compose (Production)](./docs/deployment/docker-compose.md) – running docker-compose.prod.yml
+* [CI/CD Automation](./docs/deployment/ci-cd.md) – GitHub Actions, SSH deployment 
 
 For a detailed guide, see [DevOps & Infrastructure](./docs/architecture/devops-and-infrastructure.md).  
 
