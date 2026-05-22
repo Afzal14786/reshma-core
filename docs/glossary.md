@@ -344,7 +344,7 @@ TypeScript‑first schema validation library. Used to validate environment varia
 ## Related Documentation
 
 - [Authentication Guide](./api/authentication.md) – two‑token architecture.
-- [Error Handling Guide](./api/error-handling.md) – HTTP status codes and error shapes.
+- [Error Handling Guide](./api/error-codes.md) – HTTP status codes and error shapes.
 - [Rate Limiting Guide](./api/rate-limiting.md) – all rate limiters.
 - [API Module Docs](./api/README.md) – per‑module endpoint references.
 
