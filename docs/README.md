@@ -108,7 +108,8 @@ Understand the “why” behind the code.
 | [Security Hardening](./architecture/security-hardening.md) | CWE mitigations, Zod firewalls, rate limiting |
 | [Payment Integration (Razorpay)](./architecture/payment-integration.md) | HMAC webhooks, idempotency |
 | [Legal & Tax Compliance (GST)](./architecture/legal-tax-compliance.md) | CGST/SGST/IGST calculations |
-| [Edge Cache & Workers](./architecture/edge-cache-and-workers.md) | Redis caching, BullMQ queues |
+| [Edge Cache](./architecture/edge-cache.md) | | Redis caching, BullMQ queues |
+| [Background Jobs & Cron](./architecture/background-jobs-and-cron.md) | BullMQ queues |
 | [DevOps & Infrastructure](./architecture/devops-and-infrastructure.md) | Horizontal scaling, health checks |
 
 ---
@@ -116,22 +117,22 @@ Understand the “why” behind the code.
 ## Testing & Runbooks
 
 Manual test sequences for each module (Thunder Client / Postman).  
-Located in [`./api/testing/`](./api/testing/).
+Located in [`./api/thunder-tests/`](./api/thunder-tests/).
 
 | Runbook | Module |
 |---------|--------|
-| [Auth Runbook](./api/testing/auth-runbook.md) | Registration, OTP, login, refresh, logout |
-| [User Runbook](./api/testing/user-runbook.md) | Profile, addresses, password change |
-| [Product Runbook](./api/testing/product-runbook.md) | Admin CRUD, polymorphic validation |
-| [Cart Runbook](./api/testing/cart-runbook.md) | Add, merge, coupons |
-| [Order Runbook](./api/testing/order-runbook.md) | Checkout, webhooks, dispatch |
-| [Return Runbook](./api/testing/return-runbook.md) | Initiate, arbitrate, refund |
-| [Interaction Runbook](./api/testing/interaction-runbook.md) | Reviews, comments, voting |
-| [Coupon Runbook](./api/testing/coupon-runbook.md) | Create, apply |
-| [Wishlist Runbook](./api/testing/wishlist-runbook.md) | Add, move, clear |
-| [Search Runbook](./api/testing/search-runbook.md) | Typo tolerance, faceting |
-| [Dashboard Runbook](./api/testing/dashboard-runbook.md) | Metrics, date ranges |
-| [Support Runbook](./api/testing/support-runbook.md) | Tickets, replies, state changes |
+| [Auth Runbook](./api/thunder-tests/auth-runbook.md) | Registration, OTP, login, refresh, logout |
+| [User Runbook](./api/thunder-tests/user-runbook.md) | Profile, addresses, password change |
+| [Product Runbook](./api/thunder-tests/product-runbook.md) | Admin CRUD, polymorphic validation |
+| [Cart Runbook](./api/thunder-tests/cart-runbook.md) | Add, merge, coupons |
+| [Order Runbook](./api/thunder-tests/order-runbook.md) | Checkout, webhooks, dispatch |
+| [Return Runbook](./api/thunder-tests/return-runbook.md) | Initiate, arbitrate, refund |
+| [Interaction Runbook](./api/thunder-tests/interaction-runbook.md) | Reviews, comments, voting |
+| [Coupon Runbook](./api/thunder-tests/coupon-runbook.md) | Create, apply |
+| [Wishlist Runbook](./api/thunder-tests/wishlist-runbook.md) | Add, move, clear |
+| [Search Runbook](./api/thunder-tests/search-runbook.md) | Typo tolerance, faceting |
+| [Dashboard Runbook](./api/thunder-tests/dashboard-runbook.md) | Metrics, date ranges |
+| [Support Runbook](./api/thunder-tests/support-runbook.md) | Tickets, replies, state changes |
 
 ---
 

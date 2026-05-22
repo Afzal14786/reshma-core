@@ -67,7 +67,7 @@ Deep dives into specific business logic, DTOs, and services.
 ### API Standards & Testing
 Rules for RESTful communication and manual runbooks.
 
-* **[API Design Standards](../api/api-standards.md)** – Frontend integration & payload shapes.
+* **[API Design Standards](../api/README.md)** – Frontend integration & payload shapes.
 * **[Global Error Codes](../api/error-codes.md)** – Standardised HTTP responses.
 * **[Auth Runbook](../api/thunder-tests/auth-runbook.md)** – Manual integration testing.
 * **[Product Runbook](../api/thunder-tests/product-runbook.md)** – Polymorphic creation and image uploads.
