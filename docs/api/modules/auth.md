@@ -68,7 +68,8 @@ Create a new user account. An OTP is sent to the provided email address. The use
   "firstname": "Test",
   "lastname": "User",
   "email": "test@example.com",
-  "password": "SecurePassword123!"
+  "password": "SecurePassword123!",
+  "acceptPrivacyPolicy": true
 }
 ```  
 
