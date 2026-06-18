@@ -38,7 +38,7 @@
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
     "node-cron": "^4.2.1",
-    "nodemailer": "^8.0.7",
+    "nodemailer": "^8.0.9",
     "pdfkit": "^0.18.0",
     "rate-limit-redis": "^5.0.0",
     "razorpay": "^2.9.6",
