@@ -35,6 +35,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy only the compiled JavaScript from the builder stage
 COPY --from=builder /app/dist ./dist
 
+# NEW: Create the logs directory and give the 'node' user ownership of it
+RUN mkdir -p logs && chown node:node logs
+
 # SECURITY: Do not run as root. Switch to the unprivileged 'node' user provided by the image.
 USER node
 
