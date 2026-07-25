@@ -10,10 +10,12 @@ services:
     restart: unless-stopped
     ports:
       - "5000:5000"
+    env_file:
+      - .env
     environment:
       - NODE_ENV=development
       - PORT=5000
-      - MONGODB_URI=mongodb://reshma-db:27017/reshmabangles
+      - MONGO_URI=mongodb://reshma-db:27017/reshmabangles
       - REDIS_URL=redis://reshma-redis:6379
       # NEW: Point the API to the internal Typesense container
       - TYPESENSE_HOST=reshma-typesense
@@ -37,9 +39,11 @@ services:
     container_name: reshma-worker
     restart: unless-stopped
     command: ["node", "dist/shared/queues/email.worker.js"] 
+    env_file:
+      - .env
     environment:
       - NODE_ENV=development
-      - MONGODB_URI=mongodb://reshma-db:27017/reshmabangles
+      - MONGO_URI=mongodb://reshma-db:27017/reshmabangles
       - REDIS_URL=redis://reshma-redis:6379
     depends_on:
       reshma-redis:
@@ -53,7 +57,7 @@ services:
     container_name: reshma-redis
     restart: always
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -65,7 +69,7 @@ services:
     container_name: reshma-db
     restart: always
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -82,7 +86,7 @@ services:
       - typesense_data:/data
     # Configure the internal startup command. 
     # Make sure 'your-super-secret-key' matches the TYPESENSE_API_KEY in your .env file!
-    command: '--data-dir /data --api-key=your-super-secret-key --enable-cors=true'
+    command: '--data-dir /data --api-key=${TYPESENSE_API_KEY} --enable-cors=true'
     networks:
       - reshma-network
 
