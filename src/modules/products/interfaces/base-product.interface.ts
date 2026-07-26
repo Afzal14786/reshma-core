@@ -5,24 +5,11 @@ import { TaxProfile } from "@modules/orders/tax.utils";
  * Global Types
  */
 export type ItemType =
-  | "BANGLE"
-  | "APPAREL"
-  | "FABRIC"
-  | "INNERWEAR"
-  | "ACCESSORY";
+  "BANGLE" | "APPAREL" | "FABRIC" | "INNERWEAR" | "ACCESSORY";
 export type MainCategory =
-  | "Sarees"
-  | "Apparel"
-  | "Accessories"
-  | "Innerwear"
-  | "Bangles";
+  "Sarees" | "Apparel" | "Accessories" | "Innerwear" | "Bangles";
 export type SellingUnit =
-  | "Single Piece"
-  | "Meter"
-  | "Set"
-  | "Pair"
-  | "Dozen"
-  | "Pack";
+  "Single Piece" | "Meter" | "Set" | "Pair" | "Dozen" | "Pack";
 
 /**
  * Tracks the exact distribution of star ratings for highly optimized UI rendering
