@@ -48,7 +48,7 @@ const UserSchema = new Schema<IUser>(
     avatar: {
       type: String,
       default:
-        "https://res.cloudinary.com/demo/image/upload/v1/default_avatar.png",
+        "https://res.cloudinary.com/dl9bfojiu/image/upload/v1785015040/leetcode-profile_ot2bwk.jpg",
     },
     gender: { type: String, enum: ["MALE", "FEMALE", "OTHER"] },
     dob: { type: Date },
