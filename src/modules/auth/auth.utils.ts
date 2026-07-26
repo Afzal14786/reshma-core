@@ -55,9 +55,9 @@ export const setAccessCookie = (res: Response, accessToken: string): void => {
   res.cookie("jwt", accessToken, {
     httpOnly: true,
     secure: env.NODE_ENV === "production",
-    sameSite: "strict",
-    signed: true, // Required to satisfy CodeQL User-Controlled Bypass
-    maxAge: 15 * 60 * 1000, // Matches standard 15m access window
+    sameSite: env.NODE_ENV === "production" ? "strict" : "none",
+    signed: true,
+    maxAge: 15 * 60 * 1000, // 15 minutes
   } as const);
 };
 
@@ -77,9 +77,9 @@ export const setRefreshCookie = (res: Response, refreshToken: string): void => {
     expires: new Date(Date.now() + expirationMs),
     httpOnly: true,
     secure: env.NODE_ENV === "production",
+    sameSite: env.NODE_ENV === "production" ? "strict" : "none",
     signed: true,
-    sameSite: "strict", // Mitigates Cross-Site Request Forgery (CSRF)
-  } as const);
+  });
 };
 
 /**
@@ -91,7 +91,7 @@ export const clearRefreshCookie = (res: Response): void => {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
     secure: env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
     signed: true,
   } as const;
 
