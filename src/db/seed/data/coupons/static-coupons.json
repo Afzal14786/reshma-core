@@ -1,0 +1,35 @@
+[
+  {
+    "code": "WELCOME10",
+    "discountType": "PERCENTAGE",
+    "discountValue": 10,
+    "minCartValue": 500,
+    "startDate": "2026-01-01T00:00:00.000Z",
+    "expiryDate": "2026-12-31T23:59:59.999Z",
+    "usageLimit": 100,
+    "usedCount": 0,
+    "isActive": true
+  },
+  {
+    "code": "FLAT200",
+    "discountType": "FLAT",
+    "discountValue": 200,
+    "minCartValue": 1500,
+    "startDate": "2026-01-01T00:00:00.000Z",
+    "expiryDate": "2026-06-30T23:59:59.999Z",
+    "usageLimit": 50,
+    "usedCount": 0,
+    "isActive": true
+  },
+  {
+    "code": "BANGLEFEST",
+    "discountType": "PERCENTAGE",
+    "discountValue": 15,
+    "minCartValue": 1000,
+    "startDate": "2026-03-01T00:00:00.000Z",
+    "expiryDate": "2026-05-31T23:59:59.999Z",
+    "usageLimit": 30,
+    "usedCount": 0,
+    "isActive": true
+  }
+]
