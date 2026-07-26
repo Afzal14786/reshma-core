@@ -594,20 +594,30 @@ export class OrderService {
       session.startTransaction();
 
       try {
-        // ATOMIC RE-VERIFICATION
-        // Guarantee the order wasn't paid via webhook in the milliseconds since we fetched the list
+        // Check if order is still pending (race condition safety)
+        const stillPending = await Order.exists({
+          _id: order._id,
+          orderStatus: "PENDING",
+        }).session(session);
+
+        if (!stillPending) {
+          await session.abortTransaction();
+          continue;
+        }
+
+        // Atomically update to CANCELLED
         const lockedOrder = await Order.findOneAndUpdate(
           { _id: order._id, orderStatus: "PENDING" },
           { $set: { orderStatus: "CANCELLED" } },
-          { session, new: true },
+          { session, returnDocument: "after" }, // updated
         );
 
-        // If lockedOrder is null, the status changed (likely PAID via webhook). Skip cancellation.
         if (!lockedOrder) {
           await session.abortTransaction();
           continue;
         }
 
+        // Restore inventory for each item
         for (const item of lockedOrder.items) {
           await Product.findOneAndUpdate(
             { _id: { $eq: String(item.product) } },
@@ -623,7 +633,7 @@ export class OrderService {
           ),
         );
 
-        // Executed outside the transaction, and only if the commit succeeded
+        // Send notification (outside transaction)
         try {
           const userDoc = await User.findOne({
             _id: { $eq: String(lockedOrder.user) },
@@ -649,8 +659,11 @@ export class OrderService {
         }
       } catch (error) {
         await session.abortTransaction();
+        const errMsg = error instanceof Error ? error.message : String(error);
         logger.error(
-          this.safeLog(`[Cron] Failed to restore order ${order.orderNumber}`),
+          this.safeLog(
+            `[Cron] Failed to restore order ${order.orderNumber}: ${errMsg}`,
+          ),
         );
         continue;
       } finally {

@@ -114,7 +114,7 @@ export class AuthController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const refreshToken = req.cookies.refreshToken;
+      const refreshToken = req.signedCookies?.refreshToken;
 
       if (!refreshToken) {
         // Return a specific 401 message so the frontend router knows to hard-redirect to /login
@@ -234,7 +234,7 @@ export class AuthController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const refreshToken = req.cookies.refreshToken;
+      const refreshToken = req.signedCookies?.refreshToken;
 
       if (refreshToken) {
         await AuthService.logoutUser(refreshToken);

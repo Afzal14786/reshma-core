@@ -25,7 +25,7 @@ app.use(helmet());
 // CORS allows our specific frontend domain to communicate with this API securely
 app.use(
   cors({
-    origin: env.CLIENT_URL,
+    origin: [env.CLIENT_URL, env.ADMIN_URL],
     credentials: true, // Crucial for accepting HttpOnly cookies
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   }),
@@ -64,7 +64,7 @@ app.use(
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
 // Parse cookies attached to the client request
-app.use(cookieParser(env.JWT_ACCESS_SECRET));
+app.use(cookieParser(env.COOKIE_SECRET));
 
 /**
  * Mount Global Router

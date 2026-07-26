@@ -1,0 +1,24 @@
+{
+  "categories": [
+    {
+      "main": "Bangles",
+      "sub": ["Festive Wear", "Daily Wear", "Bridal Collection", "Traditional"]
+    },
+    {
+      "main": "Apparel",
+      "sub": ["Ethnic Wear", "Western Wear", "Kurtis", "Lehengas", "Sarees"]
+    },
+    {
+      "main": "Sarees",
+      "sub": ["Silk Sarees", "Cotton Sarees", "Banarasi Sarees", "Chanderi Sarees", "Georgette Sarees", "Unstitched Suit", "Dress Material"]
+    },
+    {
+      "main": "Innerwear",
+      "sub": ["Everyday Bra", "Shapewear", "Lingerie"]
+    },
+    {
+      "main": "Accessories",
+      "sub": ["Jewelry", "Handbags", "Scarves", "Hair Accessories"]
+    }
+  ]
+}
