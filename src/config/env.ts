@@ -28,11 +28,13 @@ const envSchema = z.object({
     .min(10, "Access Secret must be at least 10 characters long"),
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
 
-  // Refresh tokens are long-lived and live in HttpOnly cookies to prevent CSRF and XSS.
+  // Refresh tokens are long-lived anad live in HttpOnly cookies to prevent CSRF and XSS.
   JWT_REFRESH_SECRET: z
     .string()
     .min(10, "Refresh Secret must be at least 10 characters long"),
   JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
+
+  COOKIE_SECRET: z.string().min(10, "Cookie secret is required"),
 
   GOOGLE_CLIENT_ID: z.string().min(1, "Google Client ID is required"),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
