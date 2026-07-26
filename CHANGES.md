@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Added – Comprehensive Database Seeding System 2026-07-26  
+
+A fully-featured, modular seeding system has been introduced to bootstrap the application with realistic, interconnected data for development and testing.  
+
+
+#### Core Infrastructure
+- **Central orchestrator** (`src/db/seed.ts`) – connects to MongoDB and runs all seeders in dependency order.
+- **Shared types** (`src/db/seeds/types.ts`) – ensures type safety across all generators and seeders.
+- **Base utilities** (`src/db/seeds/generators/base-generator.ts`) – provides reusable functions: `pickRandom`, `generateSKU`, `generatePrice`, image pools, etc.
+
+#### Static Data Files
+- Admin user JSON (`src/db/seeds/data/users/admin.json`) – pre-configured admin account with address.
+- Product categories JSON (`src/db/seeds/data/categories.json`) – defines main and sub‑categories for all product types.
+- Static coupons JSON (`src/db/seeds/data/coupons/static-coupons.json`) – fixed promo codes (WELCOME10, FLAT200, BANGLEFEST)  
+- Auth Controller (`src/modules/auth/auth.controller.ts`) – fixed refresh token code changes `const refreshToken = req.signedCookies?.refreshToken;`
+- Auth Utils (`src/modules/auth/auth.utils.ts`) - make compatale for local developement `sameSite: env.NODE_ENV === "production" ? "strict" : "none",` 
+- Order Service (`src/modules/orders/order.service.ts`) - update `recoverAbandonedOrders` function
+- Order Module (`src/modules/users/user.model.ts`) - update default working image url
+- Databet Seed (`src/db/seed.ts`) - Implement Dataset for all the modules including working images
+- ENV Config (`src/config/env.ts`) - Added `  COOKIE_SECRET: z.string().min(10, "Cookie secret is required"),` 
+- app.js (`src/app.ts`) - used `app.use(cookieParser(env.COOKIE_SECRET));` and also update the **client url** in the cors origin
+
 ### Added: DevOps, Containerization & Repository Governance
 
 This release transitions the Reshma-Core architecture from a local development environment to a production-ready, highly available enterprise system.
