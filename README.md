@@ -455,13 +455,13 @@ The API will be available at `http://localhost:5000`.
 
 The `docker-compose.yml` launches all five services: API, worker, MongoDB, Redis, and Typesense.  
 ```bash
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f reshma-api
 
 # Stop everything
-docker-compose down
+docker compose down
 ```  
 Environment variables are already injected for internal service names. The API will be on port 5000.  
 
