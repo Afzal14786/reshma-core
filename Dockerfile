@@ -1,6 +1,6 @@
 
 # Base & Dependencies
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Alpine is a highly secure, ultra-lightweight Linux distribution
 WORKDIR /app
@@ -9,7 +9,7 @@ FROM base AS deps
 # Copy only package files to leverage Docker layer caching
 COPY package.json package-lock.json ./
 # Install ALL dependencies (including devDependencies like TypeScript)
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # Builder (Compilation)
 
@@ -30,7 +30,7 @@ ENV NODE_ENV=production
 
 # Re-install ONLY production dependencies to keep the image tiny and secure
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
 
 # Copy only the compiled JavaScript from the builder stage
 COPY --from=builder /app/dist ./dist
