@@ -11,6 +11,13 @@ COPY package.json package-lock.json ./
 # Install ALL dependencies (including devDependencies like TypeScript)
 RUN npm install --legacy-peer-deps
 
+# Development (hot reload via nodemon — used by docker-compose.yml for local dev)
+
+FROM deps AS dev
+WORKDIR /app
+EXPOSE 5000
+CMD ["npm", "run", "dev"]
+
 # Builder (Compilation)
 
 FROM base AS builder
