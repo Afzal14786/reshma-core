@@ -55,7 +55,7 @@ export const setAccessCookie = (res: Response, accessToken: string): void => {
   res.cookie("jwt", accessToken, {
     httpOnly: true,
     secure: env.NODE_ENV === "production",
-    sameSite: env.NODE_ENV === "production" ? "strict" : "none",
+    sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
     signed: true,
     maxAge: 15 * 60 * 1000, // 15 minutes
   } as const);
@@ -77,7 +77,7 @@ export const setRefreshCookie = (res: Response, refreshToken: string): void => {
     expires: new Date(Date.now() + expirationMs),
     httpOnly: true,
     secure: env.NODE_ENV === "production",
-    sameSite: env.NODE_ENV === "production" ? "strict" : "none",
+    sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
     signed: true,
   });
 };
