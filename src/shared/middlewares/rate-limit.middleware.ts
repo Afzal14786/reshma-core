@@ -14,13 +14,10 @@ import { HTTP_STATUS } from "@shared/constant/http-codes";
 
 // We create a factory utility to generate the RedisStore instance.
 // The `sendCommand` adapter maps the rate-limiter's raw commands into our node-redis (v4) client.
-const createRedisStore = () => {
+const createRedisStore = (prefix: string) => {
   return new RedisStore({
+    prefix,
     sendCommand: async (...args: string[]) => {
-      // RACE CONDITION DEFENSE:
-      // Node.js imports files synchronously. This middleware evaluates before server.ts
-      // finishes calling connectRedis(). If the client isn't open yet, we pause the
-      // execution and wait for the Redis 'ready' event emitted by our config file.
       if (!redisClient.isOpen) {
         await new Promise((resolve) => redisClient.once("ready", resolve));
       }
@@ -30,7 +27,7 @@ const createRedisStore = () => {
 };
 
 export const standardLimiter = rateLimit({
-  store: createRedisStore(),
+  store: createRedisStore("rl:standard:"),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per `window`
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
@@ -46,7 +43,7 @@ export const standardLimiter = rateLimit({
 });
 
 export const authLimiter = rateLimit({
-  store: createRedisStore(),
+  store: createRedisStore("rl:auth:"),
   windowMs: 60 * 60 * 1000, // 1 Hour
   max: 10, // Limit each IP to 10 authentication requests per hour
   standardHeaders: true,
@@ -62,7 +59,7 @@ export const authLimiter = rateLimit({
 });
 
 export const checkoutLimiter = rateLimit({
-  store: createRedisStore(),
+  store: createRedisStore("rl:checkout:"),
   windowMs: 60 * 60 * 1000, // 1 Hour
   max: 5, // Strict limit on order creation to prevent card-testing bots
   standardHeaders: true,

@@ -6,7 +6,7 @@ import { ReturnAdminController } from "./return.admin.controller";
 import { protect } from "@shared/middlewares/auth.middleware";
 import { restrictTo } from "@shared/middlewares/role.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
-import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
+// import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 
 // Validation Firewalls
 import {
@@ -21,7 +21,7 @@ const router = Router();
  * PUBLIC ROUTES: CUSTOR BOUNDARY
  * Requires a verified JWT. Protected by the standard rate limiter to prevent bot spam.
  */
-router.use(standardLimiter);
+// router.use(standardLimiter);  // already used in app.ts
 router.use(protect); // Applies to ALL routes below this point
 
 // POST /api/v1/returns/:orderId/initiate

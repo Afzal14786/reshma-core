@@ -3,7 +3,7 @@ import { UserController } from "./user.controller";
 import { protect } from "@shared/middlewares/auth.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
 import { upload } from "@shared/middlewares/upload.middleware";
-import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
+// import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 import { UpdateProfileSchema } from "./dtos/update-profile.dto";
 import { AddAddressSchema, UpdateAddressSchema } from "./dtos/address.dto";
 import { UpdatePasswordSchema } from "./dtos/security.dto";
@@ -18,7 +18,7 @@ const router = Router();
 
 // Global Rate Limiter for all user profile mutations
 // This satisfies CodeQL requirements and prevents CPU exhaustion from brute-force/DoS attacks.
-router.use(standardLimiter);
+// router.use(standardLimiter);  // already used @app.ts
 
 // IDENTITY & PROFILE MANAGEMENT
 

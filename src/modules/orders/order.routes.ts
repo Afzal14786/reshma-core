@@ -6,10 +6,8 @@ import { OrderAdminController } from "./order.admin.controller";
 import { protect } from "@shared/middlewares/auth.middleware";
 import { restrictTo } from "@shared/middlewares/role.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
-import {
-  checkoutLimiter,
-  standardLimiter,
-} from "@shared/middlewares/rate-limit.middleware";
+// standardLimiter -- removed
+import { checkoutLimiter } from "@shared/middlewares/rate-limit.middleware";
 
 // Validation Schemas
 import {
@@ -44,7 +42,7 @@ router.post(
  * We apply the standard limiter globally to prevent basic enumeration attacks
  * before the request even reaches the database.
  */
-router.use(standardLimiter);
+// router.use(standardLimiter);  // already used @app.ts
 
 // Establishes `req.user` identity for all downstream order and invoice operations.
 router.use(protect);

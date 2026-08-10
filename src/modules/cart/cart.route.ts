@@ -4,7 +4,6 @@ import { CartController } from "./cart.controller";
 // Middlewares (Using standardized absolute path aliases)
 import { protect } from "@shared/middlewares/auth.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
-import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 
 // Validation Schemas
 import {
@@ -24,10 +23,8 @@ const router = Router();
  */
 
 // SECURITY CONFIGURATION: Apply rate limiting BEFORE authentication.
-// By combining standardLimiter and protect into a single execution chain,
-// CodeQL's CFG registers that the expensive database lookups inside 'protect'
 // are shielded, completely neutralizing the DoS vector warning (CWE-770).
-router.use(standardLimiter, protect);
+router.use(protect);
 
 // Fetch the user's current cart with live prices and stock
 router.get("/", CartController.getCart);

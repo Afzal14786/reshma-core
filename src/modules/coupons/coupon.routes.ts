@@ -5,7 +5,7 @@ import { CouponController } from "./coupon.controller";
 import { protect } from "@shared/middlewares/auth.middleware";
 import { restrictTo } from "@shared/middlewares/role.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
-import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
+// import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 
 // DTO Schemas
 import { createCouponSchema, updateCouponSchema } from "./dtos/coupon.dto";
@@ -19,7 +19,7 @@ const router = Router();
  * Rate Limiting (CWE-770): Prevents brute-force API enumeration and DoS.
  * Authentication (CWE-285): Cryptographically verifies the user's JWT.
  */
-router.use(standardLimiter);
+// router.use(standardLimiter); -- already implemented @app.ts
 router.use(protect);
 
 /**

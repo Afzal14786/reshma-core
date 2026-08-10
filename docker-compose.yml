@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     container_name: reshma-api
     restart: unless-stopped
     ports:
@@ -20,6 +21,10 @@ services:
       - TYPESENSE_PORT=8108
       - TYPESENSE_PROTOCOL=http
       - TZ=Asia/Kolkata
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
     depends_on:
       reshma-db:
         condition: service_started
@@ -44,6 +49,7 @@ services:
       - NODE_ENV=development
       - MONGO_URI=mongodb://reshma-db:27017/reshmabangles
       - REDIS_URL=redis://reshma-redis:6379
+      - TZ=Asia/Kolkata
     depends_on:
       reshma-redis:
         condition: service_started
@@ -61,6 +67,8 @@ services:
       - redis_data:/data
     networks:
       - reshma-network
+    environment:
+      - TZ=Asia/Kolkata
 
   # 4. MONGODB (Database)
   reshma-db:
@@ -73,6 +81,8 @@ services:
       - mongodb_data:/data/db
     networks:
       - reshma-network
+    environment:
+      - TZ=Asia/Kolkata
 
   # 5. TYPESENSE (The Search Engine)
   reshma-typesense:
@@ -88,6 +98,8 @@ services:
     command: '--data-dir /data --api-key=${TYPESENSE_API_KEY} --enable-cors=true'
     networks:
       - reshma-network
+    environment:
+      - TZ=Asia/Kolkata
 
 # Define persistent storage so you don't lose data when containers restart
 volumes:

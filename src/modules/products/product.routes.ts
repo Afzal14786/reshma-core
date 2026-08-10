@@ -7,7 +7,6 @@ import { protect } from "@shared/middlewares/auth.middleware";
 import { restrictTo } from "@shared/middlewares/role.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
 import { uploadProductImage } from "@shared/middlewares/upload.middleware";
-import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 import { cacheMiddleware } from "@shared/middlewares/cache.middleware";
 
 // DTO Imports
@@ -30,7 +29,6 @@ const router = Router();
 
 router.get(
   "/",
-  standardLimiter,
   cacheMiddleware(300),
   validate(GetProductsQuerySchema),
   PublicProductController.getProducts,
@@ -38,7 +36,6 @@ router.get(
 
 router.get(
   "/:id",
-  standardLimiter,
   cacheMiddleware(300),
   validate(GetProductByIdSchema),
   PublicProductController.getProductById,
@@ -50,7 +47,7 @@ router.get(
  */
 
 // CodeQL's static analyzer registers the protection over the database queries.
-router.use(standardLimiter, protect, restrictTo("ADMIN"));
+router.use(protect, restrictTo("ADMIN"));
 
 router.post(
   "/",

@@ -99,5 +99,17 @@ UserSchema.methods.comparePassword = async function (
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// Strip sensitive/internal fields from every serialized response — this is
+// what actually protects us in cases like loginLocal, where .select("+password")
+// is used to run comparePassword(), then the same document is returned and
+// serialized. `select: false` above only affects query *defaults*; once a
+// query explicitly re-selects the field, this transform is the real backstop.
+UserSchema.set("toJSON", {
+  transform: (_doc, ret) => {
+    const { password, __v, ...rest } = ret;
+    return rest;
+  },
+});
+
 // Export the compiled model
 export const User = mongoose.model<IUser>("User", UserSchema);
