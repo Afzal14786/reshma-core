@@ -16,11 +16,11 @@ const router = Router();
  * DASHBOARD ROUTE CONFIGURATION
  *
  * SECURITY BOUNDARY:
- * 1. standardLimiter: Throttles requests to prevent DoS via heavy aggregations.
+ * 1. standardLimiter: Throttles requests to prevent DoS via heavy aggregations. And this is aleady set inside app.ts file to all the routes
  * 2. protect: Guarantees a cryptographically verified JWT session exists.
  * 3. restrictTo("ADMIN"): Drops requests from standard users immediately.
  */
-router.use(standardLimiter);
+// router.use(standardLimiter);
 router.use(protect);
 router.use(restrictTo("ADMIN"));
 

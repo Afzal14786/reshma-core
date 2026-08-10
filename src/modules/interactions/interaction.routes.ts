@@ -4,7 +4,7 @@ import { InteractionController } from "./interaction.controller";
 // Middlewares
 import { protect } from "@shared/middlewares/auth.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
-import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
+// import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";  -- removed because inside app.ts already implemented
 
 // Zod DTOs
 import { CreateInteractionSchema } from "./dtos/create-interaction.dto";
@@ -19,11 +19,7 @@ const router = Router();
 
 // Public endpoints without auth are the most vulnerable to Resource Exhaustion (DoS).
 // We must throttle this to prevent database connection pool depletion.
-router.get(
-  "/product/:productId",
-  standardLimiter,
-  InteractionController.getProductInteractions,
-);
+router.get("/product/:productId", InteractionController.getProductInteractions);
 
 /**
  * PROTECTED ROUTES (Write-Heavy Operations)
@@ -40,7 +36,6 @@ router.use(protect);
  */
 router.post(
   "/",
-  standardLimiter,
   validate(CreateInteractionSchema),
   InteractionController.createInteraction,
 );
@@ -52,7 +47,6 @@ router.post(
  */
 router.patch(
   "/:interactionId/vote",
-  standardLimiter,
   validate(VoteInteractionSchema),
   InteractionController.voteInteraction,
 );
