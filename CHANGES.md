@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### Remove -- StandardLimited from all the API's where it is used because the standardLimiter middleware is already used @app.ts file
+
+- **Why?** : *This changes reduce the IP block as well as duplicated count of the API calls, for example if the user hit's the auth route one time so it should only increate the counter by 1, not by 2.*
+
+- **Nodemon** (`/boutique-startup/reshma-core/Dockerfile`) : *Added nodemon into the docker so while working in backend we do not need to restart all the serviecs again and again, all the changes reflect automatically*  
+- **Asia/Kolkata TimeZone** : (`/boutique-startup/reshma-core/docker-compose.yml`) : Added current time zone to all the services so the logs works efficiently.
+- **rate-middleware.ts** : (`/boutique-startup/reshma-core/src/shared/middlewares/rate-limit.middleware.ts`) : Added prefix to redis store because without prefix it is unable to identify for which limiter it is blocking the IP. In other words `createRedisStore` now having individual limiter, like for `standard-limiter` having it's own redis store, previsouly they are sharing the same redis-store. Now this change prevent the IP blocking.
+- **Router** : (`/boutique-startup/reshma-core/src/modules/*/<module-name.routes.ts>`) : Remove all the standard-limiter from routes because it is already implemented inside **app.ts** (`/home/iamafzal/projects/boutique-startup/reshma-core/src/app.ts`) . After making this changes, it stop double count in every API call.  
+
+- **User Model** : (`/boutique-startup/reshma-core/src/modules/users/user.model.ts`) : Strip sensitive/internal fields from every serialized response . See the exact peace of code added in this file. 
+  ```typescript
+  UserSchema.set("toJSON", {
+    transform: (_doc, ret) => {
+      const { password, __v, ...rest } = ret;
+      return rest;
+    },
+  });
+  ```
+
+- **Fix Import** : (`/boutique-startup/reshma-core/src/modules/products/controllers/product.public.controller.ts`) : use `@shared` path instead or relative path. It helps easy to undertsand the imports.  
+
+
 ### Added – Comprehensive Database Seeding System 2026-07-26  
 
 A fully-featured, modular seeding system has been introduced to bootstrap the application with realistic, interconnected data for development and testing.  
