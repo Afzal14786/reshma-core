@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { ProductService } from "../product.service";
-import { ApiResponse } from "../../../shared/utils/api-response";
-import { HTTP_STATUS } from "../../../shared/constant/http-codes";
+import { ApiResponse } from "@shared/utils/api-response";
+import { HTTP_STATUS } from "@shared/constant/http-codes";
 
 /**
  * Public Product Controller
