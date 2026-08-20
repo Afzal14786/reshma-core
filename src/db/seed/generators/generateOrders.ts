@@ -56,7 +56,7 @@ const calculateTaxDetails = (
  * Generate a random HSN code (4-6 digits)
  */
 const generateHsnCode = (): string => {
-  return faker.string.numeric({ length: { min: 4, max: 6 } });
+  return faker.string.numeric({ length: { min: 4, max: 8 } });
 };
 
 /**

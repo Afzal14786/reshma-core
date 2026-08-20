@@ -104,7 +104,7 @@ const ACCESSORY_STYLES = [
 ];
 
 // ---- Helper for required fields ----
-const generateHsnCode = (): string => `HS${faker.string.numeric(6)}`;
+const generateHsnCode = (): string => `${faker.string.numeric(6)}`;
 
 // sellingUnit enum: "Single Piece", "Meter", "Set", "Pair", "Dozen", "Pack"
 const generateSellingUnit = (itemType: string): string => {
