@@ -52,10 +52,11 @@ export const signRefreshToken = (userId: Types.ObjectId): string => {
  * a signed cookie provides an extra layer of CSRF/XSS protection for Web clients.
  */
 export const setAccessCookie = (res: Response, accessToken: string): void => {
+  const isProduction = env.NODE_ENV === "production";
   res.cookie("jwt", accessToken, {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
+    secure: isProduction ? true : false,
+    sameSite: isProduction ? "strict" : "none",
     signed: true,
     maxAge: 15 * 60 * 1000, // 15 minutes
   } as const);
@@ -72,12 +73,13 @@ export const setAccessCookie = (res: Response, accessToken: string): void => {
 export const setRefreshCookie = (res: Response, refreshToken: string): void => {
   const days = parseInt(env.JWT_REFRESH_EXPIRES_IN.replace("d", "")) || 7;
   const expirationMs = days * 24 * 60 * 60 * 1000;
+  const isProduction = env.NODE_ENV === "production";
 
   res.cookie("refreshToken", refreshToken, {
     expires: new Date(Date.now() + expirationMs),
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
+    secure: isProduction ? true : false,
+    sameSite: isProduction ? "strict" : "none",
     signed: true,
   });
 };
@@ -87,11 +89,12 @@ export const setRefreshCookie = (res: Response, refreshToken: string): void => {
  * Overwrites the existing cookie with a dummy value that expires immediately.
  */
 export const clearRefreshCookie = (res: Response): void => {
+  const isProduction = env.NODE_ENV === "production";
   const clearOptions = {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
+    secure: isProduction ? true : false,
+    sameSite: isProduction ? "strict" : "none",
     signed: true,
   } as const;
 
