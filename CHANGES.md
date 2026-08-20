@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### fix 
+
+- Removed HSN code from product becuase it contains only number minimum 4 and max 8 digit 
+- fix auth utils and compare the `NODE_ENV` properly so it act as a string
+- also fix the product.admin.dto.ts so from the frontend request received properly as well as all the CRUD operation checked and tested
+
 ### Remove -- StandardLimited from all the API's where it is used because the standardLimiter middleware is already used @app.ts file
 
 - **Why?** : *This changes reduce the IP block as well as duplicated count of the API calls, for example if the user hit's the auth route one time so it should only increate the counter by 1, not by 2.*
