@@ -63,17 +63,6 @@ router.post(
 );
 
 /**
- * @route   POST /admin/:id/dispatch
- * @desc    Triggers physical fulfillment via Shiprocket
- * @security Validates physical dimensions to prevent 3PL API rejection
- */
-router.post(
-  "/admin/:id/dispatch",
-  validate(DispatchOrderSchema),
-  OrderAdminController.dispatchOrder,
-);
-
-/**
  * @route   POST /verify-payment
  * @desc    Cryptographic handshake endpoint. Validates Razorpay HMAC signatures.
  */
@@ -108,6 +97,12 @@ router.use("/admin", restrictTo("ADMIN"));
 router.get("/admin", OrderAdminController.getAllOrders);
 
 /**
+ * @route   GET /admin/:id
+ * @desc    Fetch a single order's full detail for the admin view.
+ */
+router.get("/admin/:id", OrderAdminController.getOrderById);
+
+/**
  * @route   PATCH /admin/:id/status
  * @desc    Drives the Order State Machine (PROCESSING -> SHIPPED -> DELIVERED).
  * Automatically hooks into BullMQ to fire async logistics emails.
@@ -117,6 +112,20 @@ router.patch(
   "/admin/:id/status",
   validate(UpdateOrderStatusSchema),
   OrderAdminController.updateOrderStatus,
+);
+
+/**
+ * @route   POST /admin/:id/dispatch
+ * @desc    Triggers physical fulfillment via Shiprocket
+ * @security Validates physical dimensions to prevent 3PL API rejection.
+ *           Moved here (after restrictTo("ADMIN")) — it was previously
+ *           registered before the admin role check applied, meaning any
+ *           authenticated user could dispatch any order.
+ */
+router.post(
+  "/admin/:id/dispatch",
+  validate(DispatchOrderSchema),
+  OrderAdminController.dispatchOrder,
 );
 
 export const OrderRoutes = router;
