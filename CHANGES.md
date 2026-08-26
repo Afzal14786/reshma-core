@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### fix & added
+
+- Added new *method* `getOrderById` so the admin can find one particular order using the order *_id*
+- fix `getAllOrders` *method* and return proper response including **total**, **page**, **limits** and compute **totalPage** and return as `response`.
+- move the `/admin/:id/dispatch` route inside admin control so only admin can access this perticular route
+- add new route `/admin/:id` to get one particular order using order `_id`. 
+
 ### fix 
 
 - Removed HSN code from product becuase it contains only number minimum 4 and max 8 digit 
