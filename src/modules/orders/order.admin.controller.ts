@@ -18,17 +18,81 @@ export class OrderAdminController {
    * @access  Private (Admin Only - Protected by RBAC Middleware)
    */
   public static async getAllOrders(req: Request, res: Response) {
-    const orders = await Order.find()
-      .sort("-createdAt")
-      .populate("user", "firstname lastname email")
-      .lean();
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+    const { status, q } = req.query;
+
+    const query: Record<string, unknown> = {};
+
+    if (status) {
+      query.orderStatus = { $eq: String(status) };
+    }
+
+    if (q) {
+      const searchRegex = { $regex: String(q), $options: "i" };
+      const matchingUsers = await User.find({
+        $or: [
+          { email: searchRegex },
+          { firstname: searchRegex },
+          { lastname: searchRegex },
+        ],
+      })
+        .select("_id")
+        .lean();
+
+      query.$or = [
+        { orderNumber: searchRegex },
+        { user: { $in: matchingUsers.map((u) => u._id) } },
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [orders, total] = await Promise.all([
+      Order.find(query)
+        .sort("-createdAt")
+        .skip(skip)
+        .limit(limit)
+        .populate("user", "firstname lastname email")
+        .lean(),
+      Order.countDocuments(query),
+    ]);
 
     return new ApiResponse(
       res,
       HTTP_STATUS.OK,
       "Platform orders fetched successfully",
-      { orders },
+      {
+        orders,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
     ).send();
+  }
+
+  /**
+   * @route   GET /api/v1/orders/admin/:id
+   * @desc    Fetch a single order's full detail for the admin fulfillment view
+   * @access  Private (Admin Only)
+   */
+  public static async getOrderById(req: Request, res: Response) {
+    const id = String(req.params.id);
+
+    const order = await Order.findOne({ _id: { $eq: id } })
+      .populate("user", "firstname lastname email")
+      .lean();
+
+    if (!order) {
+      throw new AppError(HTTP_STATUS.NOT_FOUND, "Order not found");
+    }
+
+    return new ApiResponse(res, HTTP_STATUS.OK, "Order fetched successfully", {
+      order,
+    }).send();
   }
 
   /**
