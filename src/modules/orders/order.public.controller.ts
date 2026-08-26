@@ -93,7 +93,7 @@ export class OrderPublicController {
   /**
    * @route   GET /api/v1/orders/:id/invoice
    * @desc    Generates and downloads a PDF tax invoice on-the-fly
-   * @access  Private (Owner only)
+   * @access  Private (Owner only means only the valid user can download the invoice)
    */
   public static downloadInvoice = catchAsync(
     async (req: Request, res: Response) => {
