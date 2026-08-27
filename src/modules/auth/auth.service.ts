@@ -7,12 +7,13 @@ import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import logger from "@config/logger";
 import { redisClient } from "@config/redis";
-import jwt from "jsonwebtoken";
+import jwt, { decode } from "jsonwebtoken";
 import { OAuth2Client } from "google-auth-library";
 import env from "@config/env";
 import crypto from "crypto";
 import { NotificationService } from "../notifications/notification.service";
-import { signAccessToken } from "./auth.utils";
+import { signAccessToken, signRefreshToken } from "./auth.utils";
+import { email } from "zod";
 
 const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
@@ -121,6 +122,24 @@ export class AuthService {
     email: string,
     otp: string,
   ): Promise<IUser> {
+    /**
+     * implementing rate limiting per email for OTP verificaion
+     */
+    const attempKey: string = `otp_attempts:${email}`;
+    const attempts: number = await redisClient.incr(attempKey);
+
+    if (attempts == 1) {
+      await redisClient.expire(attempKey, 900); // 15 minute window
+    }
+
+    if (attempts > 5) {
+      logger.warn(`otp brute force detected`, { email });
+      throw new AppError(
+        HTTP_STATUS.TOO_MANY_REQUESTS,
+        "Too many failed OTP attempts. Please request a new OTP and wait 15 minutes",
+      );
+    }
+
     const storedOtp = await redisClient.get(`otp:${email}`);
 
     if (!storedOtp || storedOtp !== otp) {
@@ -163,14 +182,58 @@ export class AuthService {
       email: { $eq: String(data.email) },
     }).select("+password");
 
-    if (!user || !(await user.comparePassword(data.password))) {
-      logger.warn(`Failed login attempt`, { email: data.email });
-      // Generic error message prevents bad actors from enumerating valid emails
+    if (!user) {
       throw new AppError(
         HTTP_STATUS.UNAUTHORIZED,
-        "Incorrect email or password.",
+        "Incorrect email or password",
       );
     }
+
+    // check if the account is already locked
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      const waitMinute = Math.ceil(
+        (user.lockUntil.getTime() - Date.now()) / 60000,
+      );
+      throw new AppError(
+        HTTP_STATUS.TOO_MANY_REQUESTS,
+        `Account temporarily locked. Please try again in ${waitMinute} minutes`,
+      );
+    }
+
+    const isMatch: boolean = await user.comparePassword(data.password);
+
+    if (!isMatch) {
+      const attempts: number = (user.failedLoginAttempts || 0) + 1;
+      const updateAttempts: Partial<IUser> = {
+        failedLoginAttempts: attempts,
+        lockUntil: null,
+      };
+
+      if (attempts >= 5) {
+        updateAttempts.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+        logger.warn(`Account locked due to multiple failed attempts`, {
+          email: data.email,
+          attempts,
+        });
+      }
+
+      await User.updateOne({ _id: user._id }, { $set: updateAttempts });
+
+      throw new AppError(
+        HTTP_STATUS.UNAUTHORIZED,
+        "Incorrect email and password",
+      );
+    }
+
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          failedLoginAttempts: 0,
+          lockUntil: null,
+        },
+      },
+    );
 
     // Infrastructure Gatekeepers
     if (!user.isEmailVerified)
@@ -195,8 +258,11 @@ export class AuthService {
   /**
    * Rehydrates an expired Access session using a valid Refresh Token.
    */
-  public static async refreshSession(refreshToken: string): Promise<string> {
+  public static async refreshSession(
+    refreshToken: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     try {
+      // first check blacklist
       const isBlacklisted = await redisClient.get(`blacklist:${refreshToken}`);
       if (isBlacklisted) {
         logger.warn(`Attempted refresh with blacklisted token`);
@@ -206,6 +272,7 @@ export class AuthService {
         );
       }
 
+      // verify the old
       const decoded = jwt.verify(
         refreshToken,
         env.JWT_REFRESH_SECRET,
@@ -217,14 +284,32 @@ export class AuthService {
           HTTP_STATUS.UNAUTHORIZED,
           "The user belonging to this token no longer exists.",
         );
-      if (!user.isActive)
+      if (!user.isActive) {
         throw new AppError(
           HTTP_STATUS.FORBIDDEN,
           "This account has been deactivated.",
         );
+      }
+
+      // blacklist the old refresh token
+      if (decoded.exp) {
+        const timeToLive: number = decoded.exp - Math.floor(Date.now() / 1000);
+        if (timeToLive > 0) {
+          await redisClient.setEx(
+            `blacklist:${refreshToken}`,
+            timeToLive,
+            "revoked",
+          );
+        }
+      }
+
+      const newAccessToken = signAccessToken(user._id);
+      const newRefreshToken = signRefreshToken(user._id);
+
+      logger.info(`Refresh token rotated successfully`, { userId: user._id });
 
       // Issue a fresh 15-minute Access Token
-      return signAccessToken(user._id);
+      return { accessToken: newAccessToken, refreshToken: newRefreshToken };
     } catch (error: unknown) {
       if (error instanceof AppError) throw error;
       throw new AppError(

@@ -61,7 +61,7 @@ export class UserService {
     // runValidators ensures Mongoose Schema rules (like max lengths) are enforced.
     const updatedUser = (await User.findOneAndUpdate(
       { _id: { $eq: userId } },
-      { $set: { updateData } },
+      { $set: updateData },
       { new: true, runValidators: true },
     ).lean()) as IUser | null;
 

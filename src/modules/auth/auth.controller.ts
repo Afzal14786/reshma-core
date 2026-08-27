@@ -4,6 +4,7 @@ import {
   signAccessToken,
   signRefreshToken,
   setRefreshCookie,
+  setAccessCookie,
   clearRefreshCookie,
 } from "./auth.utils";
 import { ApiResponse } from "@shared/utils/api-response";
@@ -64,6 +65,7 @@ export class AuthController {
       const refreshToken = signRefreshToken(user._id);
 
       setRefreshCookie(res, refreshToken);
+      setAccessCookie(res, accessToken);
 
       new ApiResponse(
         res,
@@ -93,6 +95,7 @@ export class AuthController {
       const refreshToken = signRefreshToken(user._id);
 
       setRefreshCookie(res, refreshToken);
+      setAccessCookie(res, accessToken);
 
       new ApiResponse(res, HTTP_STATUS.OK, "Login successful", {
         user,
@@ -127,10 +130,13 @@ export class AuthController {
         return;
       }
 
-      const newAccessToken = await AuthService.refreshSession(refreshToken);
+      const { accessToken, refreshToken: newRefreshToken } =
+        await AuthService.refreshSession(refreshToken);
+      setRefreshCookie(res, newRefreshToken);
+      setAccessCookie(res, accessToken);
 
       new ApiResponse(res, HTTP_STATUS.OK, "Token refreshed", {
-        accessToken: newAccessToken,
+        accessToken,
       }).send();
     } catch (error: unknown) {
       next(error);
@@ -166,6 +172,7 @@ export class AuthController {
 
       // 4. Secure Transport (Attach HttpOnly Cookie)
       setRefreshCookie(res, refreshToken);
+      setAccessCookie(res, accessToken);
 
       new ApiResponse(res, HTTP_STATUS.OK, "Google Login successful", {
         user,

@@ -67,6 +67,8 @@ export interface IUser extends Document {
   preferences: IUserPreferences;
   isEmailVerified: boolean; // Gates checkout; users must verify email to place COD orders
   isActive: boolean; // Soft-delete flag; used to ban fraudulent buyers without destroying order history references
+  failedLoginAttempts: number; // Security
+  lockUntil: Date | null; // Lockout Mechanism
   lastLogin?: Date; // Telemetry: Used to identify inactive accounts for re-engagement campaigns
 
   // --- Timestamps (Managed by Mongoose) ---
