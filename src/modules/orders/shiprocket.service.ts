@@ -9,6 +9,7 @@ import { Order } from "./order.model";
 import { shiprocketAuth } from "@config/shiprocket";
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
+import { safeCompare } from "@shared/utils/crypto.utils";
 
 /**
  * Strict typing for inbound physical dimensions.
@@ -257,8 +258,7 @@ export class ShiprocketService {
     providedSecret: string,
   ): Promise<void> {
     // Security Firewall: Verify the webhook actually came from Shiprocket
-    // In your Shiprocket Dashboard, you will set the header key 'x-api-key' to match your ENV secret.
-    if (providedSecret !== env.SHIPROCKET_WEBHOOK_SECRET) {
+    if (!safeCompare(providedSecret, env.SHIPROCKET_WEBHOOK_SECRET)) {
       logger.error(
         this.safeLog(
           `[Shiprocket Webhook] Critical: Invalid authentication secret provided.`,

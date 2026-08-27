@@ -1,5 +1,6 @@
 import crypto from "crypto";
-import env from "@config/env"; // Adjust path if necessary
+import env from "@config/env";
+import { safeCompare } from "@shared/utils/crypto.utils";
 
 /**
  * @method verifyRazorpaySignature
@@ -17,7 +18,7 @@ export const verifyRazorpaySignature = (
     .update(text)
     .digest("hex");
 
-  return generatedSignature === signature;
+  return safeCompare(generatedSignature, signature);
 };
 
 /**
@@ -34,5 +35,5 @@ export const verifyWebhookEvent = (
     .update(rawBody)
     .digest("hex");
 
-  return expectedSignature === signature;
+  return safeCompare(expectedSignature, signature);
 };

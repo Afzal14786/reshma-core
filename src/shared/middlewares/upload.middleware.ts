@@ -2,6 +2,7 @@ import multer from "multer";
 import { Request } from "express";
 import { AppError } from "../utils/app-error";
 import { HTTP_STATUS } from "../constant/http-codes";
+import { fileTypeFromBuffer } from "file-type";
 
 /**
  * Multer Memory Storage Configuration
@@ -12,15 +13,19 @@ import { HTTP_STATUS } from "../constant/http-codes";
 const storage = multer.memoryStorage();
 
 /**
- * Security Firewall: File Type Validation
- * Prevents execution of malicious scripts or massive PDFs.
+ * Security Firewall: File Type Validation using Magic Bytes
+ *
+ * ENHANCEMENT (Phase 1.3):
+ * - Reads the actual file buffer (magic bytes) to detect the REAL MIME type.
+ * - Rejects if the detected type does not match the client-declared type.
+ * - Prevents attackers from uploading executables disguised as images.
  */
-const fileFilter = (
+const fileFilter = async (
   req: Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback,
 ) => {
-  // Only accept standard web image formats
+  // Allowed MIME types (based on actual content)
   const allowedMimeTypes = [
     "image/jpeg",
     "image/png",
@@ -28,16 +33,53 @@ const fileFilter = (
     "image/jpg",
   ];
 
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(
+  // Read the Magic Bytes (first 4-8 bytes) of the uploaded file
+  let detectedType;
+  try {
+    detectedType = await fileTypeFromBuffer(file.buffer);
+  } catch {
+    // If detection fails, treat as invalid
+    return cb(
       new AppError(
         HTTP_STATUS.BAD_REQUEST,
-        "Invalid file type. Only JPEG, PNG, and WebP are allowed.",
+        "Unable to detect file type. Please upload a valid image.",
       ),
     );
   }
+
+  // Validation Logic
+  if (!detectedType) {
+    return cb(
+      new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        "Unable to detect file type. Please upload a valid image.",
+      ),
+    );
+  }
+
+  // Check if detected MIME is allowed
+  if (!allowedMimeTypes.includes(detectedType.mime)) {
+    return cb(
+      new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        `Invalid file content. Detected '${detectedType.mime}', but only JPEG, PNG, and WebP are allowed.`,
+      ),
+    );
+  }
+
+  //    Strict mode: Ensure client's declared type matches actual content
+  //    This prevents attackers from claiming one type while uploading another.
+  if (detectedType.mime !== file.mimetype) {
+    return cb(
+      new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        `File content mismatch. Detected '${detectedType.mime}', but declared '${file.mimetype}'.`,
+      ),
+    );
+  }
+
+  // All checks passed
+  cb(null, true);
 };
 
 /**
@@ -49,6 +91,7 @@ export const upload = multer({
   fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024, // Strict 10MB hard limit per file
+    files: 5, // Maximum number of files per request
   },
 });
 

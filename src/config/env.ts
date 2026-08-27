@@ -25,13 +25,13 @@ const envSchema = z.object({
   // Access tokens are short-lived and live in React memory to prevent XSS.
   JWT_ACCESS_SECRET: z
     .string()
-    .min(10, "Access Secret must be at least 10 characters long"),
+    .min(32, "Access Secret must be at least 32 characters long"),
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
 
   // Refresh tokens are long-lived anad live in HttpOnly cookies to prevent CSRF and XSS.
   JWT_REFRESH_SECRET: z
     .string()
-    .min(10, "Refresh Secret must be at least 10 characters long"),
+    .min(32, "Refresh Secret must be at least 32 characters long"),
   JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
 
   COOKIE_SECRET: z.string().min(10, "Cookie secret is required"),

@@ -12,6 +12,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### fix & added
 
+**Phase 1: Core Security Hardening & Global Admin Search**
+
+**1. Typesense Filter Injection Mitigation**
+- **Fixed** the public search endpoint (`GET /api/v1/search`) by locking down `itemType` and `mainCategory` to strict `z.enum()` validators in `search/dtos/search.dto.ts`.
+- *Impact:* Prevents attackers from injecting malicious Typesense filter syntax (`' || 1 == 1`) to bypass category restrictions or crash the RAM cluster. Invalid category strings now return a `400 Bad Request` at the Zod firewall layer.
+
+**2. Timing-Safe Webhook Comparisons (HMAC Brute-Force Mitigation)**
+- **Fixed** cryptographic signature verification in `orders/payment.utils.ts` (Razorpay) and `orders/shiprocket.service.ts` (Shiprocket) by replacing vulnerable `===` comparisons with `crypto.timingSafeEqual`.
+- *Impact:* Closes a critical timing side-channel vulnerability. Attackers can no longer measure response latency differences to brute-force HMAC signatures and forge fake `payment.captured` or `delivered` webhooks, preventing financial fraud.
+
+**3. Magic-Byte File Validation (Malware Upload Prevention)**
+- **Enhanced** the file upload middleware (`shared/middlewares/upload.middleware.ts`) by integrating the `file-type` package to read actual file content (magic bytes) rather than trusting client-declared `Content-Type` headers.
+- *Impact:* Completely eliminates the "malware-as-image" attack vector. Executables, PHP shells, or any non-image file renamed with a `.png` extension are instantly rejected, protecting the server from Remote Code Execution (RCE) threats.
+
+**4. Enforced JWT Secret Length**
+- **Updated** the environment validation schema (`config/env.ts`) to enforce a minimum length of 32 characters for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` (previously 10).
+- *Impact:* Prevents developers from accidentally using weak secrets (e.g., `"password123"`) that could be brute-forced, ensuring cryptographic entropy meets enterprise-grade standards (256-bit strength).
+
+**5. New Global Admin Search Engine (Unified Dashboard Search)**
+- **Added** a brand new `admin-search` module with a dedicated endpoint `GET /api/v1/admin/search`.
+- **Implemented** a smart pattern-detection engine that optimizes queries based on the input string (e.g., detects `ORD-...` for orders, `TCK-...` for support tickets, SKU patterns, phone numbers, emails, and MongoDB ObjectIds).
+- **Integrated** parallel aggregation across **Products**, **Orders**, **Users**, **Support Tickets**, and **Returns** using `Promise.allSettled` for fault isolation—if one collection times out, the others still render results.
+- **Enabled** a grouped JSON response structure (`{ products: { count, items }, orders: { count, items }, ... }`), allowing the Admin Dashboard to render tabbed or card-based results.
+- *Impact:* Empowers admins, support staff, and warehouse teams to paste any identifier (Order ID, AWB, SKU, Phone, Email, Ticket ID) into a single search bar and instantly retrieve all relevant records across the entire platform, drastically improving operational efficiency.
+
+**6. Shared Cryptographic Utilities**
+- **Added** a new shared utility `shared/utils/crypto.utils.ts` exporting the `safeCompare` function. This centralizes constant-time string comparison logic, ensuring all future HMAC or API-key verifications benefit from timing-attack protection out of the box.
+
+**7. Route Registration & Module Integration**
+- **Registered** the new `AdminSearchRoutes` under `/api/v1/admin/search` in `routes/index.ts`, ensuring proper middleware cascading (`protect` + `restrictTo("ADMIN")`) is applied at the route level.
+- *Impact:* Ensures the global search is exclusively accessible to authenticated administrators, maintaining strict RBAC boundaries.
+
+---
+### Dependencies
+- **Added** `file-type` package to support magic-byte file detection (`package.json` & `package-lock.json`).
+
+---
+### Files Modified
+- `package-lock.json`
+- `package.json`
+- `src/config/env.ts`
+- `src/modules/orders/payment.utils.ts`
+- `src/modules/orders/shiprocket.service.ts`
+- `src/modules/search/dtos/search.dto.ts`
+- `src/routes/index.ts`
+- `src/shared/middlewares/upload.middleware.ts`
+
+---
+### Files Created
+- `src/modules/admin-search/admin-search.controller.ts`
+- `src/modules/admin-search/admin-search.routes.ts`
+- `src/modules/admin-search/admin-search.service.ts`
+- `src/modules/admin-search/dto/admin-search.dto.ts`
+- `src/shared/utils/crypto.utils.ts`
+
+### fix & added
+
 **1. Profile Update Logic Overhaul (Critical Bug Fix)**
 - **Fixed** the `UserService.updateProfile` method where user profile updates (firstname, lastname, phone, gender, DOB) were silently failing. 
   - *Root cause:* The update object was incorrectly wrapped as `{ $set: { updateData } }`, which Mongoose ignored due to strict mode.
