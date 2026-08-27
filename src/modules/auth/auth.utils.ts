@@ -52,11 +52,11 @@ export const signRefreshToken = (userId: Types.ObjectId): string => {
  * a signed cookie provides an extra layer of CSRF/XSS protection for Web clients.
  */
 export const setAccessCookie = (res: Response, accessToken: string): void => {
-  const isProduction = env.NODE_ENV === "production";
+  const isProduction: boolean = env.NODE_ENV === "production";
   res.cookie("jwt", accessToken, {
     httpOnly: true,
-    secure: isProduction ? true : false,
-    sameSite: isProduction ? "strict" : "none",
+    secure: isProduction,
+    sameSite: isProduction ? "strict" : "lax",
     signed: true,
     maxAge: 15 * 60 * 1000, // 15 minutes
   } as const);
@@ -71,15 +71,16 @@ export const setAccessCookie = (res: Response, accessToken: string): void => {
  * completely nullifying Cross-Site Scripting (XSS) payload attacks.
  */
 export const setRefreshCookie = (res: Response, refreshToken: string): void => {
-  const days = parseInt(env.JWT_REFRESH_EXPIRES_IN.replace("d", "")) || 7;
-  const expirationMs = days * 24 * 60 * 60 * 1000;
-  const isProduction = env.NODE_ENV === "production";
+  const days: number =
+    parseInt(env.JWT_REFRESH_EXPIRES_IN.replace("d", "")) || 7;
+  const expirationMs: number = days * 24 * 60 * 60 * 1000;
+  const isProduction: boolean = env.NODE_ENV === "production";
 
   res.cookie("refreshToken", refreshToken, {
     expires: new Date(Date.now() + expirationMs),
     httpOnly: true,
-    secure: isProduction ? true : false,
-    sameSite: isProduction ? "strict" : "none",
+    secure: isProduction,
+    sameSite: isProduction ? "strict" : "lax",
     signed: true,
   });
 };
@@ -89,12 +90,12 @@ export const setRefreshCookie = (res: Response, refreshToken: string): void => {
  * Overwrites the existing cookie with a dummy value that expires immediately.
  */
 export const clearRefreshCookie = (res: Response): void => {
-  const isProduction = env.NODE_ENV === "production";
+  const isProduction: boolean = env.NODE_ENV === "production";
   const clearOptions = {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
     secure: isProduction ? true : false,
-    sameSite: isProduction ? "strict" : "none",
+    sameSite: isProduction ? "strict" : "lax",
     signed: true,
   } as const;
 
