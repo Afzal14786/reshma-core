@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+*(Phase 0: Emergency Hotfixes & Core Security Hardening - Prepared for alpha release)*  
+
+### fix & added
+
+**1. Profile Update Logic Overhaul (Critical Bug Fix)**
+- **Fixed** the `UserService.updateProfile` method where user profile updates (firstname, lastname, phone, gender, DOB) were silently failing. 
+  - *Root cause:* The update object was incorrectly wrapped as `{ $set: { updateData } }`, which Mongoose ignored due to strict mode.
+  - *Resolution:* Corrected the MongoDB update syntax to `{ $set: updateData }`. Profile fields now persist in the database as expected.
+
+**2. Browser Cookie Persistence (Dev Environment Fix)**
+- **Fixed** a critical cookie rejection bug in `auth.utils.ts` that prevented refresh tokens from being stored during local development.
+  - *Root cause:* Modern browsers strictly enforce the RFC 6265 rule: `SameSite=None` requires the `Secure` flag. In dev (HTTP), this combination caused the browser to drop the cookie entirely.
+  - *Resolution:* Implemented conditional logic across `setAccessCookie`, `setRefreshCookie`, and `clearRefreshCookie`. In development (`secure: false`), `sameSite` is set to `'lax'`. In production (`secure: true`), it remains `'strict'`.
+
+**3. Activating the Dead Cookie-Auth Pathway (Defense-in-Depth)**
+- **Integrated** `setAccessCookie` into the `login`, `verifyOtp`, `refresh`, and `googleLogin` controllers.
+  - *Why this matters:* Previously, the `protect` middleware checked `req.signedCookies.jwt` as a fallback, but this cookie was never actually sent to the browser. 
+  - *Outcome:* We now support dual-channel token delivery (JSON response body + HttpOnly cookie). This provides an additional XSS mitigation layer—even if an attacker steals the in-memory token, the HttpOnly cookie remains inaccessible to JavaScript.
+
+**4. Refresh Token Rotation (Session Security Upgrade)**
+- **Refactored** the `AuthService.refreshSession` method to implement mandatory Refresh Token Rotation.
+  - *Process:* When a refresh token is used, the old token is instantly blacklisted in Redis, and a brand-new refresh token is issued.
+  - *Impact:* This completely mitigates replay attacks. If a refresh token is stolen, the original owner's next refresh request invalidates the thief's copy, forcing the attacker to re-authenticate.
+
+**5. Account Lockout Mechanism (Brute-Force Mitigation)**
+- **Added** `failedLoginAttempts` (number) and `lockUntil` (Date) fields to the `IUser` interface and `User` schema.
+- **Updated** the `loginLocal` service logic to:
+  - Increment `failedLoginAttempts` on every failed password entry.
+  - Automatically lock the account for 15 minutes after 5 consecutive failed attempts.
+  - Reset the counter to `0` and clear `lockUntil` on successful authentication.
+
+**6. OTP Brute-Force Protection (2FA Pathway Security)**
+- **Enhanced** the `verifyEmailOtp` service with a Redis-backed attempt counter (`otp_attempts:{email}`).
+  - *Restriction:* Users are limited to 5 OTP verification attempts within a 15-minute sliding window.
+  - *Impact:* Prevents attackers from brute-forcing 6-digit OTP codes, closing a critical vulnerability in the registration/login pipeline.
+
+**7. TypeScript Strictness Enforcement**
+- **Refactored** the failed-login update logic in `loginLocal` to strictly use `Partial<IUser>` instead of `any`, ensuring absolute type safety and aligning with the `noImplicitAny` and `noUncheckedIndexedAccess` TS rules.
+
+---
+### Files Modified in this Phase
+
+- `modified: src/modules/auth/auth.controller.ts`
+- `modified: src/modules/auth/auth.service.ts`
+- `modified: src/modules/auth/auth.utils.ts`
+- `modified: src/modules/users/interfaces/user.interface.ts`
+- `modified: src/modules/users/user.model.ts`
+- `modified: src/modules/users/user.service.ts`
+
 ### fix & added
 
 - Added new *method* `getOrderById` so the admin can find one particular order using the order *_id*
