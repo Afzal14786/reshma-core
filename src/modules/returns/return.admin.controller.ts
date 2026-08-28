@@ -3,6 +3,7 @@ import { ReturnService } from "./return.service";
 import { ApiResponse } from "@shared/utils/api-response";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { ArbitrateReturnInput } from "./dtos/return.dto";
+import { getAuditContext } from "@shared/utils/audit.utils";
 
 /**
  * ADMIN RETURN CONTROLLER (Internal Operations)
@@ -51,9 +52,13 @@ export class ReturnAdminController {
     const returnId = String(req.params.returnId);
     const payload = req.body as ArbitrateReturnInput;
 
+    // extract admin context for audit
+    const auditContext = getAuditContext(req);
+
     const returnRequest = await ReturnService.arbitrateReturn(
       returnId,
       payload,
+      auditContext,
     );
 
     return new ApiResponse(
@@ -71,8 +76,11 @@ export class ReturnAdminController {
    */
   public static async processRefund(req: Request, res: Response) {
     const returnId = String(req.params.returnId);
-
-    const returnRequest = await ReturnService.processRefundAndRestock(returnId);
+    const auditContext = getAuditContext(req);
+    const returnRequest = await ReturnService.processRefundAndRestock(
+      returnId,
+      auditContext,
+    );
 
     return new ApiResponse(
       res,
