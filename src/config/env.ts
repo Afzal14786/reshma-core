@@ -34,6 +34,10 @@ const envSchema = z.object({
     .min(32, "Refresh Secret must be at least 32 characters long"),
   JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
 
+  ENCRYPTION_KEY: z
+    .string()
+    .min(32, "Encryption key must be at least 32 characters"),
+
   COOKIE_SECRET: z.string().min(10, "Cookie secret is required"),
 
   GOOGLE_CLIENT_ID: z.string().min(1, "Google Client ID is required"),
