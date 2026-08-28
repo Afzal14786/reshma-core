@@ -68,6 +68,23 @@ const UserSchema = new Schema<IUser>(
     },
     isEmailVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
+
+    // 2FA & Security : TOTP
+    twoFactorSecret: {
+      type: String,
+      select: false,
+    },
+
+    isTwoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+
+    twoFactorBackupCodes: {
+      type: [String],
+      select: false,
+    },
+
     failedLoginAttempts: {
       type: Number,
       default: 0,

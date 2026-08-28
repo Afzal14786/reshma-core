@@ -71,6 +71,11 @@ export interface IUser extends Document {
   lockUntil: Date | null; // Lockout Mechanism
   lastLogin?: Date; // Telemetry: Used to identify inactive accounts for re-engagement campaigns
 
+  // 2FA & Security enhancement
+  twoFactorSecret?: string; // Encrypted TOTP secret (select: false)
+  isTwoFactorEnabled: boolean; // Is 2FA active for this user?
+  twoFactorBackupCodes?: string[]; // Hashed backup codes (select: false)
+
   // --- Timestamps (Managed by Mongoose) ---
   createdAt: Date;
   updatedAt: Date;
