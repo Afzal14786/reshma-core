@@ -8,7 +8,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
-*(Phase 0: Emergency Hotfixes & Core Security Hardening - Prepared for alpha release)*  
+*(Phase 1: Implemented Admin Two-Factor Authentication (2FA) using TOTP (Time-based One-Time Password) standard (RFC 6238) - Prepared for alpha release)*  
+
+### fix & added
+
+- **Implemented Admin Two-Factor Authentication (2FA) using TOTP (Time-based One-Time Password) standard (RFC 6238).** 
+  This adds a complete secure flow for enabling, verifying, and disabling 2FA on admin accounts, drastically reducing the risk of account takeover via credential theft or phishing.
+
+  - **New Endpoints:**
+    - `POST /api/v1/auth/2fa/setup` – Generates a QR code (for authenticator apps) and a set of 8 single-use backup codes.
+    - `POST /api/v1/auth/2fa/verify-setup` – Verifies the 6-digit OTP to enable 2FA for the account.
+    - `POST /api/v1/auth/2fa/verify` – Verifies the 6-digit OTP (or a backup code) during the login process.
+    - `POST /api/v1/auth/2fa/disable` – Disables 2FA, requiring the current 6-digit OTP to authorize the deactivation.
+
+  - **Login Flow Enhancement:**
+    - Modified the `POST /api/v1/auth/login` endpoint to detect if the user (specifically `ADMIN` role) has 2FA enabled.
+    - Upon successful password validation, the API now returns a short-lived `twoFactorToken` (expires in 5 minutes) and a `requiresTwoFactor: true` flag, prompting the frontend to challenge the user for their OTP.
+
+  - **Enterprise-Grade Security Hardening:**
+    - TOTP secrets are **encrypted at rest** using AES-256-GCM (requires the new `ENCRYPTION_KEY` environment variable).
+    - Backup codes are **hashed using `bcrypt`** (10 rounds) and are strictly **single-use**—they are automatically consumed and permanently removed from the user's document after first use.
+    - Short-lived JWT session tokens ensure the 2FA login handshake cannot be replayed.
+    - Rate limiting (`authLimiter`) is strictly applied to the `/2fa/verify` endpoint to prevent brute-force attacks on the OTP.
+    - Clock skew tolerance (`window: 1`) is implemented to handle slight time differences between the server and the user's device.
+
+  - **Schema & Interface Updates:**
+    - Added `twoFactorSecret` (string, encrypted), `isTwoFactorEnabled` (boolean), and `twoFactorBackupCodes` (array of strings) to the `IUser` interface and `User` schema. Sensitive fields are marked with `select: false` to prevent exposure in standard queries.
+
+  - **New Cryptographic Utilities:**
+    - Added `encrypt()` and `decrypt()` helpers in `src/shared/utils/crypto.utils.ts` leveraging AES-256-GCM for secure secret storage.
+    - Added `signTwoFactorToken()` and `verifyTwoFactorToken()` in `auth.utils.ts` for managing the short-lived 2FA challenge handshake.
+
+---
+### Dependencies Added
+- `speakeasy` – For generating and verifying TOTP secrets and codes.
+- `qrcode` – For generating QR codes as base64 data URLs for authenticator app setup.
+- `@types/speakeasy` & `@types/qrcode` – Type definitions for TypeScript strictness.
+
+---
+### Files Modified
+- `package-lock.json`
+- `package.json`
+- `src/config/env.ts`
+- `src/modules/auth/auth.controller.ts`
+- `src/modules/auth/auth.routes.ts`
+- `src/modules/auth/auth.service.ts`
+- `src/modules/auth/auth.utils.ts`
+- `src/modules/users/interfaces/user.interface.ts`
+- `src/modules/users/user.model.ts`
+- `src/shared/utils/crypto.utils.ts`
+
+---
+### Files Created
+- `src/modules/auth/dtos/two-factor.dto.ts`
 
 ### fix & added
 
