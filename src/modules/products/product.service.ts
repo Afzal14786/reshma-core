@@ -14,6 +14,14 @@ import { GetProductsQueryInput } from "./dtos/product.public.dto";
 import { IBaseProduct } from "./interfaces/base-product.interface";
 import logger from "@config/logger";
 
+// audit logs
+import { AuditLogService } from "@modules/audit-logs/audit-log.service";
+import {
+  AuditAction,
+  AuditModule,
+} from "@modules/audit-logs/audit-log.interface";
+import { IAuditContext } from "@shared/utils/audit.utils";
+
 // --- RESILIENCE INFRASTRUCTURE IMPORTS ---
 import { Queue } from "bullmq";
 import Redis from "ioredis";
@@ -70,6 +78,7 @@ export class ProductService {
   public static async createProduct(
     payload: CreateProductInput,
     files: Express.Multer.File[],
+    auditContext?: IAuditContext,
   ): Promise<IBaseProduct> {
     // Enforce Image Requirement
     if (!files || files.length === 0) {
@@ -101,6 +110,26 @@ export class ProductService {
       // --- SEARCH SYNCHRONIZATION HOOK ---
       // Syncs to Typesense immediately after MongoDB successfully commits.
       await this.syncToSearchEngine(product as unknown as IBaseProduct);
+
+      // --- audit log ---
+      if (auditContext) {
+        await AuditLogService.log({
+          adminId: auditContext.adminId,
+          adminEmail: auditContext.adminEmail,
+          adminName: auditContext.adminName,
+          action: AuditAction.CREATE,
+          module: AuditModule.PRODUCT,
+          targetId: String(product._id),
+          targetName: product.name,
+          payload: productData,
+          ...(auditContext.ipAddress
+            ? { ipAddress: auditContext.ipAddress }
+            : {}),
+          ...(auditContext.userAgent
+            ? { userAgent: auditContext.userAgent }
+            : {}),
+        });
+      }
 
       return product as unknown as IBaseProduct;
     } catch (error: unknown) {
@@ -187,7 +216,16 @@ export class ProductService {
   public static async updateProduct(
     productId: string,
     payload: UpdateProductInput,
+    auditContext?: IAuditContext,
   ): Promise<IBaseProduct> {
+    // capture "before" state for audi logging
+    let beforeProduct: IBaseProduct | null = null;
+    if (auditContext) {
+      beforeProduct = (await Product.findOne({
+        _id: { $eq: String(productId) },
+      }).lean()) as IBaseProduct | null;
+    }
+
     const sanitizedPayload: Record<string, unknown> = Object.create(null);
 
     for (const [key, value] of Object.entries(payload)) {
@@ -220,6 +258,29 @@ export class ProductService {
       await this.syncToSearchEngine(baseProduct);
     }
 
+    // audit log
+    if (auditContext && beforeProduct) {
+      await AuditLogService.log({
+        adminId: auditContext.adminId,
+        adminEmail: auditContext.adminEmail,
+        adminName: auditContext.adminName,
+        action: AuditAction.UPDATE,
+        module: AuditModule.PRODUCT,
+        targetId: String(baseProduct._id),
+        targetName: baseProduct.name,
+        changes: {
+          before: beforeProduct as unknown as Record<string, unknown>,
+          after: baseProduct as unknown as Record<string, unknown>,
+        },
+        ...(auditContext.ipAddress
+          ? { ipAddress: auditContext.ipAddress }
+          : {}),
+        ...(auditContext.userAgent
+          ? { userAgent: auditContext.userAgent }
+          : {}),
+      });
+    }
+
     return baseProduct;
   }
 
@@ -228,7 +289,22 @@ export class ProductService {
    * We never permanently delete (`.deleteOne()`) products. Doing so would orphan
    * historical Order documents and break financial receipts. Instead, we hide them.
    */
-  public static async softDeleteProduct(productId: string): Promise<void> {
+  public static async softDeleteProduct(
+    productId: string,
+    auditContext?: IAuditContext,
+  ): Promise<void> {
+    // Capture the "before" state for audit logging
+    let beforeProduct: IBaseProduct | null = null;
+    let productName = "Unknown Product";
+    if (auditContext) {
+      beforeProduct = (await Product.findOne({
+        _id: { $eq: String(productId) },
+      }).lean()) as IBaseProduct | null;
+      if (beforeProduct) {
+        productName = beforeProduct.name;
+      }
+    }
+
     const result = await Product.findOneAndUpdate(
       { _id: { $eq: String(productId) } },
       { $set: { isActive: false } },
@@ -240,6 +316,24 @@ export class ProductService {
 
     // SEARCH SYNCHRONIZATION HOOK
     await this.removeFromSearchEngine(String(productId));
+
+    if (auditContext) {
+      await AuditLogService.log({
+        adminId: auditContext.adminId,
+        adminEmail: auditContext.adminEmail,
+        adminName: auditContext.adminName,
+        action: AuditAction.DELETE,
+        module: AuditModule.PRODUCT,
+        targetId: productId,
+        targetName: productName,
+        ...(auditContext.ipAddress
+          ? { ipAddress: auditContext.ipAddress }
+          : {}),
+        ...(auditContext.userAgent
+          ? { userAgent: auditContext.userAgent }
+          : {}),
+      });
+    }
   }
 
   /**
