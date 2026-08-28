@@ -2,7 +2,10 @@ import jwt, { SignOptions } from "jsonwebtoken";
 import { Response } from "express";
 import env from "@config/env";
 import { Types } from "mongoose";
-
+import speakeasy from "speakeasy";
+import { AppError } from "@shared/utils/app-error";
+import crypto from "crypto";
+import { HTTP_STATUS } from "@shared/constant/http-codes";
 /**
  * Authentication Cryptography Utilities
  * * * ARCHITECTURE NOTE:
@@ -101,4 +104,64 @@ export const clearRefreshCookie = (res: Response): void => {
 
   res.cookie("refreshToken", "loggedout", clearOptions);
   res.cookie("jwt", "loggedout", clearOptions);
+};
+
+/**
+ * TWO-FACTOR AUTHENTICATION UTILITIES
+ */
+
+/**
+ * Generates a short-lived JWT for the 2FA login challenge.
+ * Expires in 5 minutes.
+ */
+export const signTwoFactorToken = (userId: Types.ObjectId): string => {
+  return jwt.sign(
+    { id: userId, purpose: "2fa" },
+    env.JWT_ACCESS_SECRET, // Reuse access secret, or create a dedicated ONE
+    { expiresIn: "5m" },
+  );
+};
+
+/**
+ * Verifies the 2FA challenge token.
+ * Returns the decoded payload if valid, otherwise throws.
+ */
+export const verifyTwoFactorToken = (token: string): jwt.JwtPayload => {
+  try {
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as jwt.JwtPayload;
+    if (decoded.purpose !== "2fa") {
+      throw new Error("Invalid token purpose");
+    }
+    return decoded;
+  } catch (error) {
+    throw new AppError(
+      HTTP_STATUS.UNAUTHORIZED,
+      "Invalid or expired 2FA session. Please log in again.",
+    );
+  }
+};
+
+/**
+ * Generates a new TOTP secret, QR code URL, and backup codes.
+ */
+export const generateTwoFactorSecret = (
+  email: string,
+  issuer: string = "Reshma Boutique",
+) => {
+  const secret = speakeasy.generateSecret({
+    name: `${issuer} (${email})`,
+    length: 20, // 20 bytes = 160-bit secret
+  });
+
+  // Generate 8 single-use backup codes (10 characters each)
+  const backupCodes: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    backupCodes.push(crypto.randomBytes(5).toString("hex").toUpperCase());
+  }
+
+  return {
+    secret: secret.base32, // The base32 secret to encrypt and store
+    otpauthUrl: secret.otpauth_url, // The URL for QR code generation
+    backupCodes, // Raw codes to show the user (will be hashed before storage)
+  };
 };
