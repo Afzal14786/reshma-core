@@ -13,7 +13,16 @@ import env from "@config/env";
 import crypto from "crypto";
 import { NotificationService } from "../notifications/notification.service";
 import { signAccessToken, signRefreshToken } from "./auth.utils";
-import { email } from "zod";
+import { encrypt, decrypt } from "@shared/utils/crypto.utils";
+import speakeasy from "speakeasy";
+import bcrypt from "bcrypt";
+import {
+  generateTwoFactorSecret,
+  signTwoFactorToken,
+  verifyTwoFactorToken,
+} from "./auth.utils";
+import QRCode from "qrcode";
+import type { BookModule } from "@faker-js/faker";
 
 const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
@@ -499,5 +508,282 @@ export class AuthService {
         `Attempted to blacklist invalid or expired refresh token during logout`,
       );
     }
+  }
+
+  /**
+   * TWO-FACTOR AUTHENTICATION (TOTP) METHODS
+   */
+
+  /**
+   * Step 1: Generate 2FA setup data (Secret, QR Code, Backup Codes)
+   * @param userId - The ID of the admin user enabling 2FA.
+   * @returns { secret, qrCodeDataURL, backupCodes }
+   */
+  public static async generateTwoFactorSetup(userId: string) {
+    const user = await User.findById(userId);
+    if (!user) throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found");
+
+    // If already enabled, prevent re-generation without disabling first
+    if (user.isTwoFactorEnabled) {
+      throw new AppError(
+        HTTP_STATUS.CONFLICT,
+        "2FA is already enabled for this account.",
+      );
+    }
+
+    // Generate the TOTP secret and backup codes
+    const { secret, otpauthUrl, backupCodes } = generateTwoFactorSecret(
+      user.email,
+    );
+
+    // Encrypt the secret before storing (AES-256-GCM)
+    const encryptedSecret = encrypt(secret);
+
+    // Hash the backup codes (bcrypt) before storing
+    const saltRounds = 10;
+    const hashedBackupCodes = await Promise.all(
+      backupCodes.map((code) => bcrypt.hash(code, saltRounds)),
+    );
+
+    // Save the encrypted secret and hashed backup codes to the user document
+    user.twoFactorSecret = encryptedSecret;
+    user.twoFactorBackupCodes = hashedBackupCodes;
+    await user.save({ validateBeforeSave: false });
+
+    // Generate QR Code as a Data URL (for the frontend to display)
+
+    if (!otpauthUrl) {
+      throw new AppError(
+        HTTP_STATUS.INTERNAL_SERVER_ERROR,
+        "Failed to generate OTP authentication url",
+      );
+    }
+
+    const qrCodeDataURL = await QRCode.toDataURL(otpauthUrl);
+
+    // Return the raw backup codes (they are shown only ONCE to the user)
+    // We return the encrypted secret? No, we return the *actual* base32 secret for the frontend to display?
+    // Wait, the frontend doesn't need the secret. The user scans the QR code.
+    // The frontend only needs the QR code image and the backup codes.
+    return {
+      qrCode: qrCodeDataURL,
+      backupCodes, // These are the RAW codes the user must save.
+      // The secret is already saved in the DB. We don't send it back to the client.
+    };
+  }
+
+  /**
+   * Step 2: Verify the TOTP and enable 2FA for the user.
+   * @param userId - The ID of the admin user.
+   * @param token - The 6-digit TOTP from the authenticator app.
+   */
+  public static async enableTwoFactor(userId: string, token: string) {
+    const user = await User.findById(userId).select("+twoFactorSecret");
+    if (!user) throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found");
+
+    if (user.isTwoFactorEnabled) {
+      throw new AppError(HTTP_STATUS.CONFLICT, "2FA is already enabled.");
+    }
+
+    if (!user.twoFactorSecret) {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        "2FA setup not initiated. Please generate a secret first.",
+      );
+    }
+
+    // Decrypt the stored secret
+    let decryptedSecret: string;
+    try {
+      decryptedSecret = decrypt(user.twoFactorSecret);
+    } catch (error) {
+      throw new AppError(
+        HTTP_STATUS.INTERNAL_SERVER_ERROR,
+        "Corrupted 2FA secret. Please reset 2FA.",
+      );
+    }
+
+    // Verify the TOTP
+    const isValid = speakeasy.totp.verify({
+      secret: decryptedSecret,
+      encoding: "base32",
+      token,
+      window: 1, // Allow 1 step (30 seconds) of clock skew for network latency
+    });
+
+    if (!isValid) {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        "Invalid OTP. Please try again.",
+      );
+    }
+
+    // Enable 2FA
+    user.isTwoFactorEnabled = true;
+    await user.save({ validateBeforeSave: false });
+
+    logger.info(`2FA enabled for user ${userId}`);
+    return {
+      success: true,
+      message: "Two-factor authentication enabled successfully.",
+    };
+  }
+
+  /**
+   * Step 3: Verify 2FA during login.
+   * @param userId - The ID of the user attempting to log in.
+   * @param token - The 6-digit TOTP from the authenticator app.
+   * @param backupCode - Optional backup code (if the user lost their phone).
+   * @param twoFactorToken - The short-lived JWT from the login step.
+   * @returns { accessToken, refreshToken } - The final session tokens.
+   */
+
+  public static async verifyTwoFactorLogin(
+    userId: string,
+    token: string,
+    backupCode: string | undefined,
+    twoFactorToken: string,
+  ) {
+    // 1. Verify the short-lived 2FA token
+    const decoded = verifyTwoFactorToken(twoFactorToken);
+    if (decoded.id !== userId) {
+      throw new AppError(HTTP_STATUS.UNAUTHORIZED, "Invalid 2FA session.");
+    }
+
+    // 2. Fetch the user with the encrypted secret and backup codes
+    const user = await User.findById(userId).select(
+      "+twoFactorSecret +twoFactorBackupCodes",
+    );
+    if (!user) throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found");
+
+    if (!user.isTwoFactorEnabled) {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        "2FA is not enabled for this account.",
+      );
+    }
+
+    // 3. Handle Backup Code flow
+    if (backupCode) {
+      const safeBackupCode: string = backupCode;
+      if (
+        !user.twoFactorBackupCodes ||
+        user.twoFactorBackupCodes.length === 0
+      ) {
+        throw new AppError(
+          HTTP_STATUS.BAD_REQUEST,
+          "No backup codes remaining. Please use your authenticator app.",
+        );
+      }
+
+      const codes = user.twoFactorBackupCodes!;
+      let foundIndex = -1;
+      for (const [index, code] of codes.entries()) {
+        const isMatch = await bcrypt.compare(safeBackupCode, code);
+        if (isMatch) {
+          foundIndex = index;
+          break;
+        }
+      }
+
+      if (foundIndex === -1) {
+        throw new AppError(HTTP_STATUS.UNAUTHORIZED, "Invalid backup code.");
+      }
+
+      codes.splice(foundIndex, 1);
+      user.twoFactorBackupCodes = codes;
+      await user.save({ validateBeforeSave: false });
+
+      logger.info(
+        `Backup code used for user ${userId}. ${codes.length} codes remaining.`,
+      );
+    } else {
+      // 4. Handle Standard TOTP flow
+      if (!user.twoFactorSecret) {
+        throw new AppError(
+          HTTP_STATUS.INTERNAL_SERVER_ERROR,
+          "2FA secret missing.",
+        );
+      }
+
+      const decryptedSecret = decrypt(user.twoFactorSecret);
+      const isValid = speakeasy.totp.verify({
+        secret: decryptedSecret,
+        encoding: "base32",
+        token,
+        window: 1,
+      });
+
+      if (!isValid) {
+        throw new AppError(
+          HTTP_STATUS.UNAUTHORIZED,
+          "Invalid 2FA code. Please try again.",
+        );
+      }
+    }
+
+    // 5. Issue final Access & Refresh Tokens
+    const accessToken = signAccessToken(user._id);
+    const refreshToken = signRefreshToken(user._id);
+
+    user.lastLogin = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    logger.info(`2FA login successful for user ${userId}`);
+
+    return { accessToken, refreshToken };
+  }
+
+  /**
+   * Step 4: Disable 2FA (requires valid TOTP)
+   * @param userId - The ID of the user.
+   * @param token - The 6-digit TOTP from the authenticator app.
+   */
+  public static async disableTwoFactor(userId: string, token: string) {
+    const user = await User.findById(userId).select("+twoFactorSecret");
+    if (!user) throw new AppError(HTTP_STATUS.NOT_FOUND, "User not found");
+
+    if (!user.isTwoFactorEnabled) {
+      throw new AppError(HTTP_STATUS.BAD_REQUEST, "2FA is not enabled.");
+    }
+
+    if (!user.twoFactorSecret) {
+      throw new AppError(
+        HTTP_STATUS.INTERNAL_SERVER_ERROR,
+        "2FA secret missing.",
+      );
+    }
+
+    const decryptedSecret = decrypt(user.twoFactorSecret);
+    const isValid = speakeasy.totp.verify({
+      secret: decryptedSecret,
+      encoding: "base32",
+      token,
+      window: 1,
+    });
+
+    if (!isValid) {
+      throw new AppError(
+        HTTP_STATUS.UNAUTHORIZED,
+        "Invalid OTP. Cannot disable 2FA.",
+      );
+    }
+
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: { isTwoFactorEnabled: false },
+        $unset: {
+          twoFactorSecret: 1,
+          twoFactorBackupCodes: 1,
+        },
+      },
+    );
+
+    logger.info(`2FA disabled for user ${userId}`);
+    return {
+      success: true,
+      message: "Two-factor authentication disabled successfully.",
+    };
   }
 }

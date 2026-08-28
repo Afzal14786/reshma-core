@@ -6,6 +6,7 @@ import {
   setRefreshCookie,
   setAccessCookie,
   clearRefreshCookie,
+  verifyTwoFactorToken,
 } from "./auth.utils";
 import { ApiResponse } from "@shared/utils/api-response";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
@@ -13,6 +14,13 @@ import { RegisterInput } from "./dtos/register.dto";
 import { LoginInput } from "./dtos/login.dto";
 import { VerifyOtpInput } from "./dtos/verify-otp.dto";
 import { GoogleLoginInput } from "./dtos/google.dto";
+import {
+  VerifySetupTwoFactorInput,
+  VerifyLoginTwoFactorInput,
+  DisableTwoFactorInput,
+} from "./dtos/two-factor.dto";
+import { signTwoFactorToken } from "./auth.utils";
+import { User } from "@modules/users/user.model";
 import logger from "@config/logger";
 
 /**
@@ -90,6 +98,25 @@ export class AuthController {
     try {
       const data = req.body as LoginInput;
       const user = await AuthService.loginLocal(data);
+
+      // Check if 2FA is required for this user
+      // We enforce 2FA for ADMIN users. If you want to enforce for all users, remove the role check.
+
+      if (user.role === "ADMIN" && user.isTwoFactorEnabled) {
+        // Generate a short-lived JWT for the 2FA challenge
+        const twoFactorToken = signTwoFactorToken(user._id);
+        new ApiResponse(
+          res,
+          HTTP_STATUS.OK,
+          "2FA verification required. Please provide your authenticator code.",
+          {
+            requiresTwoFactor: true,
+            twoFactorToken,
+            userId: user._id,
+          },
+        ).send();
+        return;
+      }
 
       const accessToken = signAccessToken(user._id);
       const refreshToken = signRefreshToken(user._id);
@@ -258,6 +285,119 @@ export class AuthController {
         null,
       ).send();
     } catch (error: unknown) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/2fa/setup
+   * Generates QR code and backup codes for enabling 2FA.
+   * @access Private (Admin Only)
+   */
+  public static async setupTwoFactor(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      const userId = String(req.user!._id);
+      const result = await AuthService.generateTwoFactorSetup(userId);
+
+      new ApiResponse(
+        res,
+        HTTP_STATUS.OK,
+        "2FA setup generated successfully. Scan the QR code with your authenticator app.",
+        result,
+      ).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/2fa/verify-setup
+   * Verifies the TOTP and enables 2FA for the user.
+   * @access Private (Admin Only)
+   */
+  public static async verifyTwoFactorSetup(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      const userId = String(req.user!._id);
+      const { token } = req.body as VerifySetupTwoFactorInput;
+
+      const result = await AuthService.enableTwoFactor(userId, token);
+
+      new ApiResponse(res, HTTP_STATUS.OK, result.message, result).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/2fa/verify
+   * Verifies the 2FA code (or backup code) during login and completes the authentication.
+   * @access Public (Requires the twoFactorToken from the login step)
+   */
+  public static async verifyTwoFactorLogin(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      const { token, twoFactorToken, backupCode } =
+        req.body as VerifyLoginTwoFactorInput;
+
+      // Decode the twoFactorToken to get the userId
+      const decoded = verifyTwoFactorToken(twoFactorToken);
+      const userId = String(decoded.id);
+
+      const { accessToken, refreshToken } =
+        await AuthService.verifyTwoFactorLogin(
+          userId,
+          token,
+          backupCode,
+          twoFactorToken,
+        );
+
+      // Set the secure cookies
+      setRefreshCookie(res, refreshToken);
+      setAccessCookie(res, accessToken);
+
+      new ApiResponse(
+        res,
+        HTTP_STATUS.OK,
+        "2FA verification successful. Welcome!",
+        {
+          accessToken,
+          user: await User.findById(userId).lean(),
+        },
+      ).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/2fa/disable
+   * Disables 2FA for the user (requires current TOTP).
+   * @access Private (Admin Only)
+   */
+  public static async disableTwoFactor(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      const userId = String(req.user!._id);
+      const { token } = req.body as DisableTwoFactorInput;
+
+      const result = await AuthService.disableTwoFactor(userId, token);
+
+      new ApiResponse(res, HTTP_STATUS.OK, result.message, result).send();
+    } catch (error) {
       next(error);
     }
   }
