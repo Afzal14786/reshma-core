@@ -6,6 +6,15 @@ import { Product } from "../products/models/base-product.model";
 import { ReturnModel } from "../returns/return.model";
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
+
+// audit imports
+import { AuditLogService } from "@modules/audit-logs/audit-log.service";
+import {
+  AuditAction,
+  AuditModule,
+} from "@modules/audit-logs/audit-log.interface";
+import { IAuditContext } from "@shared/utils/audit.utils";
+
 import logger from "@config/logger";
 import { NotificationService } from "../notifications/notification.service";
 
@@ -179,6 +188,7 @@ export class SupportService {
     senderRole: MessageSenderRole,
     payload: ReplyTicketInput,
     attachmentUrls: string[] = [],
+    auditContext?: IAuditContext,
   ): Promise<ITicket> {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -223,6 +233,30 @@ export class SupportService {
       await ticket.save({ session });
       await session.commitTransaction();
 
+      // audit log
+      if (auditContext && senderRole === MessageSenderRole.ADMIN) {
+        await AuditLogService.log({
+          adminId: auditContext.adminId,
+          adminEmail: auditContext.adminEmail,
+          adminName: auditContext.adminName,
+          action: AuditAction.UPDATE,
+          module: AuditModule.SUPPORT,
+          targetId: ticket._id.toString(),
+          targetName: ticket.ticketId,
+          changes: {
+            before: { status: ticket.status },
+            after: { status: ticket.status }, // State machine shifted
+          },
+          payload: { message: payload.message },
+          ...(auditContext.ipAddress
+            ? { ipAddress: auditContext.ipAddress }
+            : {}),
+          ...(auditContext.userAgent
+            ? { userAgent: auditContext.userAgent }
+            : {}),
+        });
+      }
+
       // FIRE-AND-FORGET NOTIFICATION: If Admin replies, notify the Customer
       if (senderRole === MessageSenderRole.ADMIN && ticket.user) {
         const userDoc = await User.findById(ticket.user)
@@ -263,7 +297,16 @@ export class SupportService {
   public static async updateTicketState(
     ticketId: string,
     payload: UpdateTicketStateInput,
+    auditContext?: IAuditContext,
   ): Promise<ITicket> {
+    // capture "before" state for audit logging
+    let beforeTicket: ITicket | null = null;
+    if (auditContext) {
+      beforeTicket = (await Ticket.findOne({
+        ticketId: { $eq: ticketId },
+      }).lean()) as ITicket | null;
+    }
+
     const ticket = await Ticket.findOneAndUpdate(
       { ticketId: { $eq: ticketId } },
       { $set: payload },
@@ -272,6 +315,30 @@ export class SupportService {
 
     if (!ticket) {
       throw new AppError(HTTP_STATUS.NOT_FOUND, "Support ticket not found.");
+    }
+
+    // audit log
+    if (auditContext && beforeTicket) {
+      await AuditLogService.log({
+        adminId: auditContext.adminId,
+        adminEmail: auditContext.adminEmail,
+        adminName: auditContext.adminName,
+        action: AuditAction.UPDATE,
+        module: AuditModule.SUPPORT,
+        targetId: ticket._id.toString(),
+        targetName: ticket.ticketId,
+        changes: {
+          before: beforeTicket as unknown as Record<string, unknown>,
+          after: ticket.toObject() as unknown as Record<string, unknown>,
+        },
+        payload: payload,
+        ...(auditContext.ipAddress
+          ? { ipAddress: auditContext.ipAddress }
+          : {}),
+        ...(auditContext.userAgent
+          ? { userAgent: auditContext.userAgent }
+          : {}),
+      });
     }
 
     logger.info(`[SupportEngine] Admin updated State for Ticket ${ticketId}`);

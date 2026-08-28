@@ -17,6 +17,15 @@ import {
 import { InitiateReturnInput, ArbitrateReturnInput } from "./dtos/return.dto";
 import { IOrderItem } from "@modules/orders/interfaces/order.interface";
 
+// --- audit imports ---
+import { AuditLogService } from "@modules/audit-logs/audit-log.service";
+import {
+  AuditAction,
+  AuditModule,
+} from "@modules/audit-logs/audit-log.interface";
+import { IAuditContext } from "@shared/utils/audit.utils";
+import { IOrder } from "@modules/orders/interfaces/order.interface";
+
 /**
  * UNIFIED RETURN & RMA SERVICE
  * ARCHITECTURE NOTE:
@@ -252,6 +261,7 @@ export class ReturnService {
   public static async arbitrateReturn(
     returnId: string,
     payload: ArbitrateReturnInput,
+    auditContext?: IAuditContext,
   ) {
     const safeReturnId = String(returnId).replace(/[\r\n]/g, "");
     const safeStatus = String(payload.status).replace(/[\r\n]/g, "");
@@ -259,6 +269,21 @@ export class ReturnService {
     logger.info(
       `[ReturnService] Admin arbitrating Return: ${safeReturnId} to ${safeStatus}`,
     );
+
+    // capture "before" state for audit logging
+    let beforeReturn: IReturn | null = null;
+    let beforeOrder: IOrder | null = null;
+
+    if (auditContext) {
+      beforeReturn = (await ReturnModel.findOne({
+        _id: { $eq: String(returnId) },
+      }).lean()) as IReturn | null;
+      if (beforeReturn) {
+        beforeOrder = (await Order.findOne({
+          _id: { $eq: String(beforeReturn.order) },
+        }).lean()) as IOrder | null;
+      }
+    }
 
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -337,6 +362,38 @@ export class ReturnService {
         });
       }
 
+      // audit log (arbitrate) ---
+      if (auditContext) {
+        const afterReturn = (await ReturnModel.findOne({
+          _id: { $eq: String(returnId) },
+        }).lean()) as IReturn | null;
+
+        await AuditLogService.log({
+          adminId: auditContext.adminId,
+          adminEmail: auditContext.adminEmail,
+          adminName: auditContext.adminName,
+          action: AuditAction.UPDATE,
+          module: AuditModule.RETURN,
+          targetId: returnId,
+          targetName: `Return ${returnRequest._id}`,
+          changes: {
+            before: beforeReturn as unknown as Record<string, unknown>,
+            after: afterReturn as unknown as Record<string, unknown>,
+          },
+          payload: {
+            status: payload.status,
+            adminRejectionReason: payload.adminRejectionReason,
+            orderStatusUpdatedTo: order.orderStatus,
+          },
+          ...(auditContext.ipAddress
+            ? { ipAddress: auditContext.ipAddress }
+            : {}),
+          ...(auditContext.userAgent
+            ? { userAgent: auditContext.userAgent }
+            : {}),
+        });
+      }
+
       return returnRequest;
     } catch (error) {
       await session.abortTransaction();
@@ -351,11 +408,29 @@ export class ReturnService {
    * @description Executes the Razorpay refund. Upon success, initiates a
    * Mongoose bulkWrite to restore inventory levels atomically.
    */
-  public static async processRefundAndRestock(returnId: string) {
+  public static async processRefundAndRestock(
+    returnId: string,
+    auditContext?: IAuditContext,
+  ) {
     const safeReturnId = String(returnId).replace(/[\r\n]/g, "");
     logger.info(
       `[ReturnService] Executing Refund & Restock for Return: ${safeReturnId}`,
     );
+
+    // capture "before" state for audit loggig
+    let beforeReturn: IReturn | null = null;
+    let beforeOrder: IOrder | null = null;
+
+    if (auditContext) {
+      beforeReturn = (await ReturnModel.findOne({
+        _id: { $eq: String(returnId) },
+      }).lean()) as IReturn | null;
+      if (beforeReturn) {
+        beforeOrder = (await Order.findOne({
+          _id: { $eq: String(beforeReturn.order) },
+        }).lean()) as IOrder | null;
+      }
+    }
 
     const returnRequest = await ReturnModel.findOne({
       _id: { $eq: String(returnId) },
@@ -455,6 +530,38 @@ export class ReturnService {
           ),
         );
       });
+
+      // audit log (process refund)
+      if (auditContext) {
+        const afterReturn = (await ReturnModel.findOne({
+          _id: { $eq: String(returnId) },
+        }).lean()) as IReturn | null;
+
+        await AuditLogService.log({
+          adminId: auditContext.adminId,
+          adminEmail: auditContext.adminEmail,
+          adminName: auditContext.adminName,
+          action: AuditAction.UPDATE,
+          module: AuditModule.RETURN,
+          targetId: returnId,
+          targetName: `Return ${returnRequest._id}`,
+          changes: {
+            before: beforeReturn as unknown as Record<string, unknown>,
+            after: afterReturn as unknown as Record<string, unknown>,
+          },
+          payload: {
+            refundAmount: returnRequest.refundAmountEstimate,
+            razorpayRefundId,
+            orderStatusUpdatedTo: order.orderStatus,
+          },
+          ...(auditContext.ipAddress
+            ? { ipAddress: auditContext.ipAddress }
+            : {}),
+          ...(auditContext.userAgent
+            ? { userAgent: auditContext.userAgent }
+            : {}),
+        });
+      }
 
       return returnRequest;
     } catch (error) {

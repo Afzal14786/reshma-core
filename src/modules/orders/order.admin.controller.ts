@@ -8,6 +8,16 @@ import { UpdateOrderStatusInput } from "./dtos/order.dto";
 import { NotificationService } from "../notifications/notification.service";
 import { ShiprocketService } from "./shiprocket.service";
 import { DispatchOrderInput } from "./dtos/order.dto";
+
+// audit imports
+import { AuditLogService } from "@modules/audit-logs/audit-log.service";
+import {
+  AuditAction,
+  AuditModule,
+} from "@modules/audit-logs/audit-log.interface";
+import { getAuditContext } from "@shared/utils/audit.utils";
+import { IOrder } from "./interfaces/order.interface";
+
 import logger from "@config/logger";
 import mongoose from "mongoose";
 
@@ -104,6 +114,16 @@ export class OrderAdminController {
     const id = String(req.params.id);
     const payload = req.body as UpdateOrderStatusInput;
 
+    // capture admin context for audit
+    const auditContext = getAuditContext(req);
+    let beforeOrder: IOrder | null = null;
+
+    if (auditContext) {
+      beforeOrder = (await Order.findOne({
+        _id: { $eq: id },
+      }).lean()) as IOrder | null;
+    }
+
     // SECURITY: Object.create(null) ensures prototype chain is dead, mitigating Prototype Pollution
     const sanitizedPayload = Object.create(null);
     if (payload.orderStatus) sanitizedPayload.orderStatus = payload.orderStatus;
@@ -148,6 +168,29 @@ export class OrderAdminController {
       }
     }
 
+    // audit log -- update order status
+    if (auditContext) {
+      await AuditLogService.log({
+        adminId: auditContext.adminId,
+        adminEmail: auditContext.adminEmail,
+        adminName: auditContext.adminName,
+        action: AuditAction.UPDATE,
+        module: AuditModule.ORDER,
+        targetId: id,
+        targetName: order.orderNumber,
+        changes: {
+          before: beforeOrder as unknown as Record<string, unknown>,
+          after: order.toObject() as unknown as Record<string, unknown>,
+        },
+        ...(auditContext.ipAddress
+          ? { ipAddress: auditContext.ipAddress }
+          : {}),
+        ...(auditContext.userAgent
+          ? { userAgent: auditContext.userAgent }
+          : {}),
+      });
+    }
+
     return new ApiResponse(
       res,
       HTTP_STATUS.OK,
@@ -163,6 +206,16 @@ export class OrderAdminController {
    */
   public static async dispatchOrder(req: Request, res: Response) {
     const orderId = String(req.params.id);
+
+    // capture admin context for audit
+    const auditContext = getAuditContext(req);
+    let beforeOrder: IOrder | null = null;
+
+    if (auditContext) {
+      beforeOrder = (await Order.findOne({
+        _id: { $eq: orderId },
+      }).lean()) as IOrder | null;
+    }
 
     // SECURITY FIREWALL (CodeQL Mitigation)
     // CodeQL flags `req.body.length` as a Type Confusion vulnerability because an attacker
@@ -182,6 +235,30 @@ export class OrderAdminController {
 
     // Fetch the freshly updated order to return to the frontend
     const updatedOrder = await Order.findById(orderId).lean();
+
+    // audit logs
+    if (auditContext) {
+      await AuditLogService.log({
+        adminId: auditContext.adminId,
+        adminEmail: auditContext.adminEmail,
+        adminName: auditContext.adminName,
+        action: AuditAction.UPDATE,
+        module: AuditModule.ORDER,
+        targetId: orderId,
+        targetName: updatedOrder?.orderNumber || "Unknown Order",
+        changes: {
+          before: beforeOrder as unknown as Record<string, unknown>,
+          after: updatedOrder as unknown as Record<string, unknown>,
+        },
+        payload: dimensions,
+        ...(auditContext.ipAddress
+          ? { ipAddress: auditContext.ipAddress }
+          : {}),
+        ...(auditContext.userAgent
+          ? { userAgent: auditContext.userAgent }
+          : {}),
+      });
+    }
 
     return new ApiResponse(
       res,

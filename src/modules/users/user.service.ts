@@ -18,6 +18,14 @@ import { UpdateProfileInput } from "./dtos/update-profile.dto";
 import { AddAddressInput, UpdateAddressInput } from "./dtos/address.dto";
 import { UpdatePasswordInput } from "./dtos/security.dto";
 
+// audit imports
+import { AuditLogService } from "@modules/audit-logs/audit-log.service";
+import {
+  AuditAction,
+  AuditModule,
+} from "@modules/audit-logs/audit-log.interface";
+import { IAuditContext } from "@shared/utils/audit.utils";
+
 /**
  * ENTERPRISE USER SERVICE
  * Orchestrates all identity, logistics, and security state changes.
@@ -46,6 +54,7 @@ export class UserService {
   public static async updateProfile(
     userId: string | Types.ObjectId,
     payload: UpdateProfileInput,
+    auditContext?: IAuditContext,
   ): Promise<IUser> {
     // SECURITY FIX: Explicitly map allowed fields from the DTO.
     // This stops CodeQL from tracing untrusted req.body directly to the DB sink.
@@ -57,6 +66,14 @@ export class UserService {
     if (payload.gender) updateData.gender = payload.gender;
     if (payload.dob) updateData.dob = payload.dob;
 
+    // capture "before" state for audit logging
+    let beforeUser: IUser | null = null;
+    if (auditContext) {
+      beforeUser = (await User.findOne({
+        _id: { $eq: userId },
+      }).lean()) as IUser | null;
+    }
+
     // Find by ID and update, returning the newly modified document.
     // runValidators ensures Mongoose Schema rules (like max lengths) are enforced.
     const updatedUser = (await User.findOneAndUpdate(
@@ -67,6 +84,30 @@ export class UserService {
 
     if (!updatedUser) {
       throw new AppError(HTTP_STATUS.NOT_FOUND, "User profile not found");
+    }
+
+    // audit log (update profile)
+    if (auditContext && beforeUser) {
+      await AuditLogService.log({
+        adminId: auditContext.adminId,
+        adminEmail: auditContext.adminEmail,
+        adminName: auditContext.adminName,
+        action: AuditAction.UPDATE,
+        module: AuditModule.USER,
+        targetId: String(userId),
+        targetName: updatedUser.email,
+        changes: {
+          before: beforeUser as unknown as Record<string, unknown>,
+          after: updatedUser as unknown as Record<string, unknown>,
+        },
+        payload: updateData,
+        ...(auditContext.ipAddress
+          ? { ipAddress: auditContext.ipAddress }
+          : {}),
+        ...(auditContext.userAgent
+          ? { userAgent: auditContext.userAgent }
+          : {}),
+      });
     }
     return updatedUser;
   }
@@ -321,11 +362,19 @@ export class UserService {
    */
   public static async deleteAccount(
     userId: string | Types.ObjectId,
+    auditContext?: IAuditContext,
   ): Promise<void> {
     const session = await mongoose.startSession();
     session.startTransaction();
 
     const safeUserId = String(userId).replace(/[\r\n]/g, "");
+    // capture "before" state for audit logging
+    let beforeUser: IUser | null = null;
+    if (auditContext) {
+      beforeUser = (await User.findOne({
+        _id: { $eq: safeUserId },
+      }).lean()) as IUser | null;
+    }
 
     try {
       // 1. Wipe Ephemeral State (Free up DB storage)
@@ -357,6 +406,29 @@ export class UserService {
       // FIRE AND FORGET:
       // Any active Access Tokens (JWT) will naturally expire within 15 minutes.
       // Refresh Tokens will naturally fail upon their next use because User.findOne() will return null.
+
+      // audit log
+      if (auditContext) {
+        await AuditLogService.log({
+          adminId: auditContext.adminId,
+          adminEmail: auditContext.adminEmail,
+          adminName: auditContext.adminName,
+          action: AuditAction.DELETE,
+          module: AuditModule.USER,
+          targetId: safeUserId,
+          targetName: beforeUser?.email || "Unknown User",
+          changes: {
+            before: beforeUser as unknown as Record<string, unknown>,
+            after: { deleted: true, reason: "GDPR/DPDP Right to be Forgotten" },
+          },
+          ...(auditContext.ipAddress
+            ? { ipAddress: auditContext.ipAddress }
+            : {}),
+          ...(auditContext.userAgent
+            ? { userAgent: auditContext.userAgent }
+            : {}),
+        });
+      }
     } catch (error) {
       await session.abortTransaction();
       logger.error(

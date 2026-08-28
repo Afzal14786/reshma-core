@@ -11,6 +11,8 @@ import { UpdateProfileInput } from "./dtos/update-profile.dto";
 import { AddAddressInput, UpdateAddressInput } from "./dtos/address.dto";
 import { UpdatePasswordInput } from "./dtos/security.dto";
 
+import { getAuditContext } from "@shared/utils/audit.utils";
+
 /**
  * ENTERPRISE USER CONTROLLER
  * * ARCHITECTURE NOTE:
@@ -71,7 +73,18 @@ export class UserController {
 
       // Safe casting: The Validation Middleware guarantees this payload perfectly matches the DTO
       const payload = req.body as UpdateProfileInput;
-      const updatedUser = await UserService.updateProfile(userId, payload);
+
+      // extract admin context for audit (Only if user is ADMIN)
+      // Note: This endpoint is user-facing, but we check if the user is an ADMIN
+      // so we can log admin-driven profile updates.
+      const auditContext =
+        req.user?.role === "ADMIN" ? getAuditContext(req) : undefined;
+
+      const updatedUser = await UserService.updateProfile(
+        userId,
+        payload,
+        auditContext,
+      );
 
       new ApiResponse(
         res,
@@ -320,8 +333,10 @@ export class UserController {
         throw new AppError(HTTP_STATUS.UNAUTHORIZED, "Authentication required");
       }
 
+      // --- extract admin context for audit log
+      const auditContext = getAuditContext(req);
       // Execute the Master Deletion Transaction
-      await UserService.deleteAccount(userId);
+      await UserService.deleteAccount(userId, auditContext);
 
       // Security: Instruct the browser to destroy the HttpOnly session cookie
       res.clearCookie("refresh_token", {

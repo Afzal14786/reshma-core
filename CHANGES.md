@@ -8,6 +8,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+*(Phase 2: Implemented Enterprise-Grade Audit Log Middleware - Prepared for alpha release)*  
+
+### fix & added
+
+- **Implemented Enterprise-Grade Audit Log Middleware**
+  - **Added** a non-blocking, fire-and-forget audit logging system that automatically tracks every administrative mutation (`CREATE`, `UPDATE`, `DELETE`) across the platform.
+  - **Captures:** Admin Identity (`adminId`, `email`, `name`), Target (`module`, `targetId`), `before`/`after` state diffs (for `UPDATE`), full `payload` (for `CREATE`), and network context (`ipAddress`, `userAgent`).
+  - **Stored:** Immutable records in the MongoDB `auditlogs` collection with strategic compound indexes for high-performance Admin Dashboard queries.
+
+- **New Admin API Endpoints**
+  - **Added** `GET /api/v1/admin/audit-logs` – A paginated, filterable view of all audit logs. Supports filtering by `module`, `action`, `adminId`, `targetId`, and `startDate`/`endDate`.
+  - **Added** `GET /api/v1/admin/audit-logs/export` – Triggers an asynchronous BullMQ background job to generate a CSV of filtered audit logs. The Admin receives the download link via email (preventing HTTP timeouts for large datasets).
+
+- **Full Integration Across All Admin Modules**
+  - **Products (`product.service.ts`):** Logs `CREATE`, `UPDATE`, and `DELETE` (soft-delete) actions with full `before`/`after` product state.
+  - **Orders (`order.admin.controller.ts`):** Logs `updateOrderStatus` and `dispatchOrder` actions with order state diffs and shipping dimension payloads.
+  - **Support (`support.service.ts`):** Logs Admin replies and ticket state changes (status, priority, assignment).
+  - **Returns (`return.service.ts`):** Logs arbitration decisions (Approve/Reject) and final refund processing with financial details.
+  - **Users (`user.service.ts`):** Logs Admin-driven profile updates and critical DPDP/GDPR account deletions (Right to be Forgotten).
+
+- **New Utilities & Infrastructure**
+  - **`src/shared/utils/audit.utils.ts`:** Added the `getAuditContext()` helper to extract Admin identity, IP (proxy-aware), and User-Agent from the Express `Request` object.
+  - **`src/shared/queues/audit-export.queue.ts`:** Added the `AuditExportQueueManager` to handle the CSV generation pipeline via BullMQ.
+
+---
+### Files Created
+- `src/modules/audit-logs/audit-log.interface.ts`
+- `src/modules/audit-logs/audit-log.model.ts`
+- `src/modules/audit-logs/audit-log.service.ts`
+- `src/modules/audit-logs/audit-log.controller.ts`
+- `src/modules/audit-logs/audit-log.routes.ts`
+- `src/modules/audit-logs/dto/audit-log.dto.ts`
+- `src/shared/utils/audit.utils.ts`
+- `src/shared/queues/audit-export.queue.ts`
+
+---
+### Files Modified
+- `src/modules/orders/order.admin.controller.ts`
+- `src/modules/products/product.service.ts`
+- `src/modules/returns/return.admin.controller.ts`
+- `src/modules/returns/return.service.ts`
+- `src/modules/support/support.admin.controller.ts`
+- `src/modules/support/support.service.ts`
+- `src/modules/users/user.controller.ts`
+- `src/modules/users/user.service.ts`
+- `src/routes/index.ts`  
+
+
 *(Phase 1: Implemented Admin Two-Factor Authentication (2FA) using TOTP (Time-based One-Time Password) standard (RFC 6238) - Prepared for alpha release)*  
 
 ### fix & added

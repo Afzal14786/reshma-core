@@ -4,6 +4,7 @@ import { ApiResponse } from "@shared/utils/api-response";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { MessageSenderRole } from "./interfaces/support.interface";
 import { ReplyTicketInput, UpdateTicketStateInput } from "./dtos/support.dto";
+import { getAuditContext } from "@shared/utils/audit.utils";
 
 /**
  * ADMIN SUPPORT CONTROLLER (Staff Dashboard)
@@ -66,6 +67,8 @@ export class SupportAdminController {
       const ticketId = String(req.params.ticketId);
       const payload = req.body as ReplyTicketInput;
 
+      const auditContext = getAuditContext(req);
+
       // Extract Cloudinary attachments (if Admin needs to send a screenshot/document)
       const attachmentUrls: string[] = [];
       if (req.files && Array.isArray(req.files)) {
@@ -80,6 +83,7 @@ export class SupportAdminController {
         MessageSenderRole.ADMIN, // Force ADMIN state shift
         payload,
         attachmentUrls,
+        auditContext,
       );
 
       new ApiResponse(res, HTTP_STATUS.OK, "Admin reply posted successfully.", {
@@ -104,7 +108,13 @@ export class SupportAdminController {
       const ticketId = String(req.params.ticketId);
       const payload = req.body as UpdateTicketStateInput;
 
-      const ticket = await SupportService.updateTicketState(ticketId, payload);
+      const auditContext = getAuditContext(req);
+
+      const ticket = await SupportService.updateTicketState(
+        ticketId,
+        payload,
+        auditContext,
+      );
 
       new ApiResponse(
         res,
