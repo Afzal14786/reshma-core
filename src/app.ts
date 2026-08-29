@@ -7,6 +7,7 @@ import env from "@config/env";
 // Middleware Imports
 import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 import { errorHandler } from "@shared/middlewares/error.middleware";
+import { correlationMiddleware } from "@shared/middlewares/correlation.middleware";
 import { httpLogger } from "@shared/middlewares/http-logger";
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
@@ -30,6 +31,9 @@ app.use(
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   }),
 );
+
+// Generate a unique correlation ID for every request (for distributed tracing)
+app.use(correlationMiddleware);
 
 /**
  * Enterprise Observability: HTTP Interceptor
