@@ -1,5 +1,6 @@
 import { z } from "zod";
 import dotenv from "dotenv";
+import { validate } from "node-cron";
 
 dotenv.config();
 
@@ -83,6 +84,17 @@ const envSchema = z.object({
   TYPESENSE_PORT: z.coerce.number().default(8108),
   TYPESENSE_PROTOCOL: z.enum(["http", "https"]).default("http"),
   TYPESENSE_API_KEY: z.string().min(1, "Typesense API key is required"),
+
+  ADMIN_ALERT_EMAILS: z
+    .string()
+    .optional()
+    .default("admin@reshma.com")
+    .transform((val) => {
+      return val;
+    }),
+
+  // we'll integration slack later
+  SLACK_WEBHOOK_URL: z.string().url().optional(),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
