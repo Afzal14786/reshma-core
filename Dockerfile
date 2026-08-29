@@ -32,24 +32,30 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
-# Set Node environment to production for framework optimizations (Express cache, etc.)
 ENV NODE_ENV=production
 
-# Re-install ONLY production dependencies to keep the image tiny and secure
-COPY package.json package-lock.json ./
-RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
+# Install curl for health checks (Alpine does not include it by default)
+RUN apk add --no-cache curl
 
-# Copy only the compiled JavaScript from the builder stage
+COPY package.json package-lock.json ./
+RUN npm install --omit=dev --legacy-peer-pers && npm cache clean --force
+
 COPY --from=builder /app/dist ./dist
 
-# NEW: Create the logs directory and give the 'node' user ownership of it
 RUN mkdir -p logs && chown node:node logs
 
-# SECURITY: Do not run as root. Switch to the unprivileged 'node' user provided by the image.
+# Switch to non-root user BEFORE healthcheck (it runs under the same user)
 USER node
 
-# Expose the API port
 EXPOSE 5000
 
-# Start the application
+# Docker HEALTHCHECK instruction
+# - interval: 30s   (check every 30 seconds)
+# - timeout: 3s     (fail if no response in 3 seconds)
+# - start-period: 5s (wait 5 seconds after container start before first check)
+# - retries: 3       (mark unhealthy after 3 consecutive failures)
+# - CMD: uses curl to hit the /health endpoint; if it fails (non-zero exit), Docker marks as unhealthy.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
+
 CMD ["npm", "start"]
