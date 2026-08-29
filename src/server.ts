@@ -12,6 +12,12 @@ import { startCronJobs } from "./shared/cron/order-recovery.cron";
 import "@shared/queues/email.worker";
 import "@shared/queues/invoice.worker";
 
+import { searchSyncQueue } from "@modules/products/product.service";
+import { AuditExportQueue } from "@shared/queues/audit-export.queue";
+import { emailQueue } from "@shared/queues/email.queue";
+import { dataExportQueue } from "@shared/queues/export.queue";
+import { invoiceQueue } from "@shared/queues/invoice.queue";
+
 /**
  * Failsafe : Uncaught Exceptions
  * Catches synchronous bugs (e.g., trying to read a property of undefined outside an async function).
@@ -54,6 +60,16 @@ const gracefulShutdown = (signal: string) => {
 
   const teardownDatabases = async () => {
     try {
+      const queueClosePromises = [
+        searchSyncQueue.close(),
+        AuditExportQueue.close(),
+        emailQueue.close(),
+        dataExportQueue.close(),
+        invoiceQueue.close(),
+      ];
+      await Promise.allSettled(queueClosePromises);
+      logger.info("[Shutdown] BullMQ queues closed safely.");
+
       // Safely check if Mongoose is actually connected before closing
       if (mongoose.connection.readyState === 1) {
         await mongoose.connection.close(false);
