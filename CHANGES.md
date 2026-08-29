@@ -8,6 +8,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+### fix & added
+
+*(Phase 3: Architectural Stability & Observability - Prepared for alpha release)*  
+
+**Architectural Stability & Observability**
+
+- **3.2 Graceful Shutdown Handlers**
+  - **Added** comprehensive graceful shutdown for all BullMQ queues (`emailQueue`, `invoiceQueue`, `dataExportQueue`, `searchSyncQueue`, `AuditExportQueue`).
+  - **Enhanced** `gracefulShutdown` to close BullMQ connections **before** MongoDB and Redis, preventing in-flight job loss during container termination.
+  - *Impact:* Kubernetes/Docker can now restart pods without corrupting active BullMQ transactions or losing in-progress jobs.
+
+- **3.3 Deep Health Checks**
+  - **Enhanced** `/health` endpoint with timeout guards (5-second `Promise.race`) to prevent the health check from hanging.
+  - **Added** BullMQ liveness check – verifies that workers are actively running.
+  - **Added** `latency` tracking and `NO_WORKERS` status for BullMQ.
+  - *Impact:* Load balancers (AWS ELB/Kubernetes) can now accurately detect unhealthy instances and remove them from traffic rotation.
+
+- **3.4 Docker HEALTHCHECK**
+  - **Added** `HEALTHCHECK` instruction to `Dockerfile` with `--interval=30s`, `--timeout=3s`, `--start-period=5s`.
+  - **Installed** `curl` in the runner stage (Alpine base image does not include it).
+  - **Added** explicit `healthcheck` block to `docker-compose.prod.yml` for `reshma-api`.
+  - *Impact:* Docker/Kubernetes automatically restarts containers if the health check fails, ensuring high availability.
+
+- **3.5 Correlation IDs (Distributed Tracing)**
+  - **Added** `correlation.middleware.ts` that generates a unique `X-Request-ID` for every HTTP request (UUID or client-provided).
+  - **Attached** `req.id` to the Express Request object (TypeScript-extended via `express.d.ts`).
+  - **Integrated** `cls-hooked` into `logger.ts` to inject `requestId` into **every** log entry (both dev console and JSON format).
+  - *Impact:* Enables end-to-end tracing across API, workers, and logs. Developers can now search logs by `X-Request-ID` to debug complex async flows (e.g., Abandoned Cart Recovery, Webhook Retries).
+
+- **3.6 Dead Letter Queue (DLQ) Alerting**
+  - **Added** `dlq.alert.ts` – a centralized alert engine that triggers when a BullMQ job exhausts all retry attempts.
+  - **Sends** detailed HTML email alerts to `ADMIN_ALERT_EMAILS` with: Job ID, Queue Name, Stack Trace, Job Data, and Timestamp.
+  - **Integrated** DLQ alerts into `email.worker`, `invoice.worker`, `export.worker`, and future workers.
+  - *Impact:* Permanent job failures are now detected **immediately** (not hours later). Admins are proactively notified, enabling rapid incident response.
+
+---
+### Dependencies Added
+- `cls-hooked` – Async context propagation for request-scoped logging.
+- `@types/cls-hooked` – TypeScript definitions for the above.
+
+---
+### Files Modified
+- `Dockerfile`
+- `docker-compose.prod.yml`
+- `package.json`
+- `package-lock.json`
+- `src/app.ts`
+- `src/config/env.ts`
+- `src/config/logger.ts`
+- `src/modules/health/health.controller.ts`
+- `src/server.ts`
+- `src/shared/types/express.d.ts`
+
+---
+### Files Created
+- `src/shared/middlewares/correlation.middleware.ts`
+- `src/shared/queues/dlq.alert.ts`
+
 *(Phase 2: Implemented Enterprise-Grade Audit Log Middleware - Prepared for alpha release)*  
 
 ### fix & added
