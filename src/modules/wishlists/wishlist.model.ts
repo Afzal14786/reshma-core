@@ -10,7 +10,7 @@ const WishlistItemSchema = new Schema(
     product: {
       type: Schema.Types.ObjectId,
       // Must reference the polymorphic base collection to allow saving Bangles, Apparel, etc.
-      ref: "BaseProduct",
+      ref: "Product",
       required: true,
     },
     addedAt: {
