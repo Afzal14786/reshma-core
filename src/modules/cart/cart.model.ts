@@ -9,9 +9,10 @@ const CartItemSchema = new Schema(
   {
     product: {
       type: Schema.Types.ObjectId,
-      // ARCHITECTURAL FIX: Must reference the polymorphic base collection to allow
-      // population of Bangles, Apparel, Innerwear, etc., from a single reference.
-      ref: "BaseProduct",
+      // Points at the polymorphic base model (registered as "Product" in
+      // base-product.model.ts). Discriminators like Bangles/Apparel share
+      // the same collection and populate transparently through this ref.
+      ref: "Product",
       required: true,
     },
     quantity: {
