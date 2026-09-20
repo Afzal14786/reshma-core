@@ -30,7 +30,11 @@ export const signAccessToken = (userId: Types.ObjectId): string => {
       SignOptions["expiresIn"]
     >;
   }
-  return jwt.sign({ id: userId }, env.JWT_ACCESS_SECRET, options);
+  return jwt.sign(
+    { id: userId.toString(), jti: crypto.randomUUID() },
+    env.JWT_ACCESS_SECRET,
+    options,
+  );
 };
 
 /**
@@ -45,7 +49,11 @@ export const signRefreshToken = (userId: Types.ObjectId): string => {
       SignOptions["expiresIn"]
     >;
   }
-  return jwt.sign({ id: userId }, env.JWT_REFRESH_SECRET, options);
+  return jwt.sign(
+    { id: userId.toString(), jti: crypto.randomUUID() },
+    env.JWT_REFRESH_SECRET,
+    options,
+  );
 };
 
 /**
@@ -59,7 +67,7 @@ export const setAccessCookie = (res: Response, accessToken: string): void => {
   res.cookie("jwt", accessToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? "strict" : "lax",
+    sameSite: "lax",
     signed: true,
     maxAge: 15 * 60 * 1000, // 15 minutes
   } as const);
@@ -74,16 +82,14 @@ export const setAccessCookie = (res: Response, accessToken: string): void => {
  * completely nullifying Cross-Site Scripting (XSS) payload attacks.
  */
 export const setRefreshCookie = (res: Response, refreshToken: string): void => {
-  const days: number =
-    parseInt(env.JWT_REFRESH_EXPIRES_IN.replace("d", "")) || 7;
-  const expirationMs: number = days * 24 * 60 * 60 * 1000;
   const isProduction: boolean = env.NODE_ENV === "production";
+  const refreshMaxAgeMs = 7 * 24 * 60 * 60 * 1000; // 7 days
 
   res.cookie("refreshToken", refreshToken, {
-    expires: new Date(Date.now() + expirationMs),
+    maxAge: refreshMaxAgeMs,
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? "strict" : "lax",
+    sameSite: "lax",
     signed: true,
   });
 };
@@ -95,10 +101,10 @@ export const setRefreshCookie = (res: Response, refreshToken: string): void => {
 export const clearRefreshCookie = (res: Response): void => {
   const isProduction: boolean = env.NODE_ENV === "production";
   const clearOptions = {
-    expires: new Date(Date.now() + 10 * 1000),
+    maxAge: 0,
     httpOnly: true,
     secure: isProduction ? true : false,
-    sameSite: isProduction ? "strict" : "lax",
+    sameSite: "lax",
     signed: true,
   } as const;
 
@@ -116,7 +122,7 @@ export const clearRefreshCookie = (res: Response): void => {
  */
 export const signTwoFactorToken = (userId: Types.ObjectId): string => {
   return jwt.sign(
-    { id: userId, purpose: "2fa" },
+    { id: userId.toString(), purpose: "2fa" },
     env.JWT_ACCESS_SECRET, // Reuse access secret, or create a dedicated ONE
     { expiresIn: "5m" },
   );

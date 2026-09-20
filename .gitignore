@@ -74,3 +74,45 @@ uploads/
 *.swp
 *.swo
 .DS_Store
+
+
+# ──────────────────────────────────────────────
+# TEST REPORTS
+# ──────────────────────────────────────────────
+reports/*.xml
+reports/*.json
+reports/*.html
+reports/*.log
+!reports/.gitkeep
+
+# ──────────────────────────────────────────────
+# ENV VARIANTS — explicit ignore + test whitelist
+# ──────────────────────────────────────────────
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.*.local
+!.env.test
+!.env.test.example
+
+# ──────────────────────────────────────────────
+# SECRETS / TLS
+# ──────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ──────────────────────────────────────────────
+# TOOLING / TEST CACHE
+# ──────────────────────────────────────────────
+dist-test/
+.mongodb-binaries/
+.jest-cache/
+.jest_*/
+.cache/
+.parcel-cache/
+docker-compose.override.yml
+docker-compose.*.local.yml

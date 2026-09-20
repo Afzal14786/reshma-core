@@ -1,0 +1,21 @@
+# ──────────────────────────────────────────────
+# Reshma-Core Test Runner
+# ──────────────────────────────────────────────
+
+FROM node:20-slim AS base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev --no-audit --no-fund --legacy-peer-deps
+
+COPY . .
+
+ENV NODE_ENV=test
+ENV TS_NODE_TRANSPILE_ONLY=true
+
+CMD ["npm", "run", "test:unit"]

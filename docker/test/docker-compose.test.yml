@@ -1,0 +1,119 @@
+services:
+  test-redis:
+    image: redis:7-alpine
+    container_name: reshma-test-redis
+    restart: "no"
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "testredispassword", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - reshma-test-network
+
+  # ── MongoDB 6.0 (avoids handshake bug with Mongoose 9) ──
+  test-mongo:
+    image: mongo:6.0
+    container_name: reshma-test-mongo
+    restart: "no"
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    healthcheck:
+      test: >
+        bash -c "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id:\"rs0\",members:[{_id:0,host:\"test-mongo:27017\"}]}).ok }' || exit 1"
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+    networks:
+      - reshma-test-network
+
+  test-smoke:
+    build:
+      context: ../../
+      dockerfile: docker/test/Dockerfile.test
+    container_name: reshma-test-smoke
+    env_file:
+      - ../../.env.test
+    environment:
+      REDIS_URL: redis://:testredispassword@test-redis:6379
+    depends_on:
+      test-redis:
+        condition: service_healthy
+    volumes:
+      - ../../src:/app/src
+      - ../../tests:/app/tests
+      - ../../jest.config.ts:/app/jest.config.ts:ro
+      - ../../jest.config.unit.ts:/app/jest.config.unit.ts:ro
+      - ../../tsconfig.json:/app/tsconfig.json:ro
+      - ../../tsconfig.test.json:/app/tsconfig.test.json:ro
+      - ../../coverage:/app/coverage
+      - ../../reports:/app/reports
+    networks:
+      - reshma-test-network
+    command: ["npm", "run", "test:smoke"]
+    profiles: ["smoke"]
+
+  test-runner:
+    build:
+      context: ../../
+      dockerfile: docker/test/Dockerfile.test
+    container_name: reshma-test-runner
+    env_file:
+      - ../../.env.test
+    environment:
+      REDIS_URL: redis://:testredispassword@test-redis:6379
+    depends_on:
+      test-redis:
+        condition: service_healthy
+    volumes:
+      - ../../src:/app/src
+      - ../../tests:/app/tests
+      - ../../jest.config.ts:/app/jest.config.ts:ro
+      - ../../jest.config.unit.ts:/app/jest.config.unit.ts:ro
+      - ../../tsconfig.json:/app/tsconfig.json:ro
+      - ../../tsconfig.test.json:/app/tsconfig.test.json:ro
+      - ../../coverage:/app/coverage
+      - ../../reports:/app/reports
+    networks:
+      - reshma-test-network
+    command: ["npm", "run", "test:unit"]
+    profiles: ["unit"]
+
+  # ── Integration tests (Phase 2) ──
+  test-integration:
+    build:
+      context: ../../
+      dockerfile: docker/test/Dockerfile.test
+    container_name: reshma-test-integration
+    env_file:
+      - ../../.env.test
+    environment:
+      MONGO_URI: mongodb://test-mongo:27017/reshma_test?replicaSet=rs0
+      REDIS_URL: redis://:testredispassword@test-redis:6379
+    depends_on:
+      test-mongo:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+    volumes:
+      - ../../src:/app/src
+      - ../../tests:/app/tests
+      - ../../jest.config.ts:/app/jest.config.ts:ro
+      - ../../jest.config.integration.ts:/app/jest.config.integration.ts:ro
+      - ../../tsconfig.json:/app/tsconfig.json:ro
+      - ../../tsconfig.test.json:/app/tsconfig.test.json:ro
+      - ../../coverage:/app/coverage
+      - ../../reports:/app/reports
+    networks:
+      - reshma-test-network
+    command: ["npm", "run", "test:integration"]
+    profiles: ["integration"]
+
+networks:
+  reshma-test-network:
+    driver: bridge
+    

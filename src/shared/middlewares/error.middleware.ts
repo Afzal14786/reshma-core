@@ -64,13 +64,40 @@ export const errorHandler = (
         : "field";
       message = `The ${duplicateField} you entered already exists. Please use another value.`;
       isOperational = true;
+    } else if (err.name === "MissingSchemaError") {
+      statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR;
+      message = `Model not registered: ${err.message}`;
+      isOperational = false; // This is a developer bug, not user error
+    } else if (
+      err.name === "MongoServerError" &&
+      (err as MongoServerError).code === 20
+    ) {
+      statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR;
+      message = "Database transaction failed. Replica set required.";
+      isOperational = false;
+    } else if (err instanceof MongooseError.DocumentNotFoundError) {
+      statusCode = HTTP_STATUS.NOT_FOUND;
+      message = "Document not found.";
+      isOperational = true;
     }
   } else if (typeof err === "string") {
     message = err;
   }
 
-  if (env.NODE_ENV !== "test" && !isOperational) {
-    logger.error(`[Unhandled Error] ${message}`, { stack, path: req.path });
+  // Always log non-operational errors — even in test.
+  // Test-mode console is mocked, so use a file/stdout channel.
+  if (!isOperational) {
+    const logPayload = { stack, path: req.path, method: req.method };
+    if (env.NODE_ENV === "test") {
+      // Bypass Jest's console mocks by writing to stderr directly
+      process.stderr.write(
+        `\n[Unhandled Error] ${message}\n` +
+          `PATH: ${req.method} ${req.path}\n` +
+          `STACK: ${stack ?? "N/A"}\n\n`,
+      );
+    } else {
+      logger.error(`[Unhandled Error] ${message}`, logPayload);
+    }
   }
 
   res.status(statusCode).json({
@@ -82,6 +109,6 @@ export const errorHandler = (
         ? message
         : "Internal Server Error",
     // Strip the stack trace in production to prevent reverse-engineering
-    ...(env.NODE_ENV === "development" && { stack }),
+    ...(env.NODE_ENV !== "production" && { stack }),
   });
 };

@@ -79,18 +79,63 @@ export class CartService {
   }
 
   /**
-   * @method generateItemSignature
-   * @private
+   * Normalizes any attribute representation (Mongoose Map, plain object,
+   * null, undefined) into a flat plain object. Drops prototype-pollution
+   * keys. Returns {} when nothing usable exists.
    */
+  private static normalizeAttributes(
+    attributes: unknown,
+  ): Record<string, AttributeValue> {
+    if (!attributes) return {};
+
+    const result: Record<string, AttributeValue> = {};
+
+    // Mongoose Map (from `type: Map` schema fields)
+    if (attributes instanceof Map) {
+      for (const [key, value] of attributes.entries()) {
+        if (
+          key === "__proto__" ||
+          key === "constructor" ||
+          key === "prototype"
+        ) {
+          continue;
+        }
+        result[key] = value as AttributeValue;
+      }
+      return result;
+    }
+
+    // Plain object
+    if (typeof attributes === "object") {
+      for (const [key, value] of Object.entries(attributes)) {
+        if (
+          key === "__proto__" ||
+          key === "constructor" ||
+          key === "prototype"
+        ) {
+          continue;
+        }
+        result[key] = value as AttributeValue;
+      }
+      return result;
+    }
+
+    return {};
+  }
+
   private static generateItemSignature(
     productId: string,
-    attributes?: Record<string, AttributeValue>,
+    attributes?: unknown,
   ): string {
-    if (!attributes || Object.keys(attributes).length === 0) return productId;
-    const sortedKeys = Object.keys(attributes).sort();
-    const attributeString = sortedKeys
-      .map((key) => `${key}:${attributes[key]}`)
+    const normalized = this.normalizeAttributes(attributes);
+    const keys = Object.keys(normalized).sort();
+
+    if (keys.length === 0) return productId;
+
+    const attributeString = keys
+      .map((key) => `${key}:${normalized[key]}`)
       .join("|");
+
     return `${productId}|${attributeString}`;
   }
 
@@ -236,7 +281,7 @@ export class CartService {
 
       // Attach tax calculations to the outgoing response for UI transparency
       itemsWithTaxBreakdown.push({
-        ...item,
+        ...(item as unknown as mongoose.Document).toObject(),
         financials: {
           preCouponTotal: itemPreCouponTotal,
           postCouponTotal: itemPostCouponTotal,

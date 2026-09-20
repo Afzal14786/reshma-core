@@ -100,10 +100,15 @@ const envSchema = z.object({
 const parsedEnv = envSchema.safeParse(process.env);
 
 if (!parsedEnv.success) {
-  console.error(
-    "Invalid environment variables:",
-    JSON.stringify(parsedEnv.error.format(), null, 2),
-  );
+  const formatted = JSON.stringify(parsedEnv.error.format(), null, 2);
+  console.error("Invalid environment variables:\n", formatted);
+
+  // In test mode: throw so Jest shows a readable failure instead of silent exit
+  if (process.env.NODE_ENV === "test") {
+    throw new Error(`Environment validation failed:\n${formatted}`);
+  }
+
+  // In dev/prod: fail-fast on boot (existing behavior)
   process.exit(1);
 }
 
