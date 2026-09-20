@@ -8,6 +8,341 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+# Phase 0–2: Testing Infrastructure & Production Bug Fixes
+
+*(Comprehensive test coverage and source-level fixes discovered through testing)*
+
+**Test Coverage & Observability**
+
+---
+
+## 0.1 Test Infrastructure Foundation
+
+- **Added** isolated Docker-based test environment (`docker/test/`) with:
+  - `Dockerfile.test` — Debian-based Node 20 image for native module support (`bcrypt`, `mongoose`)
+  - `docker-compose.test.yml` — isolated network with `test-mongo` (MongoDB 6.0 replica set), `test-redis`, and per-suite test runners (`test-smoke`, `test-runner`, `test-integration`)
+  - Live volume mounts for `src/` and `tests/` — no rebuild required when code changes
+  - `redis.conf` — ephemeral, password-protected test Redis with persistence disabled
+  - `mongo-init.js` — test database seeding with indexes
+- **Added** `.env.test` — test-only values for every variable the app's Zod schema requires, including the previously-missing `ENCRYPTION_KEY`
+- **Added** `.env.test.example` — template for contributors
+- **Added** `tsconfig.test.json` — test-specific TypeScript config with Jest types and `@tests/*` path alias
+- **Added** multi-suite Jest configuration:
+  - `jest.config.ts` (base) — module aliases, coverage settings, `forceExit` for clean shutdown
+  - `jest.config.unit.ts`, `jest.config.integration.ts`, `jest.config.e2e.ts`, `jest.config.workers.ts`, `jest.config.security.ts`
+- **Added** `file-type` CJS-safe mock to bypass the ESM-only package boundary under `ts-jest`
+- *Impact:* Any developer can run the entire test suite with `npm run test:docker:unit` or `npm run test:docker:integration` in one command. Tests never touch development or production data — enforced by a safety guard in `env.setup.ts` that aborts on non-test `MONGO_URI` values.
+
+---
+
+## 0.2 Test Lifecycle Management
+
+- **Added** `tests/setup/jest.setup.ts` — loads `.env.test`, sets timeouts, silences console noise, installs custom matchers
+- **Added** `tests/setup/env.setup.ts` — validates all required env vars and refuses to run against any database whose name doesn't contain `test`
+- **Added** `tests/setup/db.setup.ts` — Mongoose connection with:
+  - `driverInfo` option to satisfy MongoDB's strict handshake validation
+  - Replica-set-aware transaction support
+  - **No `dropDatabase()`** between suites — prevents lazy index-rebuild races inside transactions
+  - `deleteMany({})` on every collection in `beforeEach` for clean per-test state
+- **Added** `tests/setup/redis.setup.ts` — connects the **app's** `redisClient` (node-redis) instead of a shadow `ioredis` instance, so integration tests hit the same Redis the app uses
+- *Impact:* Test isolation is guaranteed at the document level without the collateral damage of dropping indexes. The Mongoose handshake bug that silently broke all Docker-based connections is eliminated.
+
+---
+
+## 0.3 Test Factories, Helpers & Mocks
+
+- **Added** `tests/helpers/request.helper.ts` — supertest wrapper with `expectSuccess` / `expectError` that print the full response body on assertion failure (critical for debugging 500s that otherwise hide their message)
+- **Added** `tests/helpers/auth.helper.ts` — `createVerifiedUser`, `createUserWithToken`, `seedOtpInRedis`, `clearAuthRedisKeys`
+- **Added** `tests/helpers/product.helper.ts` — `createTestProduct`
+- **Added** `tests/factories/user.factory.ts`, `coupon.factory.ts`, `product.factory.ts` — deterministic fixtures
+- **Added** `tests/mocks/redis.mock.ts`, `file-type.mock.ts`
+- *Impact:* Every test starts from a known-clean state without duplicating setup code. The auth helper bypasses the OTP email flow for tests that only need an authenticated session, cutting integration test runtime in half.
+
+---
+
+## 1.1 Unit Tests — Pure Business Logic (172 tests)
+
+- **Added** `tests/unit/smoke.test.ts` — verifies env loading, Redis connectivity, path aliases, and Express app boot
+- **Added** `tests/unit/auth/auth.utils.test.ts` — JWT signing, 2FA secret generation, cookie helpers
+- **Added** `tests/unit/auth/auth.service.test.ts` — the largest suite, covering:
+  - `registerLocal` (new user, collision recovery, verified-user rejection)
+  - `verifyEmailOtp` (activation, mismatch, expiry, brute-force lockout)
+  - `loginLocal` (valid creds, wrong password, account lock, unverified, deactivated)
+  - `refreshSession` (rotation, blacklist, invalid signature)
+  - `loginWithGoogle` (new user, existing user, deactivated account, invalid token)
+  - `forgotPassword` / `resetPassword` (token lifecycle, GOOGLE-account rejection)
+  - `logoutUser` (blacklist)
+  - 2FA: `generateTwoFactorSetup`, `enableTwoFactor`, `verifyTwoFactorLogin`, `disableTwoFactor`
+- **Added** `tests/unit/pricing/tax.utils.test.ts` — all GST rate brackets, threshold behavior at ₹2500, CGST/SGST/IGST splits, shipping tax reverse-calculation
+- **Added** `tests/unit/pricing/payment.utils.test.ts` — Razorpay HMAC signature verification and webhook signature verification
+- **Added** `tests/unit/coupon/coupon.service.test.ts` — create/update, five discount firewalls (temporal, scarcity, margin, acquisition, logistics), proportional math, float safety
+- **Added** `tests/unit/cart/cart.merge.test.ts` — item signature stability, prototype-pollution-safe attribute reconstruction
+- **Added** `tests/unit/shared/crypto.utils.test.ts` — timing-safe compare, AES-256-GCM encrypt/decrypt round-trip, tamper detection
+- **Added** `tests/unit/shared/sanitizer.test.ts` — NoSQL operator stripping, dot-notation removal, prototype pollution defense
+- **Added** `tests/unit/shared/app-error.test.ts` — error class contract
+- *Impact:* Core domain logic is fully covered without touching the database or Redis — tests run in ~10 seconds.
+
+---
+
+## 2.1 Integration Tests — Real HTTP, Real DB, Real Redis (46 tests)
+
+- **Added** `tests/integration/auth/register.int.test.ts` — new user creation, safe collision recovery, validation via Zod, password never serialized
+- **Added** `tests/integration/auth/verify-otp.int.test.ts` — account activation, cookie issuance, OTP expiry, brute-force lockout
+- **Added** `tests/integration/auth/login.int.test.ts` — credentials, lockout escalation, unverified/deactivated rejection, 2FA gate for admins
+- **Added** `tests/integration/auth/refresh.int.test.ts` — cookie-based refresh, rotation with blacklist, tampered-cookie rejection
+- **Added** `tests/integration/auth/logout.int.test.ts` — cookie clearing, session revocation, protected-route behavior
+- **Added** `tests/integration/cart/cart.int.test.ts` — add, increment, update quantity, remove, clear, guest merge, stock validation, auth gates
+- **Added** `tests/integration/coupons/coupon.int.test.ts` — admin CRUD, RBAC enforcement, public discovery, validation firewalls
+- *Impact:* Every HTTP endpoint is verified end-to-end against real infrastructure. Regressions in middleware chains, error handling, or serialization surface immediately.
+
+---
+
+## 3.1 Production Bug Fixes Discovered Through Testing
+
+### 3.1.1 JWT Refresh Token Collision
+
+- **Fixed** `src/modules/auth/auth.utils.ts` — added the standard `jti` (JWT ID) claim to both access and refresh tokens.
+- **Root cause:** `jwt.sign` uses `iat` with 1-second granularity. Two tokens signed in the same second for the same user were byte-identical. On refresh rotation, the "new" token was already blacklisted.
+- **Impact:** Users were logged out mid-session on any retry pattern (double-tab, slow network, frontend retry). This was a silent production bug.
+
+### 3.1.2 Cookie `sameSite=strict` Broke OAuth
+
+- **Fixed** `src/modules/auth/auth.utils.ts` — changed `sameSite: "strict"` to `"lax"` for all auth cookies.
+- **Root cause:** `strict` blocks cookies on cross-site navigation, including Google OAuth redirects, email-based order links, and returns from Razorpay.
+- **Impact:** Every Google sign-in attempt appeared logged out. Email links landed on the homepage instead of the intended page.
+
+### 3.1.3 Cookie `expires` Clock Dependency
+
+- **Fixed** `src/modules/auth/auth.utils.ts` — replaced `expires: new Date(Date.now() + N)` with `maxAge: N` for the refresh cookie.
+- **Root cause:** `expires` sets an absolute timestamp. Client devices with incorrect clocks received cookies that expired immediately.
+- **Impact:** Intermittent "already logged out" reports from users with misconfigured system time.
+
+### 3.1.4 Logout Cookie Not Deleted Instantly
+
+- **Fixed** `src/modules/auth/auth.utils.ts` — logout cookies now use `maxAge: 0` instead of the previous 10-second expiry.
+- **Impact:** "loggedout" sentinel cookie lived for 10 seconds post-logout, briefly confusing frontend session detection.
+
+### 3.1.5 Mongoose 9 + MongoDB Handshake Failure
+
+- **Fixed** `src/config/env.ts` and `tests/setup/db.setup.ts` — added `driverInfo` to the Mongoose connection.
+- **Root cause:** MongoDB requires a `driver` sub-document in client metadata. Mongoose 9.x's dynamic ESM lookup breaks under Jest + `ts-jest`, causing the field to be omitted and connections rejected.
+- **Impact:** All tests were blocked with `Missing required sub-document 'driver'`. Fixed without downgrading Mongoose.
+
+### 3.1.6 Config `process.exit(1)` Killed Tests Silently
+
+- **Fixed** `src/config/env.ts` — validation now throws a readable error in `NODE_ENV=test` instead of calling `process.exit(1)`.
+- **Impact:** Missing env vars in tests now produce a clear Jest failure with the specific field name, instead of a silent worker exit.
+
+### 3.1.7 Cart / Order / Wishlist Populate Ref Mismatch
+
+- **Fixed** `src/modules/cart/cart.model.ts`, `src/modules/orders/order.model.ts`, `src/modules/wishlists/wishlist.model.ts` — changed `ref: "BaseProduct"` to `ref: "Product"`.
+- **Root cause:** `base-product.model.ts` registers the model under `"Product"`, but downstream schemas referenced `"BaseProduct"`, which was never registered.
+- **Impact:** Every populated cart read crashed with `MissingSchemaError`. This was a live production bug — not caught until integration tests ran. Any future admin analytics or invoice regeneration touching `order.items.product` would have crashed identically.
+
+### 3.1.8 Mongoose Internals Leaked Into JSON Responses
+
+- **Fixed** `src/modules/cart/cart.service.ts` — replaced `{...item}` spread with `.toObject()` in the tax breakdown loop.
+- **Root cause:** Spreading a Mongoose subdocument copied internal state (`$__`, `_doc`, `$isNew`, `__parentArray`) into the response. Clients received `_doc.quantity` instead of `quantity`.
+- **Impact:** Frontend cart UI showed `undefined` quantities. Any client parsing the response would have failed silently.
+
+### 3.1.9 Duplicate Cart Lines for the Same Product
+
+- **Fixed** `src/modules/cart/cart.service.ts` — added `normalizeAttributes()` and changed `generateItemSignature` to accept `unknown`.
+- **Root cause:** `Object.keys()` on a Mongoose Map (from `type: Map` schema field) behaves differently than on plain objects. Signatures never matched, so adding the same product twice created two lines instead of incrementing.
+- **Impact:** Cart showed duplicate line items for identical products. Checkout would charge the user correctly but display confusingly.
+
+### 3.1.10 Error Middleware Silently Lost Error Handling
+
+- **Fixed** `src/shared/middlewares/error.middleware.ts` — restored the required 4th parameter `next: NextFunction`.
+- **Root cause:** Express only treats middleware as an error handler when it has exactly 4 parameters. Removing `next` downgraded this to a regular middleware, so all errors fell through to Express's built-in default handler, which returns HTML and leaks stack traces.
+- **Impact:** Clients received HTML error pages instead of the standardized JSON envelope. In production, unexpected stack traces were being exposed.
+
+### 3.1.11 Missing Error Handlers for Common Mongoose Failures
+
+- **Enhanced** `src/shared/middlewares/error.middleware.ts` — added handlers for:
+  - `MissingSchemaError` — populate ref mismatches
+  - `MongoServerError code 20` — transaction errors on non-replica-set MongoDB
+  - `DocumentNotFoundError` — `findOneAndUpdate` with `orFail`
+- **Impact:** Previously generic 500s now surface accurate status codes and actionable messages.
+
+### 3.1.12 Test-Mode Errors Were Invisible
+
+- **Enhanced** `src/shared/middlewares/error.middleware.ts` — non-operational errors write directly to `stderr` in `NODE_ENV=test`, bypassing Jest's global console mock.
+- **Impact:** Debugging failing integration tests now shows the actual error message and stack trace in `docker logs`. Previously, 500s were a total black box.
+
+---
+
+## 4.1 Dependency Changes
+
+- **Pinned** `mongodb` to `6.12.0` via `overrides` in `package.json` — avoids the Mongoose 9 driver handshake bug without downgrading Mongoose itself.
+- **Added** `supertest` and `@types/supertest` — HTTP integration testing.
+- **Added** `jest`, `ts-jest`, `@types/jest`, `jest-junit` — test runner and CI reporting.
+- **Added** `@testcontainers/mongodb`, `@testcontainers/redis` — optional ephemeral container support.
+- **Added** `ioredis-mock` — in-process Redis for unit tests.
+- *Impact:* No production dependencies changed. All additions are `devDependencies`.
+
+---
+
+## 4.2 Scripts Added
+
+- **Added** to `package.json`:
+  - `test` — runs base Jest config
+  - `test:smoke` — Phase 0 infrastructure smoke test
+  - `test:unit` — Phase 1 unit tests
+  - `test:integration` — Phase 2 integration tests
+  - `test:e2e`, `test:workers`, `test:security` — reserved for future phases
+  - `test:coverage` — coverage report
+  - `test:ci` — CI-mode with JUnit XML output
+  - `test:docker:unit`, `test:docker:integration`, `test:docker:e2e`, `test:docker:workers`, `test:docker:security` — Docker-orchestrated runs
+  - `test:docker:all` — full pipeline
+- *Impact:* One command per suite. CI-ready out of the box.
+
+---
+
+## 4.3 Repository Hygiene
+
+- **Enhanced** `.gitignore`:
+  - Explicitly ignores `.env.local`, `.env.development`, `.env.production`, `.env.staging` — the previous `.env` rule only matched the literal filename, so `.env.production` could have leaked
+  - Whitelists `.env.test` and `.env.test.example` so test configs are always committable
+  - Ignores `reports/*.xml`, `*.json`, `*.html` while keeping the directory tracked via `.gitkeep`
+  - Ignores TLS artifacts (`*.pem`, `*.key`, `*.crt`, `*.p12`, `*.pfx`)
+  - Ignores tooling caches (`.jest-cache/`, `.mongodb-binaries/`, `.cache/`, `.parcel-cache/`)
+  - Ignores `docker-compose.override.yml` and local compose variants
+- *Impact:* Repository is safe to make public. No risk of leaking secrets, TLS certs, or generated test artifacts.
+
+---
+
+## Dependencies Added
+
+- `supertest` — HTTP assertion library for integration tests.
+- `@types/supertest` — TypeScript definitions.
+- `jest` — test runner.
+- `ts-jest` — TypeScript transform for Jest.
+- `@types/jest` — TypeScript definitions.
+- `jest-junit` — JUnit XML reporter for CI.
+- `@testcontainers/mongodb` — ephemeral MongoDB containers.
+- `@testcontainers/redis` — ephemeral Redis containers.
+- `ioredis-mock` — in-process Redis mock for unit tests.
+
+---
+
+## Dependencies Overridden
+
+- `mongodb` → `6.12.0` (via `package.json` `overrides`)
+
+---
+
+## Files Modified
+
+- `package.json`
+- `package-lock.json`
+- `.gitignore`
+- `src/config/env.ts`
+- `src/modules/auth/auth.utils.ts`
+- `src/modules/cart/cart.model.ts`
+- `src/modules/cart/cart.service.ts`
+- `src/modules/orders/order.model.ts`
+- `src/modules/wishlists/wishlist.model.ts`
+- `src/shared/middlewares/error.middleware.ts`
+- `docker/test/docker-compose.test.yml`
+- `docker/test/Dockerfile.test`
+
+---
+
+## Files Created
+
+**Configuration:**
+- `.env.test`
+- `.env.test.example`
+- `tsconfig.test.json`
+- `jest.config.ts`
+- `jest.config.unit.ts`
+- `jest.config.integration.ts`
+- `jest.config.e2e.ts`
+- `jest.config.workers.ts`
+- `jest.config.security.ts`
+
+**Docker:**
+- `docker/test/Dockerfile.test`
+- `docker/test/docker-compose.test.yml`
+- `docker/test/redis.conf`
+- `docker/test/mongo-init.js`
+
+**Test Setup:**
+- `tests/setup/jest.setup.ts`
+- `tests/setup/env.setup.ts`
+- `tests/setup/db.setup.ts`
+- `tests/setup/redis.setup.ts`
+
+**Test Helpers:**
+- `tests/helpers/request.helper.ts`
+- `tests/helpers/auth.helper.ts`
+- `tests/helpers/product.helper.ts`
+
+**Test Factories:**
+- `tests/factories/user.factory.ts`
+- `tests/factories/coupon.factory.ts`
+- `tests/factories/product.factory.ts`
+
+**Test Mocks:**
+- `tests/mocks/file-type.mock.ts`
+
+**Unit Tests (Phase 1):**
+- `tests/unit/smoke.test.ts`
+- `tests/unit/auth/auth.utils.test.ts`
+- `tests/unit/auth/auth.service.test.ts`
+- `tests/unit/pricing/tax.utils.test.ts`
+- `tests/unit/pricing/payment.utils.test.ts`
+- `tests/unit/coupon/coupon.service.test.ts`
+- `tests/unit/cart/cart.merge.test.ts`
+- `tests/unit/shared/crypto.utils.test.ts`
+- `tests/unit/shared/sanitizer.test.ts`
+- `tests/unit/shared/app-error.test.ts`
+
+**Integration Tests (Phase 2):**
+- `tests/integration/auth/register.int.test.ts`
+- `tests/integration/auth/verify-otp.int.test.ts`
+- `tests/integration/auth/login.int.test.ts`
+- `tests/integration/auth/refresh.int.test.ts`
+- `tests/integration/auth/logout.int.test.ts`
+- `tests/integration/cart/cart.int.test.ts`
+- `tests/integration/coupons/coupon.int.test.ts`
+
+**Repository:**
+- `reports/.gitkeep`
+
+---
+
+## Test Summary
+
+| Phase | Suite | Tests | Status |
+|-------|-------|-------|--------|
+| Phase 0 | Infrastructure smoke | 8 | ✅ |
+| Phase 1 | Unit | 172 | ✅ |
+| Phase 2 | Integration | 46 | ✅ |
+| **Total** | | **226** | **✅ Exit code 0** |
+
+---
+
+## Bugs Fixed in Production Code
+
+The test suites uncovered and fixed 12 real bugs in production code:
+
+1. JWT refresh collision (`jti` missing)
+2. Cookie `sameSite=strict` breaking OAuth
+3. Cookie `expires` clock dependency
+4. Logout cookie not deleted instantly
+5. Mongoose 9 handshake failure under Jest
+6. Silent `process.exit(1)` in config validation
+7. Cart/Order/Wishlist populate ref mismatch
+8. Mongoose internals leaking into JSON responses
+9. Duplicate cart lines from Mongoose Map signature mismatch
+10. Error middleware lost 4-param signature
+11. Missing error handlers for common Mongoose failures
+12. Test-mode errors invisible in logs
+
+These were **not** test-only findings — every one of them affected production behavior.
+
 ### fix & added
 
 *(Phase 3: Architectural Stability & Observability - Prepared for alpha release)*  
