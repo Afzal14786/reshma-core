@@ -34,6 +34,7 @@
 - [Environment Variables](#environment-variables)
 - [API Reference](#api-reference)
 - [Testing Guides](#testing-guides)
+- [Testing](#testing)
 - [Documentation Hub](#documentation-hub)
 - [Deployment](#deployment)
 - [Contributing](#contributing)
@@ -537,6 +538,35 @@ Manual runbooks (Thunder Client / Postman) are provided for every module:
 Use them to verify functionality after local setup.  
 
 ---  
+
+## Testing  
+
+This project maintains a comprehensive test suite with **226 automated tests** across infrastructure, unit, and integration layers. All tests run in fully isolated Docker environments — no access to development or production data is possible.  
+
+```bash
+# Run unit tests (172 tests, ~10s)
+npm run test:docker:unit
+
+# Run integration tests (46 tests, ~65s)
+npm run test:docker:integration
+```  
+
+**[📖 Read the full testing guide →](./tests/README.md)**  
+
+The guide covers:  
+- Test architecture and Docker isolation
+- Coverage matrix per module
+- How to write new tests
+- Troubleshooting common failures
+- Production bugs discovered through testing  
+
+---  
+
+### Documentation  
+
+- **[Testing Guide](./tests//README.md)** — how to run, write, and debug tests
+- **[CHANGES.md](./CHANGES.md)** — recent changes and bug fixes
+- **[Phase Runbooks](./tests/README.md)** — detailed phase-by-phase runbooks  
 
 ## Documentation Hub  
 
