@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+## 5.1 Developer Documentation
+
+- **Added** `tests/README.md` — comprehensive testing guide serving as the single source of truth for the test suite. Includes:
+  - **Quick start:** one-command execution for unit and integration suites
+  - **Architecture diagram:** ASCII illustration of the Docker isolation boundary between host, test containers, and app code
+  - **Phase breakdown:** all 6 phases documented (0–2 complete, 3–6 planned) with per-phase objectives
+  - **Coverage matrix:** module-by-module test counts across unit, integration, E2E, and security layers
+  - **Running instructions:** every available npm script, plus log-capture commands for debugging failures
+  - **Contributing guide:** naming conventions, template structure, helper usage, and 6 project-specific rules
+  - **Directory structure:** tree walkthrough of `tests/` with descriptions of every subdirectory
+  - **Infrastructure rationale:** why MongoDB 6.0 (not 7.0), why `driverInfo`, why no `dropDatabase()` between test files
+  - **Troubleshooting:** 7 known failure modes (handshake errors, IX lock contention, closed Redis clients, silent 500s, permission issues, hanging tests, network cleanup) with root causes and fixes
+  - **Production bugs log:** index of all 12 bugs discovered and fixed through the testing effort
+  - **Contributing checklist:** pre-PR requirements for new test suites
+
+- **Enhanced** root `README.md` — added a "Testing" section that:
+  - Links to `tests/README.md`
+  - States the scope (226 automated tests)
+  - Emphasizes the Docker isolation guarantee (no dev/prod data access)
+  - Provides the two most common commands (`test:docker:unit`, `test:docker:integration`)
+
+- *Impact:* Contributors can now self-serve onboarding for the test suite. Discoverability is maximized — the root README surfaces the testing section, and `tests/README.md` renders automatically when browsing the tests directory on GitHub. New team members can run, extend, and debug the suite without prior knowledge of the setup.
+
+---
+
 # Phase 0–2: Testing Infrastructure & Production Bug Fixes
 
 *(Comprehensive test coverage and source-level fixes discovered through testing)*
