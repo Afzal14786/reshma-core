@@ -102,9 +102,12 @@ export class ReturnService {
         0,
       );
 
-      // The ratio of what they actually paid vs the raw value of the items
+      // The ratio of what they actually paid for the ITEMS vs the raw value
+      // of the items. Must NOT include tax or shipping — those aren't the
+      // item's value and would inflate the refund.
+      const itemDiscount = order.pricing.discountAmount || 0;
       const discountRatio =
-        rawSubtotal > 0 ? order.pricing.totalAmount / rawSubtotal : 1;
+        rawSubtotal > 0 ? (rawSubtotal - itemDiscount) / rawSubtotal : 1;
 
       let estimatedRefund = 0;
       let requiresPhotographicProof = false;
