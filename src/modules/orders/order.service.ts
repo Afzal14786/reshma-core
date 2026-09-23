@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { Order } from "./order.model";
 import { Cart } from "../cart/cart.model";
-import { Product } from "../products/models/base-product.model";
+import { Product } from "../products/models";
 import { User } from "../users/user.model";
 import { NotificationService } from "../notifications/notification.service";
 import { AppError } from "@shared/utils/app-error";
