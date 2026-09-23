@@ -12,7 +12,7 @@ const NotificationSchema = new Schema<INotification>(
     },
     type: {
       type: String,
-      enum: ["SYSTEM", "ORDER", "PROMOTION", "SECURITY"],
+      enum: ["SYSTEM", "ORDER", "PROMOTION", "SECURITY", "RETURN"],
       required: true,
     },
     title: { type: String, required: true, trim: true },
