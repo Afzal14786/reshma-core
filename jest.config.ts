@@ -18,13 +18,27 @@ const baseConfig: Config = {
     ],
   },
   moduleNameMapper: {
+    // ─────────────────────────────────────────────
+    // SPECIFIC MOCKS FIRST — Jest uses the FIRST match.
+    // These must be declared BEFORE the generic globs below.
+    // ─────────────────────────────────────────────
+    "^@config/cloudinary$": "<rootDir>/tests/mocks/cloudinary.mock.ts",
+    "^@config/typesense$": "<rootDir>/tests/mocks/typesense.mock.ts",
+    "^@config/razorpay$": "<rootDir>/tests/mocks/razorpay.mock.ts",
+    "^@shared/queues/invoice.queue$":
+      "<rootDir>/tests/mocks/invoice-queue.mock.ts",
+    "^@shared/queues/email.queue$": "<rootDir>/tests/mocks/email-queue.mock.ts",
+    "^@shared/queues/export.queue$":
+      "<rootDir>/tests/mocks/export-queue.mock.ts",
+    "^file-type$": "<rootDir>/tests/mocks/file-type.mock.ts",
+
+    // ─────────────────────────────────────────────
+    // GENERIC PATH ALIASES SECOND
+    // ─────────────────────────────────────────────
     "^@modules/(.*)$": "<rootDir>/src/modules/$1",
     "^@config/(.*)$": "<rootDir>/src/config/$1",
     "^@shared/(.*)$": "<rootDir>/src/shared/$1",
     "^@tests/(.*)$": "<rootDir>/tests/$1",
-
-    // ── ESM-only packages: swap for CJS-safe mocks ──
-    "^file-type$": "<rootDir>/tests/mocks/file-type.mock.ts",
   },
   setupFilesAfterEnv: ["<rootDir>/tests/setup/jest.setup.ts"],
   collectCoverageFrom: [
