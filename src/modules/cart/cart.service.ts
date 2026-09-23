@@ -1,6 +1,6 @@
 import mongoose, { Types, ClientSession } from "mongoose";
 import { Cart } from "./cart.model";
-import { Product } from "../products/models/base-product.model";
+import { Product } from "@modules/products/models";
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import { CouponService } from "@modules/coupons/coupon.service";
