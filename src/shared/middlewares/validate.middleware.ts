@@ -41,20 +41,26 @@ export const validate = (schema: ZodObject<any>) => {
 
       // 3. DATA REASSIGNMENT
       // Update req.body directly (it remains writable).
-      req.body = validatedData.body;
+      if (validatedData.body !== undefined) {
+        req.body = validatedData.body;
+      }
 
       // Update req.query and req.params using Object.defineProperty to bypass Express 5 getters.
-      Object.defineProperty(req, "query", {
-        value: validatedData.query,
-        enumerable: true,
-        configurable: true,
-      });
+      if (validatedData.query !== undefined) {
+        Object.defineProperty(req, "query", {
+          value: validatedData.query,
+          enumerable: true,
+          configurable: true,
+        });
+      }
 
-      Object.defineProperty(req, "params", {
-        value: validatedData.params,
-        enumerable: true,
-        configurable: true,
-      });
+      if (validatedData.params !== undefined) {
+        Object.defineProperty(req, "params", {
+          value: validatedData.params,
+          enumerable: true,
+          configurable: true,
+        });
+      }
 
       next();
     } catch (error: unknown) {
