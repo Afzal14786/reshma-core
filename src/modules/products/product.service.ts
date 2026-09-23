@@ -1,5 +1,5 @@
 import { typesenseClient } from "@config/typesense";
-import { Product } from "./models/base-product.model";
+import { Product } from "./models";
 import { AppError } from "@shared/utils/app-error";
 import { HTTP_STATUS } from "@shared/constant/http-codes";
 import {

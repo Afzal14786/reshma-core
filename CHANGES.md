@@ -8,6 +8,199 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+## 6.1 Priority 1 — Integration Test Expansion
+
+**+172 integration tests** covering the seven remaining feature modules. All tests run against real MongoDB (6.0 replica set) and real Redis inside the isolated Docker test network. Cumulative suite after this phase: **~402 tests** (8 smoke + 172 unit + ~222 integration).
+
+### 6.1.1 Products (35 tests)
+
+- **`product.crud.int.test.ts` (12)** — Admin create with multipart image upload, public list with filters, get-by-id, PATCH partial update, soft-delete, RBAC enforcement, duplicate-SKU conflict, Zod validation rejections.
+- **`product.discriminator.int.test.ts` (12)** — All five polymorphic types (BANGLE, APPAREL, FABRIC, INNERWEAR, ACCESSORY) via `discriminatedUnion`. Verifies type-specific fields persist (`bangleSizes`, `sizes`, `lengthMeters`, `cupSizes`, `sizeDetails`), innerwear `isReturnable` security lock, unknown `itemType` rejection.
+- **`product.inventory.int.test.ts` (6)** — `ProductService.reserveStock` atomic decrement, overselling prevention under concurrent load (uses `$gte` firewall), inactive-product rejection, non-existent product handling.
+- **`product.upload.int.test.ts` (5)** — Cloudinary rollback on DB failure (orphan asset prevention), folder routing by `itemType`, no-upload-when-Zod-fails, missing-file rejection.
+
+### 6.1.2 Orders (36 tests)
+
+- **`checkout.int.test.ts` (10)** — Cart → order conversion, stock reservation, cart clearing, coupon application, expired-coupon rejection, intra-state (WB) CGST+SGST split, inter-state (MH) full IGST, COD vs Razorpay branches, empty-cart rejection, insufficient-stock 409.
+- **`verify-payment.int.test.ts` (5)** — Frontend HMAC verification, idempotency when already PAID, tampered-signature rejection, non-existent gateway order, auth enforcement.
+- **`order.status.int.test.ts` (8)** — PENDING → PROCESSING transition, SHIPPED with tracking data, DELIVERED, RETURN_REQUESTED, invalid-status 400, non-admin 403, non-existent order 404, DB persistence check.
+- **`razorpay.webhook.int.test.ts` (8)** — Valid signature marks order PAID, invalid signature 400, missing header 400, second webhook is a no-op (idempotent), unknown gateway order silently ignored, PAID order not overwritten, unrelated event ignored, HMAC uses webhook secret (not key secret).
+- **`order.history.int.test.ts` (5)** — `GET /my-order` returns caller's orders only (IDOR), empty history for new user, admin sees all orders, non-admin 403, auth enforcement.
+
+### 6.1.3 Returns (25 tests)
+
+- **`return.lifecycle.int.test.ts` (14)** — Initiation on DELIVERED orders, rejection on non-DELIVERED/CANCELLED, 7-day window enforcement, quantity validation, IDOR protection, innerwear hygiene block, fragile photo-proof requirement, photo-proof acceptance, duplicate-return guard, prorated refund math without tax/shipping inflation.
+- **`return.admin.int.test.ts` (6)** — Approve and reject arbitration, rejection reverts order to DELIVERED, rejection reason legally required, non-admin 403, admin queue listing, filter by status.
+- **`return.refund.int.test.ts` (5)** — Refund on APPROVED return (status → REFUNDED, order → RETURNED), inventory restock atomicity, PENDING return rejection, missing gateway payment ID rejection, non-admin 403.
+
+### 6.1.4 Users (22 tests)
+
+- **`user.profile.int.test.ts` (12)** — Profile GET/PATCH, mass-assignment defense (`role`, `isEmailVerified`, `loyaltyPoints` rejected), phone/gender/dob validation, address book CRUD, default-address auto-promotion on delete, first address auto-default, 10-address capacity limit.
+- **`user.password.int.test.ts` (5)** — Step-up OTP generation with Redis TTL, password change with valid OTP + current password, invalid OTP rejection, incorrect current-password rejection, weak new-password rejection via Zod.
+- **`user.deletion.int.test.ts` (5)** — DPDP right-to-be-forgotten, user document physically deleted, orders anonymized (PII scrambled, financial math preserved), cart wiped, subsequent authenticated requests fail with 401.
+
+### 6.1.5 Wishlists (18 tests)
+
+- Auth enforcement (401 without token).
+- Add idempotency, capacity limit (100 items), inactive-product rejection, invalid ObjectId rejection, Zod strict-mode rejection of unknown fields.
+- Remove specific item, clear entire wishlist.
+- `move-to-cart` cross-module transfer: item removed from wishlist, added to cart; stock failure leaves wishlist intact; missing item 404.
+- Self-healing purges deactivated products (regression for the model fix).
+- Populated product data reflects live price/stock.
+
+### 6.1.6 Interactions (22 tests)
+
+- Public product review feed with pagination, invalid ObjectId rejection, threaded-comment exclusion from top-level feed.
+- Verified-purchase gating: REVIEW requires DELIVERED order, 403 otherwise.
+- One review per user per product (409 on duplicate).
+- REVIEW requires rating, forbids parentId; COMMENT requires parentId, forbids rating — enforced by Zod `superRefine` and Mongoose partial unique index.
+- Vote switching is mutually exclusive (LIKE removes prior DISLIKE), `$addToSet` idempotency, non-existent interaction 404, invalid action 400.
+- Async rating sync (`setImmediate`) updates `ratingsMetadata.averageRating` and `ratingDistribution`.
+- Deleted users render as `Anonymous` in review feed.
+
+### 6.1.7 Notifications (14 tests)
+
+- Auth enforcement.
+- User-scoped list, IDOR protection, newest-first ordering, pagination.
+- All five notification types persist (SYSTEM, ORDER, SECURITY, PROMOTION, RETURN).
+- Mark-as-read idempotency, IDOR rejection (403 when notification belongs to another user), non-existent notification 404.
+- `sendReturnRequestedNotification` and `sendReturnRefundedNotification` persist correctly (regression for the enum fix), including amount formatting in the message body.
+
+---
+
+## 6.2 Test Infrastructure Additions
+
+### 6.2.1 Factories
+
+- **`tests/factories/order.factory.ts`** — `buildOrderDoc()` and `buildShippingAddress()`. Computes subTotal, discount, tax splits, shipping cost, and totalAmount so order documents satisfy Mongoose validators without manual arithmetic.
+- **`tests/factories/return.factory.ts`** — `buildReturnItem()` and `buildReturnPayload()`. Shape-matched to `InitiateReturnSchema`.
+- **`tests/factories/product.factory.ts` (extended)** — Added multipart form-data builders for all five discriminator types plus `buildBangle`, `buildApparel`, `buildFabric`, `buildInnerwear`, `buildAccessory` for direct DB insertion.
+
+### 6.2.2 Helpers
+
+- **`tests/helpers/order.helper.ts`** — `createTestOrder()` and `createDeliveredOrder()`. Resolves the owning user from the JWT when only `accessToken` is provided, guaranteeing order ownership matches the caller.
+- **`tests/helpers/return.helper.ts`** — `initiateReturn()`, `arbitrateReturn()`, `processRefund()`, `findReturnById()`. HTTP wrappers for the three RMA stages.
+- **`tests/helpers/product.helper.ts` (extended)** — Side-effect imports register discriminators. Exports `createTestBangle`, `createTestApparel`, `createTestFabric`, `createTestInnerwear`, `createTestAccessory` in addition to the backward-compatible `createTestProduct` alias.
+
+### 6.2.3 Mocks
+
+Six new module mocks wired through `jest.config.ts` `moduleNameMapper`:
+
+- **`cloudinary.mock.ts`** — `uploadBufferToCloudinary`, `deleteFromCloudinary`, `extractPublicId`.
+- **`typesense.mock.ts`** — `typesenseClient`, `typesenseManager`, collection-level `documents()`, `upsert`, `delete`.
+- **`razorpay.mock.ts`** — `razorpay.orders.create`, `razorpay.payments.refund`.
+- **`email-queue.mock.ts`** — `dispatchEmailJob`, `emailQueue`.
+- **`invoice-queue.mock.ts`** — `InvoiceQueueManager.enqueueInvoiceGeneration`.
+- **`export-queue.mock.ts`** — `ExportQueueManager.enqueueDataExport`.
+
+Every mock is declared **above** its corresponding generic glob in `moduleNameMapper` — Jest uses first-match-wins, so a generic `@config/*` alias would otherwise swallow `@config/razorpay`.
+
+---
+
+## Bug Fix 
+
+This is the **17th Production Bug Fixed** caught by the test suite.  
+
+**Wishlist self-heal loop called** `.toString()` **on a populated Mongoose document** — which returned the entire JSON representation, not the ObjectId. The subsequent `$pull` cast that JSON string back to an ObjectId → `CastError` → 400 on every wishlist fetch that had a deactivated product.  
+
+**Impact:** Any user whose saved product got deactivated by admin would get a 400 on their entire wishlist. Silent, user-facing, hard to reproduce without specific data.  
+
+**Fixed:** Self-heal now uses `popItem.product._id` (the actual ObjectId) instead of `.toString()` on the document.  
+
+
+This is the **16th Production Bug Fixed Wishlist Routes Are Unauthenticated** caught by the test suite.  
+
+`wishlist.routes.ts:`  
+
+```typescript
+// router.use(standardLimiter, protect);   -- already implemented @app.ts
+```
+
+The comment assumes protect is applied globally in app.ts. It isn't. From the app.ts you showed me earlier, only standardLimiter is applied to /api. protect is applied per route file:  
+
+**Impact:** Every wishlist endpoint reads `req.user!._id`. Without `protect`, `req.user` is `undefined` → `TypeError` → 500 on every request. Wishlists are completely broken in production.  
+
+**Fix** `src/modules/wishlists/wishlist.routes.ts`  
+**Add protect to the imports and apply it before any route:**  
+```typescript
+import { Router } from "express";
+import { WishlistController } from "./wishlist.controller";
+
+// Global Middlewares
+import { validate } from "@shared/middlewares/validate.middleware";
+import { protect } from "@shared/middlewares/auth.middleware";
+
+// Zod Validation Schemas
+import {
+  AddWishlistItemSchema,
+  RemoveWishlistItemSchema,
+  MoveToCartSchema,
+} from "./dtos/wishlist.dto";
+
+const router = Router();
+
+/**
+ * @module WishlistRoutes
+ * @description Protected Customer Routes for the Wishlist domain.
+ */
+
+// SECURITY: Every wishlist route requires an authenticated user.
+// `protect` populates req.user from the JWT; without it, every
+// controller crashes on `req.user!._id`.
+router.use(protect);
+
+// ... rest of file unchanged
+```  
+
+This is the **15th Production Bug Fixed** caught by the test suite.  
+
+**Refund calculation was inflating by tax + shipping.**  
+
+```typescript
+// BEFORE (wrong)
+const discountRatio = order.pricing.totalAmount / rawSubtotal;
+// totalAmount includes tax + shipping → ratio > 1 → over-refunds
+```  
+
+**Impact in production:** Every return on a taxed, shipped order refunded more than the customer paid for the item. On a ₹1000 order with ₹30 GST and ₹100 shipping, a returned ₹500 item would have refunded **₹565 instead of ₹500**. Silent money loss.  
+
+**Fixed:** Ratio now uses `rawSubtotal - discountAmount`, which isolates the item value from tax and shipping. Tests verify the correct behavior.  
+
+
+This is the **14th production bug** caught by the test suite.  
+
+**Production bug:** `validate.middleware.ts` was blindly overwriting `req.params` and `req.query` with `undefined` whenever the Zod schema didn't declare those keys. This silently broke every route that uses URL params but validates only the body — including all PATCH `/orders/admin/:id/status` calls.  
+
+**Impact:** Every admin order-status update returned 500. The bug was invisible in production because you'd need to attempt an actual status change to trigger it.  
+
+**Fix:** validate.middleware.ts now only overwrites fields the schema actually validated.  
+
+
+This is the **13th production bug** uncovered by the test suite. Worth recording because it's subtle:  
+
+**Bug:** Product discriminator models (`bangle.model.ts`, `apparel.model.ts`, etc.) were registered via `src/modules/products/models/index.ts`, but key consumers imported directly from `base-product.model.ts` — bypassing the barrel. Discriminators never registered → Mongoose **silently stripped** `bangleSizes`, `sizes`, `lengthMeters`, `cupSizes`, `sizeDetails` during `Product.create()`.  
+
+**Impact in production:**  
+
+- Admin creates a Bangle with sizes → sizes silently dropped
+- Customer sees a bangle with no size options
+- The bug was invisible because no error was thrown — Mongoose strict mode just discards unknown paths  
+
+**Fix:** Consumers now import Product from the barrel (@modules/products/models) instead of the base file. This triggers discriminator registration as a side effect.  
+
+**Why the tests caught it:** The discriminator integration suite asserted on the response payload fields. Without those assertions, the bug would have shipped silently.  
+
+**Bug:** `validate.middleware.ts` was blindly overwriting `req.params` and `req.query` with `undefined` whenever the Zod schema didn't declare those keys. This silently broke every route that uses URL params but validates only the body — including all `PATCH /orders/admin/:id/status` calls.  
+
+**Impact:** Every admin order-status update returned 500. The bug was invisible in production because you'd need to attempt an actual status change to trigger it.  
+
+**Fix:** validate.middleware.ts now only overwrites fields the schema actually validated.  
+
+This is the **14th production **bug caught by the test suite.  
+
+This is exactly what a good test suite is for — catching silent data loss.  
+
+
 ## 5.1 Developer Documentation
 
 - **Added** `tests/README.md` — comprehensive testing guide serving as the single source of truth for the test suite. Includes:

@@ -71,11 +71,22 @@ export class WishlistService {
     for (const item of wishlist.items) {
       const popItem = item as unknown as IPopulatedWishlistItem;
 
-      if (!popItem.product || popItem.product.isActive === false) {
-        // Collect dead references for atomic purging
-        deadProductIds.push(item.product.toString());
+      // Case 1: Product reference points at nothing (physically deleted).
+      // Populate nullifies the field, so we cannot recover the original
+      // ObjectId from the document here. Skip it from the response — the
+      // stale reference will be cleaned up on the next migration.
+      if (!popItem.product) {
         continue;
       }
+
+      // Case 2: Product exists but has been deactivated (soft-deleted).
+      // Populate gave us the full Product document. Use its `_id` — NOT
+      // the document itself, which is what `.toString()` would produce.
+      if (popItem.product.isActive === false) {
+        deadProductIds.push(String(popItem.product._id));
+        continue;
+      }
+
       validItems.push(item as IWishlistItem);
     }
 

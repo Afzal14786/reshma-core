@@ -9,8 +9,9 @@ const config: Config = {
     "<rootDir>/tests/setup/jest.setup.ts",
     "<rootDir>/tests/setup/db.setup.ts",
     "<rootDir>/tests/setup/redis.setup.ts",
+    "<rootDir>/tests/setup/discriminators.setup.ts",
   ],
-  maxWorkers: 1, // Run sequentially to avoid DB conflicts
+  maxWorkers: 1,
   testTimeout: 30000,
 };
 

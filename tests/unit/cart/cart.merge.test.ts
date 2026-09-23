@@ -29,7 +29,12 @@ jest.mock("@modules/cart/cart.model", () => ({
   },
 }));
 
-jest.mock("@modules/products/models/base-product.model", () => ({
+// Mock the BARREL — not the base file.
+// cart.service.ts imports Product from '@modules/products/models',
+// and that barrel triggers side-effect discriminator registrations
+// (bangle.model, apparel.model, etc.) which crash on a bare mock.
+// Mocking the barrel path intercepts before any of that runs.
+jest.mock("@modules/products/models", () => ({
   Product: {
     findOne: jest.fn(),
     bulkWrite: jest.fn(),
