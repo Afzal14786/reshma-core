@@ -4,6 +4,7 @@ import { WishlistController } from "./wishlist.controller";
 // Global Middlewares
 import { validate } from "@shared/middlewares/validate.middleware";
 // import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
+import { protect } from "@shared/middlewares/auth.middleware";
 
 // Zod Validation Schemas
 import {
@@ -24,7 +25,7 @@ const router = Router();
 // `protect`: Mathematically verifies the JWT to guarantee the `req.user` identity.
 // By chaining these together at the top level, we ensure no unauthenticated or
 // malicious rapid-fire requests ever touch the expensive database queries.
-// router.use(standardLimiter, protect);   -- already implemented @app.ts
+router.use(protect);
 
 /**
  * @route   GET /api/v1/wishlists
