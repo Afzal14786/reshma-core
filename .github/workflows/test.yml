@@ -1,0 +1,128 @@
+# ──────────────────────────────────────────────
+# Reshma-Core Test Pipeline
+# ──────────────────────────────────────────────
+# Runs all five test suites in parallel on every push and PR.
+# Each suite runs in an isolated Docker environment — Mongo 6.0
+# replica set + Redis — with live volume mounts. No access to
+# development or production data is possible.
+#
+# Failing any suite blocks the PR from merging.
+
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel in-progress runs on the same ref (e.g., rapid pushes to a PR)
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+# Common setup steps shared by every test job, defined as a YAML anchor
+# to avoid duplication. Each job picks which suite to run.
+jobs:
+  unit:
+    name: Unit Tests (172)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unit suite
+        run: npm run test:docker:unit
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker/test/docker-compose.test.yml down -v --remove-orphans || true
+          docker network prune -f || true
+
+  integration:
+    name: Integration Tests (221)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run integration suite
+        run: npm run test:docker:integration
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker/test/docker-compose.test.yml down -v --remove-orphans || true
+          docker network prune -f || true
+
+  security:
+    name: Security Tests (74)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run security suite
+        run: npm run test:docker:security
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker/test/docker-compose.test.yml down -v --remove-orphans || true
+          docker network prune -f || true
+
+  e2e:
+    name: E2E Tests (15)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run E2E suite
+        run: npm run test:docker:e2e
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker/test/docker-compose.test.yml down -v --remove-orphans || true
+          docker network prune -f || true
+
+  workers:
+    name: Worker Tests (19)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run worker suite
+        run: npm run test:docker:workers
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker/test/docker-compose.test.yml down -v --remove-orphans || true
+          docker network prune -f || true
+
+  # ─────────────────────────────────────────────
+  # Informational coverage report
+  # Runs unit tests with coverage and uploads the HTML report as an
+  # artifact. This is not a gate — it publishes numbers for review.
+  # A future PR will scope collectCoverageFrom per suite and enforce
+  # a 75% threshold.
+  # ─────────────────────────────────────────────
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unit tests with coverage
+        run: |
+          docker compose -f docker/test/docker-compose.test.yml --profile unit up \
+            --abort-on-container-exit --exit-code-from test-runner \
+            -e JEST_EXTRA_ARGS="--coverage --coverageReporters=text-summary --coverageReporters=html --coverageReporters=json-summary"
+        continue-on-error: true
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker/test/docker-compose.test.yml down -v --remove-orphans || true
+          docker network prune -f || true

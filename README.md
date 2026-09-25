@@ -15,6 +15,7 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![Redis](https://img.shields.io/badge/Redis-BullMQ-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io/)
 [![CodeQL](https://img.shields.io/badge/CodeQL-Security_Scan-1C2C4E?style=flat&logo=github&logoColor=white)](https://codeql.github.com/)
+![Tests](https://github.com/Afzal14786/reshma-core/actions/workflows/test.yml/badge.svg)
 [![License](https://img.shields.io/badge/License-ISC-blue.svg)](LICENCE)
 
 </div>
