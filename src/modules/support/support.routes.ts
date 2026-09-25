@@ -96,4 +96,4 @@ router.patch(
   SupportAdminController.updateTicketState,
 );
 
-export default router;
+export const SupportRoute = router;
