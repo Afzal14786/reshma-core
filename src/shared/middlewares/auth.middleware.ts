@@ -47,7 +47,12 @@ export const protect = async (
       throw new AppError(HTTP_STATUS.UNAUTHORIZED, "You are not logged in");
     }
 
-    const decode = jwt.verify(token, env.JWT_ACCESS_SECRET) as IJwtPayload;
+    const decode = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+      // Pin the algorithm to HS256. Even though jsonwebtoken v9 already
+      // rejects "none" by default, explicit pinning prevents future
+      // algorithm-confusion attacks if the default ever changes.
+      algorithms: ["HS256"],
+    }) as IJwtPayload;
 
     // Use decode.id as mapped in signAccessToken logic
     const currentUser = await User.findById(decode.id);
