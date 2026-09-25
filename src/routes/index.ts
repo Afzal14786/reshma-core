@@ -13,6 +13,7 @@ import { searchRoutes } from "@modules/search/search.routes";
 import { DashboardRoutes } from "@modules/dashboard/dashboard.routes";
 import { AdminSearchRoutes } from "@modules/admin-search/admin-search.routes";
 import { AuditLogRoutes } from "@modules/audit-logs/audit-log.routes";
+import { SupportRoute } from "@modules/support/support.routes";
 
 import { HealthRoutes } from "@modules/health/health.routes";
 
@@ -46,6 +47,7 @@ const moduleRoutes = [
   { path: "/dashboards", route: DashboardRoutes },
 
   { path: "/health", route: HealthRoutes },
+  { path: "/support", route: SupportRoute },
   { path: "/admin/search", route: AdminSearchRoutes },
   { path: "/admin/audit-logs", route: AuditLogRoutes },
 ];

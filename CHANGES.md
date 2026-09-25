@@ -8,6 +8,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+## 6.4 Priority 2 Batch 1 — Security Tests: IDOR + RBAC
+
+**33 new security tests** covering authorization boundaries. First security-focused suite in the project.
+
+### 6.4.1 IDOR — Insecure Direct Object Reference (14 tests)
+
+Verifies that User B cannot access, modify, or infer the existence of User A's resources. All cross-user attempts return **404**, not 403 — this prevents enumeration attacks (an attacker can't distinguish "doesn't exist" from "not yours").
+
+Covered resources:
+- Order invoice download
+- Payment verification
+- Order history listing
+- Return initiation and listing
+- Notification mark-as-read and listing
+- Address update and delete
+- Cart isolation
+- Wishlist isolation
+- Profile update isolation
+- Password change isolation
+
+### 6.4.2 RBAC — Role-Based Access Control (20 tests)
+
+Verifies that non-admin users cannot reach admin-only endpoints. All authenticated-user attempts return **403**; unauthenticated requests return **401** (the `protect` middleware fires before `restrictTo`).
+
+Covered admin surfaces:
+- Products: create, update, soft-delete
+- Orders: list all, fetch any, update status, dispatch
+- Coupons: create, list all
+- Returns: list all, arbitrate, process refund
+- Dashboard metrics
+- Admin global search
+- Audit logs: list and export
+- Support: list all tickets
+
+### 6.4.3 Infrastructure
+
+- **Added** `tests/helpers/security.helper.ts` — `expectForbidden()`, `expectUnauthorized()`, `expectNotFound()`, `bearer()` assertions
+- **Enhanced** `jest.config.security.ts` — added `discriminators.setup.ts` so polymorphic Product model loads correctly
+- **Added** `test-security` service to `docker/test/docker-compose.test.yml` with the `security` profile
+
+### 6.4.4 Bug #24 — Support Routes Were Never Mounted
+
+- **Fixed** `src/routes/index.ts` — added `supportRoutes` import and mount at `/support`.
+- **Root cause:** The support ticketing module (`src/modules/support/support.routes.ts`) was written but never registered in the global router. Every `/api/v1/support/*` request returned 404 — the entire module was dead code.
+- **Impact:** Customers could not create tickets, admins could not view them. Silent production bug caught by the RBAC test that expected 403 for a non-admin — got 404 because the route didn't exist for anyone.
+
+**Bug count: 18 → 24.**
+
+**Cumulative after this phase:** ~426 tests (172 unit + 221 integration + 33 security).
+
+---
+
 ## 6.3 Security Hardening (Pre-Priority-2)
 
 Five security fixes discovered during Priority 2 reconnaissance. All changes are minimal and targeted; every fix is independently revertable. Existing test suites remain green (172 unit, 221 integration, exit code 0).
