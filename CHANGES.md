@@ -8,6 +8,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+## 6.6 Priority 3 — End-to-End Tests
+
+**15 E2E tests** across four suites covering complete user journeys that span multiple modules. Each test executes a realistic flow (register → browse → cart → checkout → payment, or return → arbitrate → refund, etc.) in a single sequence, catching cross-module regressions that unit, integration, and security tests miss.
+
+### 6.6.1 Purchase Flow (5 tests)
+
+`tests/e2e/purchase.flow.e2e.test.ts`
+
+| Test | Coverage |
+|------|----------|
+| Golden path | Register → OTP → verify → cart → Razorpay checkout → signed payment → order PROCESSING, stock decremented, cart cleared |
+| With coupon | Coupon discount applied; usage count incremented after COD checkout |
+| COD | Order skips Razorpay and transitions directly to PROCESSING |
+| Idempotent payment | Second `verify-payment` with same signature does not double-decrement stock |
+| Inter-state tax | MH shipping address produces full IGST (CGST/SGST = 0) |
+
+### 6.6.2 Return Flow (4 tests)
+
+`tests/e2e/return.flow.e2e.test.ts`
+
+| Test | Coverage |
+|------|----------|
+| Golden path | Delivered → initiate → admin approve → refund → status REFUNDED, order RETURNED, inventory restocked |
+| Rejection | Admin rejects → order reverts to DELIVERED, no restock |
+| Fragile proof | Fragile product requires images; without → 400, with → success |
+| State machine guard | Return on non-DELIVERED order rejected with 400 |
+
+### 6.6.3 Guest Cart Merge (3 tests)
+
+`tests/e2e/guest.checkout.e2e.test.ts`
+
+| Test | Coverage |
+|------|----------|
+| Fresh merge | Guest cart items appear in user's cart |
+| Existing cart | Same product quantity increments (2 + 3 = 5) |
+| Checkout | Merged cart can complete end-to-end checkout |
+
+### 6.6.4 Admin Lifecycle (3 tests)
+
+`tests/e2e/admin.lifecycle.e2e.test.ts`
+
+| Test | Coverage |
+|------|----------|
+| Create + discover | Admin-created product appears in public catalog with correct ID |
+| Deactivate + self-heal | Deactivated product disappears from catalog and cart self-heals |
+| Price change | Live cart reads reflect admin price updates in real time |
+
+### 6.6.5 Infrastructure
+
+- **Enhanced** `jest.config.e2e.ts` — added `discriminators.setup.ts` so polymorphic Product loads correctly
+- **Added** `test-e2e` service to `docker/test/docker-compose.test.yml` with the `e2e` profile
+
+### 6.6.6 Verification
+
+- **Unit:** `10 suites, 172 tests, exit code 0`
+- **Integration:** `25 suites, 221 tests, exit code 0`
+- **Security:** `6 suites, 74 tests, exit code 0`
+- **E2E:** `4 suites, 15 tests, exit code 0`  
+
+**Cumulative: 482 tests across 45 suites, all passing.**  
+
 ## 6.5 Priority 2 Batches 2 & 3 — JWT, Webhook Forgery, Injection, Rate Limiting
 
 **41 additional security tests** across four new suites, completing Priority 2. Combined with Batch 1 (IDOR + RBAC, 33 tests), the security suite now has **74 tests** covering authorization, authentication, and input-hardening boundaries.
