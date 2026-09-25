@@ -542,14 +542,17 @@ Use them to verify functionality after local setup.
 
 ## Testing  
 
-This project maintains a comprehensive test suite with **226 automated tests** across infrastructure, unit, and integration layers. All tests run in fully isolated Docker environments — no access to development or production data is possible.  
+This project maintains a comprehensive test suite with **501 automated tests** across **5 categories** — unit, integration, security, E2E, and workers. All tests run in fully isolated Docker environments — no access to development or production data is possible.
 
 ```bash
 # Run unit tests (172 tests, ~10s)
 npm run test:docker:unit
 
-# Run integration tests (46 tests, ~65s)
-npm run test:docker:integration
+# Run the full suite sequentially (501 tests, ~4 min)
+npm run test:docker:all
+
+# Generate coverage reports (per-suite HTML + aggregate table)
+./scripts/coverage-report.sh
 ```  
 
 **[📖 Read the full testing guide →](./tests/README.md)**  
@@ -561,13 +564,32 @@ The guide covers:
 - Troubleshooting common failures
 - Production bugs discovered through testing  
 
+[📖 Testing Guide →](./tests/README.md) — how to run, write, and debug tests  
+[📊 Test Report →](./tests/REPORTS.md) — coverage metrics, module breakdown, and the complete bug log  
+
+The suite has uncovered and fixed **24 production bugs** across auth, cart, orders, returns, payments, and infrastructure — none were test-only findings. Every bug is documented in [CHANGES.md](./CHANGES.md).  
+
+
+**Test Coverage at a Glance:**
+
+| Category | Suites | Tests | Coverage (lines) |
+|----------|--------|-------|------------------|
+| Unit | 10 | 172 | 30.9% |
+| Integration | 25 | 221 | 60.4% |
+| Security | 6 | 74 | 37.1% |
+| E2E | 4 | 15 | 37.9% |
+| Workers | 4 | 19 | 74.0% |
+| **Total** | **49** | **501** | **48.0% avg** |
+
+The CI pipeline runs all 5 suites in parallel on every push and PR — see [.github/workflows/test.yml](.github/workflows/test.yml).  
+
 ---  
 
 ### Documentation  
 
-- **[Testing Guide](./tests//README.md)** — how to run, write, and debug tests
-- **[CHANGES.md](./CHANGES.md)** — recent changes and bug fixes
-- **[Phase Runbooks](./tests/README.md)** — detailed phase-by-phase runbooks  
+- **[Testing Guide](./tests/README.md)** — how to run, write, and debug tests
+- **[Test Report](./tests/REPORTS.md)** — coverage metrics, module breakdown, bug log
+- **[CHANGES.md](./CHANGES.md)** — recent changes and bug fixes  
 
 ## Documentation Hub  
 
