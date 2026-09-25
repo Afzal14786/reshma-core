@@ -29,7 +29,13 @@
     "test:docker:e2e": "docker compose -f docker/test/docker-compose.test.yml --profile e2e up --abort-on-container-exit --exit-code-from test-e2e",
     "test:docker:workers": "docker compose -f docker/test/docker-compose.test.yml --profile workers up --abort-on-container-exit --exit-code-from test-workers",
     "test:docker:security": "docker compose -f docker/test/docker-compose.test.yml --profile security up --abort-on-container-exit --exit-code-from test-security",
-    "test:docker:all": "docker compose -f docker/test/docker-compose.test.yml --profile unit --profile integration --profile e2e --profile workers --profile security up --abort-on-container-exit"
+    "test:docker:all": "docker compose -f docker/test/docker-compose.test.yml --profile unit --profile integration --profile e2e --profile workers --profile security up --abort-on-container-exit",
+    "test:cov:unit": "docker compose -f docker/test/docker-compose.test.yml --profile unit run --rm test-runner npx jest --config jest.config.unit.ts --coverage --coverageReporters=text --coverageReporters=text-summary --coverageReporters=json-summary --runInBand",
+    "test:cov:integration": "docker compose -f docker/test/docker-compose.test.yml --profile integration run --rm test-integration npx jest --config jest.config.integration.ts --coverage --coverageReporters=text --coverageReporters=text-summary --coverageReporters=json-summary --runInBand",
+    "test:cov:security": "docker compose -f docker/test/docker-compose.test.yml --profile security run --rm test-security npx jest --config jest.config.security.ts --coverage --coverageReporters=text --coverageReporters=text-summary --coverageReporters=json-summary --runInBand",
+    "test:cov:e2e": "docker compose -f docker/test/docker-compose.test.yml --profile e2e run --rm test-e2e npx jest --config jest.config.e2e.ts --coverage --coverageReporters=text --coverageReporters=text-summary --coverageReporters=json-summary --runInBand",
+    "test:cov:workers": "docker compose -f docker/test/docker-compose.test.yml --profile workers run --rm test-workers npx jest --config jest.config.workers.ts --coverage --coverageReporters=text --coverageReporters=text-summary --coverageReporters=json-summary --runInBand",
+    "test:cov:all": "./scripts/coverage-report.sh"
   },
   "keywords": [],
   "license": "ISC",
