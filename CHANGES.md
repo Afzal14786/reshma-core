@@ -8,6 +8,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+## 6.5 Priority 2 Batches 2 & 3 — JWT, Webhook Forgery, Injection, Rate Limiting
+
+**41 additional security tests** across four new suites, completing Priority 2. Combined with Batch 1 (IDOR + RBAC, 33 tests), the security suite now has **74 tests** covering authorization, authentication, and input-hardening boundaries.
+
+### 6.5.1 JWT Integrity (11 tests)
+
+`tests/security/jwt.int.test.ts`
+
+Attacks against the authentication layer. Every test asserts that a malformed, tampered, or algorithm-confused token cannot reach protected routes.
+
+| Attack | Expected |
+|--------|:--------:|
+| No `Authorization` header | 401 |
+| Empty `Bearer` token | 401 |
+| Malformed JWT structure | 401 |
+| Wrong-secret signature | 401 |
+| `alg: none` unsigned token | 401 |
+| Algorithm confusion (HS512-shaped token on HS256 verifier) | 401 |
+| Tampered payload (identity swap, valid signature) | 401 |
+| Expired access token | 401 |
+| Valid token for a deleted user | 401 |
+| Valid token for a deactivated user | 403 |
+| Valid token in signed cookie (not Bearer) | 200 |
+
+### 6.5.2 Webhook Forgery (8 tests)
+
+`tests/security/webhook.forgery.int.test.ts`
+
+Attacks against the Razorpay and Shiprocket webhook endpoints. A forged webhook can trigger refunds, ship orders, or mark orders paid.
+
+| Attack | Expected |
+|--------|:--------:|
+| Razorpay webhook with valid HMAC | 200 |
+| Razorpay webhook with wrong signature | 400 |
+| Razorpay webhook with missing signature header | 400 |
+| Razorpay webhook with tampered body (signature computed on original) | 400 |
+| Razorpay webhook signed with the wrong secret | 400 |
+| Shiprocket webhook with valid `x-api-key` | 200 |
+| Shiprocket webhook with wrong `x-api-key` | 401 |
+| Shiprocket webhook with missing header | 401 |
+
+### 6.5.3 Injection Defense (11 tests)
+
+`tests/security/injection.int.test.ts`
+
+Verifies the sanitizer middleware strips MongoDB operator keys (`$ne`, `$gt`, `$where`) and prototype-pollution keys (`__proto__`, `constructor`) before Zod runs — and that malformed identifiers never reach the database.
+
+Covered attack vectors:
+- NoSQL operators in request body (`$ne`, `$gt`, `$where`)
+- Prototype pollution (`__proto__`, `constructor.prototype`)
+- Malformed ObjectIds in path params
+- NoSQL operators in query strings
+- Zod `.strict()` rejection of unknown fields (mass-assignment defense)
+
+**Design property:** the sanitizer neutralizes attacks by **stripping malicious keys silently**, not by rejecting requests. Tests verify:
+1. No 500 errors (no raw operator reaches the DB)
+2. Legitimate fields in the same payload are still processed
+3. No privilege escalation or side effects
+
+### 6.5.4 Rate Limiting (11 tests)
+
+`tests/security/rate-limit.int.test.ts`
+
+End-to-end verification of every limiter in the codebase. Confirms the security hardening fixes from CHANGES.md 6.3 are effective.
+
+| Suite | Assertions |
+|-------|-----------|
+| **Auth limiter** | First 10 login attempts pass; 11th returns 429; `RateLimit-Limit: 10` header present; JSON body on 429 |
+| **Checkout limiter** | `RateLimit-Limit: 5` header present; 6th attempt returns 429 |
+| **Standard limiter** | `RateLimit-Limit: 100` on regular endpoints |
+| **Health bypass** | `RateLimit-Limit: 3000` (healthLimiter only; standardLimiter skipped) — verifies Fix 6.3.2 |
+| **Support dedup** | Support routes consume one slot per request — verifies Fix 6.3.3 |
+
+### 6.5.5 Verification
+
+- **Unit:** `10 suites, 172 tests, exit code 0`
+- **Integration:** `25 suites, 221 tests, exit code 0`
+- **Security:** `6 suites, 74 tests, exit code 0`  
+
+**Cumulative: 467 tests across 41 suites, all passing.**  
+
 ## 6.4 Priority 2 Batch 1 — Security Tests: IDOR + RBAC
 
 **33 new security tests** covering authorization boundaries. First security-focused suite in the project.
