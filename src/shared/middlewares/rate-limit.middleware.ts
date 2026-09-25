@@ -34,6 +34,16 @@ export const standardLimiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   // UNIQUE IDENTIFIER: Prevents double-count errors when layered with specific limiters
   requestPropertyName: "standardRateLimit",
+
+  /**
+   * Health endpoints must bypass the standard limiter.
+   * Load balancers (AWS ELB, Kubernetes) ping /health every 10-30s. Over a
+   * 15-minute window that's 30-90 requests — dangerously close to the
+   * 100-request cap. The dedicated `healthLimiter` (3000 req) handles
+   * health checks separately; we must not consume the standard bucket.
+   */
+  skip: (req) => req.originalUrl.startsWith("/api/v1/health"),
+
   message: {
     success: false,
     statusCode: HTTP_STATUS.TOO_MANY_REQUESTS,

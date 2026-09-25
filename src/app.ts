@@ -18,6 +18,19 @@ import globalRouter from "./routes";
 const app: Application = express();
 
 /**
+ * Trust the first proxy (AWS ALB, Nginx, Cloudflare).
+ *
+ * Without this, `req.ip` resolves to the proxy's internal address, not
+ * the client's. Every rate limiter keys on `req.ip`, so all users would
+ * share a single bucket and a single busy client could 429 the entire
+ * API for everyone else.
+ *
+ * IMPORTANT: Adjust the number if your topology has more than one proxy
+ * hop (e.g., Cloudflare → ALB → Node requires `2`).
+ */
+app.set("trust proxy", 1);
+
+/**
  * Security & Observability Middlewares
  */
 // Helmet sets secure HTTP headers (prevents XSS, Clickjacking, MIME sniffing)
