@@ -31,7 +31,7 @@ const router = Router();
  * @access  Private (Admin Only)
  */
 router.get(
-  "/admin/audit-logs",
+  "/",
   protect,
   restrictTo("ADMIN"),
   validate(AdminAuditLogQuerySchema),
