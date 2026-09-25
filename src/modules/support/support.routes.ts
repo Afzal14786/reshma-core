@@ -7,7 +7,6 @@ import { protect } from "@shared/middlewares/auth.middleware";
 import { restrictTo } from "@shared/middlewares/role.middleware";
 import { validate } from "@shared/middlewares/validate.middleware";
 import { upload } from "@shared/middlewares/upload.middleware";
-import { standardLimiter } from "@shared/middlewares/rate-limit.middleware";
 
 // Zod Validation Schemas
 import {
@@ -17,12 +16,6 @@ import {
 } from "./dtos/support.dto";
 
 const router = Router();
-
-/**
- * We apply the standard limiter globally to prevent basic enumeration attacks
- * before the request even reaches the database.
- */
-router.use(standardLimiter);
 
 /**
  * SECURITY (CodeQL): Global Authentication Firewall

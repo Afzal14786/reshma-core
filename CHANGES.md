@@ -8,6 +8,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+## 6.3 Security Hardening (Pre-Priority-2)
+
+Five security fixes discovered during Priority 2 reconnaissance. All changes are minimal and targeted; every fix is independently revertable. Existing test suites remain green (172 unit, 221 integration, exit code 0).
+
+### 6.3.1 Trust Proxy Was Not Enabled
+
+- **Fixed** `src/app.ts` — added `app.set("trust proxy", 1)`.
+- **Root cause:** Express defaults to `trust proxy = false`, which causes `req.ip` to resolve to the proxy's internal address (AWS ALB, Cloudflare, Nginx) rather than the originating client.
+- **Impact:** Every rate limiter keys on `req.ip`. Without trust proxy, all users behind the same proxy share a single rate-limit bucket. A single busy client or bot could consume the entire 100-request / 15-minute quota and effectively lock every other user out of the API. This is a **self-inflicted DoS vector**.
+
+### 6.3.2 Health Endpoint Throttled by the Wrong Limiter
+
+- **Fixed** `src/shared/middlewares/rate-limit.middleware.ts` — added `skip: (req) => req.originalUrl.startsWith("/api/v1/health")` to `standardLimiter`.
+- **Root cause:** `app.ts` mounts `standardLimiter` (100 req / 15 min) on `/api`, which includes `/api/v1/health`. The dedicated `healthLimiter` (3000 req / 15 min) never runs because the global limiter 429's first.
+- **Impact:** A load balancer pinging `/health` every 10–30 seconds consumes 30–90 requests per 15-minute window — dangerously close to the 100-request cap. Exhausting the bucket makes `/health` return 429, causing Kubernetes / Docker to mark the instance unhealthy and restart it. Cascading restarts can take the entire service down.
+
+### 6.3.3 Support Routes Double-Counted the Standard Limiter
+
+- **Fixed** `src/modules/support/support.routes.ts` — removed the local `router.use(standardLimiter)` and its import.
+- **Root cause:** The global `standardLimiter` is already mounted on `/api` in `app.ts`. Adding a second instance inside the support router incremented the shared Redis counter (`rl:standard:{IP}`) **twice per request**.
+- **Impact:** Effective limit for support routes was halved from 100 to 50 requests per 15 minutes. Users filing multi-ticket support sessions would hit 429s with roughly half the expected quota.
+
+### 6.3.4 Audit-Log List Route Was Unreachable
+
+- **Fixed** `src/modules/audit-logs/audit-log.routes.ts` — changed the list handler path from `"/admin/audit-logs"` to `"/"`.
+- **Root cause:** The router is mounted at `/api/v1/admin/audit-logs` in `src/routes/index.ts`. The internal path was declared as `/admin/audit-logs`, producing a full URL of `/api/v1/admin/audit-logs/admin/audit-logs` — a route that will never match a real request.
+- **Impact:** The main audit-log list endpoint (used by the admin dashboard) returned 404 for every call. Only the `/export` sub-route was reachable.
+
+### 6.3.5 JWT Algorithm Now Explicitly Pinned
+
+- **Enhanced** `src/shared/middlewares/auth.middleware.ts` — `jwt.verify` now passes `algorithms: ["HS256"]`.
+- **Why:** `jsonwebtoken` v9 already rejects `alg: none` by default, but pinning the algorithm explicitly defends against future algorithm-confusion attacks (e.g., an RS256-to-HS256 downgrade) and against any change in the library's default behavior.
+- **Impact:** Zero behavior change for legitimate tokens. Adds defense-in-depth.
+
+### Verification
+
+Both suites pass after all five fixes:
+
+---  
+
+## 6.2 Test Infrastructure Additions
+
+### 6.2.1 Factories
+
+- **`tests/factories/order.factory.ts`** — `buildOrderDoc()` and `buildShippingAddress()`. Computes subTotal, discount, tax splits, shipping cost, and totalAmount so order documents satisfy Mongoose validators without manual arithmetic.
+- **`tests/factories/return.factory.ts`** — `buildReturnItem()` and `buildReturnPayload()`. Shape-matched to `InitiateReturnSchema`.
+- **`tests/factories/product.factory.ts` (extended)** — Added multipart form-data builders for all five discriminator types plus `buildBangle`, `buildApparel`, `buildFabric`, `buildInnerwear`, `buildAccessory` for direct DB insertion.
+
+### 6.2.2 Helpers
+
+- **`tests/helpers/order.helper.ts`** — `createTestOrder()` and `createDeliveredOrder()`. Resolves the owning user from the JWT when only `accessToken` is provided, guaranteeing order ownership matches the caller.
+- **`tests/helpers/return.helper.ts`** — `initiateReturn()`, `arbitrateReturn()`, `processRefund()`, `findReturnById()`. HTTP wrappers for the three RMA stages.
+- **`tests/helpers/product.helper.ts` (extended)** — Side-effect imports register discriminators. Exports `createTestBangle`, `createTestApparel`, `createTestFabric`, `createTestInnerwear`, `createTestAccessory` in addition to the backward-compatible `createTestProduct` alias.
+
+### 6.2.3 Mocks
+
+Six new module mocks wired through `jest.config.ts` `moduleNameMapper`:
+
+- **`cloudinary.mock.ts`** — `uploadBufferToCloudinary`, `deleteFromCloudinary`, `extractPublicId`.
+- **`typesense.mock.ts`** — `typesenseClient`, `typesenseManager`, collection-level `documents()`, `upsert`, `delete`.
+- **`razorpay.mock.ts`** — `razorpay.orders.create`, `razorpay.payments.refund`.
+- **`email-queue.mock.ts`** — `dispatchEmailJob`, `emailQueue`.
+- **`invoice-queue.mock.ts`** — `InvoiceQueueManager.enqueueInvoiceGeneration`.
+- **`export-queue.mock.ts`** — `ExportQueueManager.enqueueDataExport`.
+
+Every mock is declared **above** its corresponding generic glob in `moduleNameMapper` — Jest uses first-match-wins, so a generic `@config/*` alias would otherwise swallow `@config/razorpay`.
+
+---
+
 ## 6.1 Priority 1 — Integration Test Expansion
 
 **+172 integration tests** covering the seven remaining feature modules. All tests run against real MongoDB (6.0 replica set) and real Redis inside the isolated Docker test network. Cumulative suite after this phase: **~402 tests** (8 smoke + 172 unit + ~222 integration).
@@ -65,35 +134,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All five notification types persist (SYSTEM, ORDER, SECURITY, PROMOTION, RETURN).
 - Mark-as-read idempotency, IDOR rejection (403 when notification belongs to another user), non-existent notification 404.
 - `sendReturnRequestedNotification` and `sendReturnRefundedNotification` persist correctly (regression for the enum fix), including amount formatting in the message body.
-
----
-
-## 6.2 Test Infrastructure Additions
-
-### 6.2.1 Factories
-
-- **`tests/factories/order.factory.ts`** — `buildOrderDoc()` and `buildShippingAddress()`. Computes subTotal, discount, tax splits, shipping cost, and totalAmount so order documents satisfy Mongoose validators without manual arithmetic.
-- **`tests/factories/return.factory.ts`** — `buildReturnItem()` and `buildReturnPayload()`. Shape-matched to `InitiateReturnSchema`.
-- **`tests/factories/product.factory.ts` (extended)** — Added multipart form-data builders for all five discriminator types plus `buildBangle`, `buildApparel`, `buildFabric`, `buildInnerwear`, `buildAccessory` for direct DB insertion.
-
-### 6.2.2 Helpers
-
-- **`tests/helpers/order.helper.ts`** — `createTestOrder()` and `createDeliveredOrder()`. Resolves the owning user from the JWT when only `accessToken` is provided, guaranteeing order ownership matches the caller.
-- **`tests/helpers/return.helper.ts`** — `initiateReturn()`, `arbitrateReturn()`, `processRefund()`, `findReturnById()`. HTTP wrappers for the three RMA stages.
-- **`tests/helpers/product.helper.ts` (extended)** — Side-effect imports register discriminators. Exports `createTestBangle`, `createTestApparel`, `createTestFabric`, `createTestInnerwear`, `createTestAccessory` in addition to the backward-compatible `createTestProduct` alias.
-
-### 6.2.3 Mocks
-
-Six new module mocks wired through `jest.config.ts` `moduleNameMapper`:
-
-- **`cloudinary.mock.ts`** — `uploadBufferToCloudinary`, `deleteFromCloudinary`, `extractPublicId`.
-- **`typesense.mock.ts`** — `typesenseClient`, `typesenseManager`, collection-level `documents()`, `upsert`, `delete`.
-- **`razorpay.mock.ts`** — `razorpay.orders.create`, `razorpay.payments.refund`.
-- **`email-queue.mock.ts`** — `dispatchEmailJob`, `emailQueue`.
-- **`invoice-queue.mock.ts`** — `InvoiceQueueManager.enqueueInvoiceGeneration`.
-- **`export-queue.mock.ts`** — `ExportQueueManager.enqueueDataExport`.
-
-Every mock is declared **above** its corresponding generic glob in `moduleNameMapper` — Jest uses first-match-wins, so a generic `@config/*` alias would otherwise swallow `@config/razorpay`.
 
 ---
 
