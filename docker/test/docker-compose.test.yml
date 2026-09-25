@@ -173,6 +173,36 @@ services:
     command: ["npm", "run", "test:e2e"]
     profiles: ["e2e"]
 
+  # ── Worker tests (Priority 4) ──
+  test-workers:
+    build:
+      context: ../../
+      dockerfile: docker/test/Dockerfile.test
+    container_name: reshma-test-workers
+    env_file:
+      - ../../.env.test
+    environment:
+      MONGO_URI: mongodb://test-mongo:27017/reshma_test?replicaSet=rs0
+      REDIS_URL: redis://:testredispassword@test-redis:6379
+    depends_on:
+      test-mongo:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+    volumes:
+      - ../../src:/app/src
+      - ../../tests:/app/tests
+      - ../../jest.config.ts:/app/jest.config.ts:ro
+      - ../../jest.config.workers.ts:/app/jest.config.workers.ts:ro
+      - ../../tsconfig.json:/app/tsconfig.json:ro
+      - ../../tsconfig.test.json:/app/tsconfig.test.json:ro
+      - ../../coverage:/app/coverage
+      - ../../reports:/app/reports
+    networks:
+      - reshma-test-network
+    command: ["npm", "run", "test:workers"]
+    profiles: ["workers"]
+
 networks:
   reshma-test-network:
     driver: bridge
