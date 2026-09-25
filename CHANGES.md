@@ -8,6 +8,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 *(Changes that are currently being worked on but not yet pushed to a stable alpha/beta tag will go here).*  
 
+## 6.7 Priority 4 — Worker Tests
+
+**19 worker tests** across four suites. These verify BullMQ background jobs that don't block HTTP responses but silently fail in production if broken — missing emails, missing invoices, missing data exports.
+
+Unlike integration tests (which mock queues so HTTP requests don't fire real jobs), worker tests use **real Redis queues** and **real BullMQ Worker instances**, with only the side-effect layers (mailer, Cloudinary, notification service) mocked.
+
+### 6.7.1 DLQ Alert (5 tests)
+
+`tests/workers/dlq.alert.test.ts`
+
+Verifies the dead-letter alert engine that fires when a job exhausts all retry attempts.
+
+| Test | Coverage |
+|------|----------|
+| Fires on exhausted retries | Email sent when `attemptsMade === opts.attempts` |
+| Silently skips intermediate failures | No email when retries remain |
+| Includes full context | Subject, job ID, queue name, error message, stack, data |
+| Handles missing `attempts` option | Treated as single-attempt |
+| Never throws on mailer failure | Alert is fire-and-forget resilient |
+
+### 6.7.2 Email Worker (6 tests)
+
+`tests/workers/email.worker.test.ts`
+
+Dispatches real jobs to the `email-queue` and lets the real Worker process them. `mailer.sendEmail` and `NotificationService.compileEmailTemplate` are mocked.
+
+| Test | Coverage |
+|------|----------|
+| Processes OTP_VERIFICATION | Template compiled, mailer called with correct recipient |
+| Compiles template with full payload | Payload passed unchanged to compiler |
+| Attaches DATA_EXPORT file | JSON string delivered as `reshma-bangles-data-export.json` |
+| No attachment on other types | `attachments` is undefined |
+| Sequential processing | 3 jobs → 3 emails to correct recipients |
+| Emits `failed` event | Processor errors surface on the worker |
+
+### 6.7.3 Export Worker (4 tests)
+
+`tests/workers/export.worker.test.ts`
+
+The DPDP / GDPR data portability worker. Queries MongoDB for every user-owned domain and emails a JSON export.
+
+| Test | Coverage |
+|------|----------|
+| Compiles and dispatches | Buffer handed to `NotificationService.sendDataExportEmail` |
+| Strips sensitive fields | `password` and `__v` removed from exported profile |
+| Includes orders | `financials.ordersTotalCount` reflects real orders |
+| Handles missing user | Silently returns without sending an email |
+
+### 6.7.4 Invoice Worker (4 tests)
+
+`tests/workers/invoice.worker.test.ts`
+
+Generates a PDF invoice, uploads it to Cloudinary, and sets `invoiceUrl` on the order. PDF generation is mocked (PDFKit is slow); Cloudinary's `upload_stream` is wired to a fake Writable stream.
+
+| Test | Coverage |
+|------|----------|
+| Full pipeline | PDF generated → Cloudinary upload → `invoiceUrl` set on order |
+| Idempotency | Order with existing `invoiceUrl` is skipped |
+| Cloudinary options | `folder`, `public_id`, `resource_type`, `format` all correct |
+| Order not found | No Cloudinary call when order is missing |
+
+### 6.7.5 Infrastructure
+
+- **Enhanced** `jest.config.workers.ts` — replaced base `moduleNameMapper` to remove queue mocks (worker tests need real BullMQ), added `db.setup.ts` + `discriminators.setup.ts` to `setupFilesAfterEnv`
+- **Added** `test-workers` service to `docker/test/docker-compose.test.yml` with the `workers` profile
+
+### 6.7.6 Design Note: Real Queues, Mocked Side Effects
+
+Worker tests are the only suite where queues are NOT mocked. The whole point is to verify that `queue.add()` → Redis → Worker → processor → side effect works end-to-end. Mocking the queue would reduce these tests to checking that a `jest.fn()` was called — meaningless.
+
+This required scoping the `moduleNameMapper` override to `jest.config.workers.ts` only. The base config still mocks queues for integration and E2E suites.
+
+### 6.7.7 Verification
+
+- **Unit:** `10 suites, 172 tests, exit code 0`
+- **Integration:** `25 suites, 221 tests, exit code 0`
+- **Security:** `6 suites, 74 tests, exit code 0`
+- **E2E:** `4 suites, 15 tests, exit code 0`
+- **Workers:** `4 suites, 19 tests, exit code 0`  
+
+**Cumulative: 501 tests across 49 suites, all passing.**  
+
 ## 6.6 Priority 3 — End-to-End Tests
 
 **15 E2E tests** across four suites covering complete user journeys that span multiple modules. Each test executes a realistic flow (register → browse → cart → checkout → payment, or return → arbitrate → refund, etc.) in a single sequence, catching cross-module regressions that unit, integration, and security tests miss.
